@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import { LocaleService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { LocaleService, useDependency } from '@univerjs/core';
 import React from 'react';
 
 import styles from './index.module.less';
@@ -28,7 +27,7 @@ export const FontFamilyItem = (props: IFontFamilyItemProps) => {
 
     return (
         <span className={styles.uiPluginSheetsFontFamilyItem} style={{ fontFamily: value }}>
-            {localeService.t(`fontFamily.${(`${value}` ?? '').replace(/\s/g, '')}`)}
+            {localeService.t(`fontFamily.${(`${value ?? ''}`).replace(/\s/g, '')}`)}
         </span>
     );
 };

@@ -14,20 +14,21 @@
  * limitations under the License.
  */
 
-import { Disposable, Observable } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-
+import type { IDisposable } from '@univerjs/core';
 import type { CURSOR_TYPE } from './basics/const';
-import { RENDER_CLASS_TYPE } from './basics/const';
+
 import type { IEvent } from './basics/i-events';
 import type { ITransformChangeState } from './basics/interfaces';
 import type { Canvas } from './canvas';
+import { Disposable, EventSubject } from '@univerjs/core';
+import { RENDER_CLASS_TYPE } from './basics/const';
 
-// FIXME: T should extends something that is disposable
+// FIXME: ThinEngine and ThinScene should be removed
+
 export abstract class ThinEngine<T extends IDisposable> extends Disposable {
-    onInputChangedObservable = new Observable<IEvent>();
+    onInputChanged$ = new EventSubject<IEvent>();
 
-    onTransformChangeObservable = new Observable<ITransformChangeState>();
+    onTransformChange$ = new EventSubject<ITransformChangeState>();
 
     private _scenes: { [sceneKey: string]: T } = {};
 
@@ -79,7 +80,7 @@ export abstract class ThinEngine<T extends IDisposable> extends Disposable {
         return scene;
     }
 
-    setRemainCapture() {}
+    abstract setRemainCapture(): void;
 
     hasActiveScene(): boolean {
         return this._activeScene != null;
@@ -96,6 +97,9 @@ export abstract class ThinEngine<T extends IDisposable> extends Disposable {
         this._scenes = {};
     }
 
+    getParent() {}
+
+    // TODO @lumixraku, it seems delete scene with key.
     remainScene(key: string) {
         const scenes = this.getScenes();
         if (scenes[key]) {

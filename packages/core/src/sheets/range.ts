@@ -15,23 +15,23 @@
  */
 
 import type { IObjectMatrixPrimitiveType, Nullable } from '../shared';
-import { ObjectMatrix, Tools } from '../shared';
-import { DEFAULT_STYLES } from '../types/const';
-import type { HorizontalAlign, VerticalAlign, WrapStrategy } from '../types/enum';
-import { BooleanNumber, FontItalic, FontWeight } from '../types/enum';
+import type { HorizontalAlign, VerticalAlign } from '../types/enum';
 import type {
     IBorderData,
-    ICellData,
     IDocumentBody,
     IDocumentData,
-    IRange,
     IStyleBase,
     IStyleData,
     ITextDecoration,
     ITextRotation,
 } from '../types/interfaces';
 import type { Styles } from './styles';
+import type { ICellData, IRange } from './typedef';
 import type { Worksheet } from './worksheet';
+import { ObjectMatrix, Tools } from '../shared';
+import { DEFAULT_STYLES } from '../types/const';
+import { BooleanNumber, FontItalic, FontWeight, WrapStrategy } from '../types/enum';
+import { RANGE_TYPE } from './typedef';
 
 /**
  * getObjectValues options type
@@ -121,6 +121,45 @@ export class Range {
             }
         }
     }
+
+    static transformRange = (range: IRange, worksheet: Worksheet): IRange => {
+        const maxColumns = worksheet.getMaxColumns() - 1;
+        const maxRows = worksheet.getMaxRows() - 1;
+
+        if (range.rangeType === RANGE_TYPE.ALL) {
+            return {
+                startColumn: 0,
+                startRow: 0,
+                endColumn: maxColumns,
+                endRow: maxRows,
+            };
+        }
+
+        if (range.rangeType === RANGE_TYPE.COLUMN) {
+            return {
+                startRow: 0,
+                endRow: maxRows,
+                startColumn: range.startColumn,
+                endColumn: range.endColumn,
+            };
+        }
+
+        if (range.rangeType === RANGE_TYPE.ROW) {
+            return {
+                startColumn: 0,
+                endColumn: maxColumns,
+                startRow: range.startRow,
+                endRow: range.endRow,
+            };
+        }
+
+        return {
+            startColumn: range.startColumn,
+            endColumn: Math.min(range.endColumn, maxColumns),
+            startRow: range.startRow,
+            endRow: Math.min(range.endRow, maxRows),
+        };
+    };
 
     /**
      * get current range data
@@ -262,7 +301,7 @@ export class Range {
      * @returns  — A range containing a single cell at the specified coordinates.
      */
     getCell(row: number, column: number): Range {
-        const { startRow, endRow, startColumn, endColumn } = this._range;
+        const { startRow, startColumn } = this._range;
         const cell = {
             startRow: startRow + row,
             endRow: startRow + row,
@@ -427,7 +466,7 @@ export class Range {
      * Returns the font size in point size of the cell in the top-left corner of the range.
      */
     getFontSize(): number {
-        const { p } = this.getValue() ?? {};
+        const p = (this.getValue()?.p || {}) as IDocumentData;
 
         if (p && Array.isArray(p.body?.textRuns) && p.body.textRuns.length > 0) {
             if (p.body.textRuns.some((textRun) => textRun?.ts?.fs != null)) {
@@ -675,14 +714,7 @@ export class Range {
      * Returns whether the text in the cell wraps.
      */
     getWrap(): BooleanNumber {
-        return this.getWraps()[0][0];
-    }
-
-    /**
-     * Returns whether the text in the cells wrap.
-     */
-    getWraps(): BooleanNumber[][] {
-        return this._getStyles('tb') as BooleanNumber[][];
+        return this.getWrapStrategy() === WrapStrategy.WRAP ? BooleanNumber.TRUE : BooleanNumber.FALSE;
     }
 
     /**

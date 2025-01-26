@@ -25,23 +25,19 @@ import {
 
 export class DataStreamTreeNode {
     children: DataStreamTreeNode[] = [];
-
     parent: Nullable<DataStreamTreeNode>;
-
     startIndex: number = -1;
-
     endIndex: number = -1;
-
     // isBullet: boolean = false;
-
     // isIndent: boolean = false;
-
     blocks: number[] = [];
 
     constructor(
         public nodeType: DataStreamTreeNodeType,
         public content?: string
-    ) {}
+    ) {
+        // empty
+    }
 
     static create(nodeType: DataStreamTreeNodeType, content?: string) {
         return new DataStreamTreeNode(nodeType, content);

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDisposable } from '@univerjs/core';
+import { createIdentifier } from '@univerjs/core';
 
 import { INotificationService } from '../notification/notification.service';
 
@@ -66,7 +66,8 @@ export class DesktopBeforeCloseService implements IBeforeCloseService {
     }
 
     private _init(): void {
-        window.addEventListener('beforeunload', (event: BeforeUnloadEvent) => {
+        window.addEventListener('beforeunload', (_event: BeforeUnloadEvent) => {
+            let event = _event;
             const message = this._beforeUnloadCallbacks
                 .map((callback) => callback())
                 .filter((m) => !!m)

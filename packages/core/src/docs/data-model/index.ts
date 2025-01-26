@@ -16,4 +16,5 @@
 
 export * from './document-data-model';
 export * from './preset-list-type';
+export * from './text-x/build-utils';
 export * from './types';

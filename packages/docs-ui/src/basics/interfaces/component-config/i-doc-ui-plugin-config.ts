@@ -19,11 +19,6 @@ export interface ILayout {
     toolbarConfig?: DocToolbarConfig;
 }
 
-export interface IUniverDocsUIConfig {
-    container?: HTMLElement | string;
-    layout?: ILayout;
-}
-
 export interface DocContainerConfig {
     outerLeft?: boolean;
 

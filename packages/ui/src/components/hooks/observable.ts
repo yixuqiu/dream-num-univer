@@ -17,8 +17,9 @@
 /* eslint-disable ts/no-explicit-any */
 
 import type { Nullable } from '@univerjs/core';
-import { useEffect, useRef, useState } from 'react';
-import type { Observable, Subscription } from 'rxjs';
+import type { RefObject } from 'react';
+import type { Observable } from 'rxjs';
+import { useEffect, useRef } from 'react';
 
 type ObservableOrFn<T> = Observable<T> | (() => Observable<T>);
 
@@ -30,87 +31,28 @@ function unwrap<T>(o: ObservableOrFn<T>): Observable<T> {
     return o;
 }
 
-function showArrayNotEqual(arr1: unknown[], arr2: unknown[]): boolean {
-    if (arr1.length !== arr2.length) {
-        return true;
-    }
-
-    return arr1.some((value, index) => value !== arr2[index]);
+export { useObservable } from '@univerjs/core';
+declare module '@univerjs/core' {
+    export function useObservable<T>(observable: ObservableOrFn<T>, defaultValue: T | undefined, shouldHaveSyncValue?: true): T;
+    export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue: T): T;
+    export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: undefined): T | undefined;
+    export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue: T, shouldHaveSyncValue?: boolean, deps?: any[]): T;
+    export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue: undefined, shouldHaveSyncValue: true, deps?: any[]): T;
+    export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: T, shouldHaveSyncValue?: boolean, deps?: any[]): T | undefined;
 }
 
-export function useObservable<T>(observable: ObservableOrFn<T>, defaultValue: T | undefined, shouldHaveSyncValue?: true): T;
-export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue: T): T;
-export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: undefined): T | undefined;
-export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: T, shouldHaveSyncValue?: true, deps?: any[]): T | undefined;
-export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: T, shouldHaveSyncValue?: boolean, deps?: any[]): T | undefined;
-/**
- * A hook to subscribe to an observable and get the latest value.
- *
- * @param observable The observable to subscribe to.
- * @param defaultValue When the observable would not emit any value, the default value would be returned.
- * @param shouldHaveSyncValue If true, the observable should emit a value synchronously.
- * @param deps The dependencies to trigger a re-subscription.
- */
-export function useObservable<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: T, shouldHaveSyncValue?: boolean, deps?: any[]): T | undefined {
-    if (typeof observable === 'function' && !deps) {
-        throw new Error('[useObservable]: expect deps when observable is a function! Otherwise it would cause an infinite loop.');
-    }
+export function useObservableRef<T>(observable: Nullable<ObservableOrFn<T>>, defaultValue?: T): RefObject<Nullable<T>> {
+    const ref = useRef<Nullable<T>>(defaultValue);
 
-    const observableRef = useRef<Observable<T> | null>(null);
-    const subscriptionRef = useRef<Subscription | null>(null);
-    const depsRef = useRef<any[] | undefined>(deps ?? undefined);
-    const initializedRef = useRef<boolean>(false);
-
-    // This state is only for trigger React to re-render. We do not use `setValue` directly because it may cause
-    // memory leaking.
-    const [_, setRenderCounter] = useState<number>(0);
-
-    const valueRef = useRef((() => {
-        let innerDefaultValue: T | undefined;
+    useEffect(() => {
         if (observable) {
             const sub = unwrap(observable).subscribe((value) => {
-                initializedRef.current = true;
-                innerDefaultValue = value;
+                ref.current = value;
             });
 
-            sub.unsubscribe();
+            return () => sub.unsubscribe();
         }
+    }, [observable]);
 
-        return innerDefaultValue ?? defaultValue;
-    })());
-
-
-    const shouldResubscribe = (() => {
-        if (typeof depsRef.current !== 'undefined') {
-            const _deps = deps ?? [];
-            if (showArrayNotEqual(depsRef.current, _deps)) {
-                depsRef.current = _deps;
-                return true;
-            }
-
-            return false;
-        }
-
-        return observableRef.current !== observable;
-    })();
-
-    // Subscribe on first rendering and re-subscribe when deps change.
-    if ((!subscriptionRef.current || shouldResubscribe) && observable) {
-        observableRef.current = unwrap(observable);
-        subscriptionRef.current?.unsubscribe();
-        subscriptionRef.current = observableRef.current.subscribe((value) => {
-            valueRef.current = value;
-            setRenderCounter((prev) => prev + 1);
-        });
-    }
-
-    useEffect(() => () => {
-        subscriptionRef.current?.unsubscribe();
-        subscriptionRef.current = null;
-    }, []);
-
-    if (shouldHaveSyncValue && !initializedRef.current) {
-        throw new Error('[useObservable]: expect shouldHaveSyncValue but not getting a sync value!');
-    }
-    return valueRef.current;
+    return ref;
 }

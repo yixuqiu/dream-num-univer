@@ -14,12 +14,15 @@
  * limitations under the License.
  */
 
-import type { Nullable, Workbook, Worksheet } from '@univerjs/core';
-import { IUniverInstanceService, LocaleService } from '@univerjs/core';
-import { SpreadsheetSkeleton } from '@univerjs/engine-render';
-import type { IDisposable } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
+import type { IRange, IRangeWithCoord, Nullable, Workbook, Worksheet } from '@univerjs/core';
+import type { IRender, IRenderContext, IRenderModule } from '@univerjs/engine-render';
+import { Disposable, Inject, Injector } from '@univerjs/core';
+import { SHEET_VIEWPORT_KEY, SpreadsheetSkeleton } from '@univerjs/engine-render';
+import { SheetsSelectionsService } from '@univerjs/sheets';
 import { BehaviorSubject } from 'rxjs';
+import { SetColumnHeaderHeightCommand, SetRowHeaderWidthCommand } from '../commands/commands/headersize-changed.command';
+import { ISheetSelectionRenderService } from './selection/base-selection-render.service';
+import { attachRangeWithCoord } from './selection/util';
 
 export interface ISheetSkeletonManagerParam {
     unitId: string;
@@ -30,21 +33,22 @@ export interface ISheetSkeletonManagerParam {
 }
 
 export interface ISheetSkeletonManagerSearch {
-    unitId: string;
     sheetId: string;
     commandId?: string; // WTF: why?
 }
 
 /**
  * This service manages the drawing of the sheet's viewModel (skeleton).
+ *
  * Each time there is a content change, it will trigger the viewModel of the render to recalculate.
+ *
  * Each application and sub-table has its own viewModel (skeleton).
+ *
  * The viewModel is also a temporary storage variable, which does not need to be persisted,
  * so it is managed uniformly through the service.
  */
-export class SheetSkeletonManagerService implements IDisposable {
-    private _currentSkeleton: ISheetSkeletonManagerSearch = {
-        unitId: '',
+export class SheetSkeletonManagerService extends Disposable implements IRenderModule {
+    private _currentSkeletonSearchParam: ISheetSkeletonManagerSearch = {
         sheetId: '',
     };
 
@@ -60,66 +64,70 @@ export class SheetSkeletonManagerService implements IDisposable {
     readonly currentSkeletonBefore$ = this._currentSkeletonBefore$.asObservable();
 
     constructor(
-        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
-        @Inject(Injector) private readonly _injector: Injector,
-        @Inject(LocaleService) private readonly _localeService: LocaleService
-    ) { }
+        private readonly _context: IRenderContext<Workbook>,
+        @Inject(Injector) private readonly _injector: Injector
+    ) {
+        // empty
+        super();
 
-    dispose(): void {
-        this._currentSkeletonBefore$.complete();
-        this._currentSkeleton$.complete();
-        this._sheetSkeletonParam = [];
+        this.disposeWithMe(() => {
+            this._currentSkeletonBefore$.complete();
+            this._currentSkeleton$.complete();
+            this._sheetSkeletonParam = [];
+        });
+
+        this._initRemoveSheet();
     }
 
-    /** @deprecated */
+    private _initRemoveSheet() {
+        this.disposeWithMe(this._context.unit.sheetDisposed$.subscribe((sheet) => {
+            this.disposeSkeleton({
+                sheetId: sheet.getSheetId(),
+            });
+        }));
+    }
+
+    getCurrentSkeleton(): Nullable<SpreadsheetSkeleton> {
+        return this.getCurrent()?.skeleton;
+    }
+
     getCurrent(): Nullable<ISheetSkeletonManagerParam> {
-        return this._getSkeleton(this._currentSkeleton);
+        return this._getSkeleton(this._currentSkeletonSearchParam);
     }
 
+    getWorksheetSkeleton(sheetId: string): Nullable<ISheetSkeletonManagerParam> {
+        return this._getSkeleton({ sheetId });
+    }
+
+    /**
+     * unitId is never read?
+     */
     getUnitSkeleton(unitId: string, sheetId: string): Nullable<ISheetSkeletonManagerParam> {
-        return this._getSkeleton({ unitId, sheetId });
+        const param = this._getSkeleton({ sheetId });
+        if (param != null) {
+            param.unitId = unitId;
+        }
+        return param;
     }
 
     setCurrent(searchParam: ISheetSkeletonManagerSearch): Nullable<ISheetSkeletonManagerParam> {
         this._setCurrent(searchParam);
     }
 
-    removeSkeleton(searchParam: Pick<ISheetSkeletonManagerSearch, 'unitId'>) {
-        const index = this._sheetSkeletonParam.findIndex((param) => param.unitId === searchParam.unitId);
-        if (index !== -1) {
-            this._sheetSkeletonParam.splice(index, 1);
-            this._currentSkeletonBefore$.next(null);
-            this._currentSkeleton$.next(null);
-        }
-    }
-
-    private _compareSearch(param1: Nullable<ISheetSkeletonManagerSearch>, param2: Nullable<ISheetSkeletonManagerSearch>) {
-        if (param1 == null || param2 == null) {
-            return false;
-        }
-
-        if (param1.commandId === param2.commandId && param1.sheetId === param2.sheetId && param1.unitId === param2.unitId) {
-            return true;
-        }
-        return false;
-    }
-
     private _setCurrent(searchParam: ISheetSkeletonManagerSearch): Nullable<ISheetSkeletonManagerParam> {
         const param = this._getSkeleton(searchParam);
+        const unitId = this._context.unitId;
         if (param != null) {
             this._reCalculate(param);
         } else {
-            const { unitId, sheetId } = searchParam;
-
-            const workbook = this._univerInstanceService.getUniverSheetInstance(searchParam.unitId);
-
-            const worksheet = workbook?.getSheetBySheetId(searchParam.sheetId);
-            if (worksheet == null || workbook == null) {
+            const { sheetId } = searchParam;
+            const workbook = this._context.unit;
+            const worksheet = workbook.getSheetBySheetId(searchParam.sheetId);
+            if (worksheet == null) {
                 return;
             }
 
-            const skeleton = this._buildSkeleton(worksheet, workbook);
-
+            const skeleton = this._buildSkeleton(worksheet);
             this._sheetSkeletonParam.push({
                 unitId,
                 sheetId,
@@ -128,11 +136,11 @@ export class SheetSkeletonManagerService implements IDisposable {
             });
         }
 
-        this._currentSkeleton = searchParam;
-
-        const nextParam = this.getCurrent();
-        this._currentSkeletonBefore$.next(nextParam);
-        this._currentSkeleton$.next(nextParam);
+        this._currentSkeletonSearchParam = searchParam;
+        const sheetId = this._currentSkeletonSearchParam.sheetId;
+        const sheetSkeletonManagerParam = this.getUnitSkeleton(unitId, sheetId);
+        this._currentSkeletonBefore$.next(sheetSkeletonManagerParam);
+        this._currentSkeleton$.next(sheetSkeletonManagerParam);
     }
 
     reCalculate() {
@@ -151,10 +159,11 @@ export class SheetSkeletonManagerService implements IDisposable {
         param.skeleton.calculate();
     }
 
-    makeDirtyCurrent(state: boolean = true) {
-        this.makeDirty(this._currentSkeleton, state);
-    }
-
+    /**
+     * Make param dirty, if param is dirty, then the skeleton will be makeDirty in _reCalculate()
+     * @param searchParm
+     * @param state
+     */
     makeDirty(searchParm: ISheetSkeletonManagerSearch, state: boolean = true) {
         const param = this._getSkeleton(searchParm);
         if (param == null) {
@@ -169,15 +178,15 @@ export class SheetSkeletonManagerService implements IDisposable {
             return skeleton.skeleton;
         }
 
-        const workbook = this._univerInstanceService.getUniverSheetInstance(searchParam.unitId);
-        const worksheet = workbook?.getSheetBySheetId(searchParam.sheetId);
-        if (!worksheet || !workbook) {
+        const workbook = this._context.unit;
+        const worksheet = workbook.getSheetBySheetId(searchParam.sheetId);
+        if (!worksheet) {
             return;
         }
 
-        const newSkeleton = this._buildSkeleton(worksheet, workbook);
+        const newSkeleton = this._buildSkeleton(worksheet);
         this._sheetSkeletonParam.push({
-            unitId: searchParam.unitId,
+            unitId: this._context.unitId,
             sheetId: searchParam.sheetId,
             skeleton: newSkeleton,
             dirty: false,
@@ -186,11 +195,25 @@ export class SheetSkeletonManagerService implements IDisposable {
         return newSkeleton;
     }
 
-    private _getSkeleton(searchParm: ISheetSkeletonManagerSearch): Nullable<ISheetSkeletonManagerParam> {
-        const item = this._sheetSkeletonParam.find(
-            (param) => param.unitId === searchParm.unitId && param.sheetId === searchParm.sheetId
-        );
+    disposeSkeleton(searchParm: ISheetSkeletonManagerSearch) {
+        const index = this._sheetSkeletonParam.findIndex((param) => param.sheetId === searchParm.sheetId);
+        if (index > -1) {
+            const skeleton = this._sheetSkeletonParam[index];
+            skeleton.skeleton.dispose();
+            this._sheetSkeletonParam.splice(index, 1);
+        }
+    }
 
+    /** @deprecated Use function `attachRangeWithCoord` instead.  */
+    attachRangeWithCoord(range: IRange): Nullable<IRangeWithCoord> {
+        const skeleton = this.getCurrentSkeleton();
+        if (!skeleton) return null;
+
+        return attachRangeWithCoord(skeleton, range);
+    }
+
+    private _getSkeleton(searchParm: ISheetSkeletonManagerSearch): Nullable<ISheetSkeletonManagerParam> {
+        const item = this._sheetSkeletonParam.find((param) => param.sheetId === searchParm.sheetId);
         if (item != null) {
             item.commandId = searchParm.commandId;
         }
@@ -198,16 +221,86 @@ export class SheetSkeletonManagerService implements IDisposable {
         return item;
     }
 
-    private _buildSkeleton(worksheet: Worksheet, workbook: Workbook) {
-        const config = worksheet.getConfig();
+    private _buildSkeleton(worksheet: Worksheet) {
         const spreadsheetSkeleton = this._injector.createInstance(
             SpreadsheetSkeleton,
             worksheet,
-            config,
-            worksheet.getCellMatrix(),
-            workbook.getStyles()
+            this._context.unit.getStyles()
         );
 
         return spreadsheetSkeleton;
+    }
+
+    setColumnHeaderSize(render: Nullable<IRender>, sheetId: string, size: number) {
+        if (!render) return;
+        const skeleton = this.getWorksheetSkeleton(sheetId)?.skeleton;
+        if (!skeleton) return;
+
+        skeleton.columnHeaderHeight = size;
+        render.scene.getViewports()[0].top = size;
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_COLUMN_RIGHT)!.setViewportSize({
+            height: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_COLUMN_LEFT)!.setViewportSize({
+            height: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_ROW_BOTTOM)!.setViewportSize({
+            top: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_ROW_TOP)!.setViewportSize({
+            top: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_LEFT_TOP)!.setViewportSize({
+            height: size,
+        });
+        const selectionService = render?.with(SheetsSelectionsService);
+        const selectionRenderService = render?.with(ISheetSelectionRenderService);
+        const currSelections = selectionService.getCurrentSelections();
+        selectionRenderService.resetSelectionsByModelData(currSelections);
+
+        const sheetSkeletonManagerParam = this.getUnitSkeleton(render.unitId, sheetId);
+        if (sheetSkeletonManagerParam) {
+            sheetSkeletonManagerParam.commandId = SetColumnHeaderHeightCommand.id;
+            this._currentSkeleton$.next(sheetSkeletonManagerParam);
+        }
+    }
+
+    setRowHeaderSize(render: Nullable<IRender>, sheetId: string, size: number) {
+        const skeleton = this.getWorksheetSkeleton(sheetId)?.skeleton;
+        if (!render) return;
+        if (!skeleton) return;
+        skeleton.rowHeaderWidth = size;
+        const originWidth = render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_LEFT_TOP)!.width || 46;
+        const deltaX = size - originWidth;
+
+        const originLeftOfViewMain = render.scene.getViewports()[0].left;
+        render.scene.getViewports()[0].left = originLeftOfViewMain + deltaX;
+
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_ROW_BOTTOM)!.setViewportSize({
+            width: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_ROW_TOP)!.setViewportSize({
+            width: size,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_COLUMN_LEFT)!.setViewportSize({
+            left: size,
+        });
+        const prevLeft = render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_COLUMN_RIGHT)!.left || 0;
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_COLUMN_RIGHT)!.setViewportSize({
+            left: prevLeft + deltaX,
+        });
+        render.scene.getViewport(SHEET_VIEWPORT_KEY.VIEW_LEFT_TOP)!.setViewportSize({
+            width: size,
+        });
+        const selectionService = render?.with(SheetsSelectionsService);
+        const selectionRenderService = render?.with(ISheetSelectionRenderService);
+        const currSelections = selectionService.getCurrentSelections();
+        selectionRenderService.resetSelectionsByModelData(currSelections);
+
+        const sheetSkeletonManagerParam = this.getCurrent();
+        if (sheetSkeletonManagerParam) {
+            sheetSkeletonManagerParam.commandId = SetRowHeaderWidthCommand.id;
+            this._currentSkeleton$.next(sheetSkeletonManagerParam);
+        }
     }
 }

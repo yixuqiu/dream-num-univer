@@ -15,9 +15,8 @@
  */
 
 import type { ICommandInfo, IUnitRange, Nullable } from '@univerjs/core';
-import { Disposable } from '@univerjs/core';
-import { createIdentifier } from '@wendellhu/redi';
 import type { IDirtyUnitFeatureMap, IDirtyUnitOtherFormulaMap, IDirtyUnitSheetDefinedNameMap, IDirtyUnitSheetNameMap } from '../basics/common';
+import { createIdentifier, Disposable } from '@univerjs/core';
 
 export interface IDirtyConversionManagerParams {
     commandId: string;
@@ -27,6 +26,7 @@ export interface IDirtyConversionManagerParams {
         dirtyDefinedNameMap?: IDirtyUnitSheetDefinedNameMap;
         dirtyUnitFeatureMap?: IDirtyUnitFeatureMap;
         dirtyUnitOtherFormulaMap?: IDirtyUnitOtherFormulaMap;
+        clearDependencyTreeCache?: IDirtyUnitSheetNameMap;
     };
 }
 

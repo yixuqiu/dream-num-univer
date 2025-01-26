@@ -14,67 +14,56 @@
  * limitations under the License.
  */
 
-/* eslint-disable no-console */
-
-import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+import { getMetrics } from './util';
 
-// The type definition is copied from:
-// examples/src/plugins/debugger/controllers/e2e/e2e-memory.controller.ts
-export interface IE2EMemoryControllerAPI {
-    loadAndRelease(id: number): Promise<void>;
-    getHeapMemoryUsage(): number;
-}
+const MAX_UNIT_MEMORY_OVERFLOW = 1_000_000; // 1MB
+
+// There are some compiled code and global cache, so we make some room
+// for this. But we need to make sure that a Univer object cannot fit
+// in this size.
+const MAX_UNIVER_MEMORY_OVERFLOW = 6_000_000; // TODO@wzhudev: temporarily added 300KB
+// there is a memory leak in the univer object, so we need to make sure that
+
+const MAX_SECOND_INSTANCE_OVERFLOW = 100_000; // Only 100 KB
+
+test('memory', async ({ page }) => {
+    test.setTimeout(60_000);
+
+    await page.goto('http://localhost:3000/sheets/');
+    await page.waitForTimeout(5000);
+
+    const memoryAfterFirstInstance = (await getMetrics(page)).JSHeapUsedSize;
+
+    await page.evaluate(() => window.E2EControllerAPI.loadAndRelease(1));
+    await page.waitForTimeout(2000);
+    const memoryAfterFirstLoad = (await getMetrics(page)).JSHeapUsedSize;
+
+    await page.evaluate(() => window.E2EControllerAPI.loadAndRelease(2));
+    await page.waitForTimeout(2000);
+    const memoryAfterSecondLoad = (await getMetrics(page)).JSHeapUsedSize;
+    expect(memoryAfterSecondLoad - memoryAfterFirstLoad)
+        .toBeLessThanOrEqual(MAX_UNIT_MEMORY_OVERFLOW);
+
+    await page.evaluate(() => window.univer.dispose());
+    await page.waitForTimeout(2000);
+    const memoryAfterDisposingFirstInstance = (await getMetrics(page)).JSHeapUsedSize;
+
+    await page.evaluate(() => window.createNewInstance());
+    await page.waitForTimeout(2000);
+    await page.evaluate(() => window.univer.dispose());
+    await page.waitForTimeout(2000);
+    const memoryAfterDisposingSecondUniver = (await getMetrics(page)).JSHeapUsedSize;
+    expect(memoryAfterDisposingSecondUniver - memoryAfterDisposingFirstInstance)
+        .toBeLessThanOrEqual(MAX_SECOND_INSTANCE_OVERFLOW);
+
+    expect(memoryAfterDisposingSecondUniver - memoryAfterFirstInstance)
+        .toBeLessThanOrEqual(MAX_UNIVER_MEMORY_OVERFLOW);
+});
+
 declare global {
     // eslint-disable-next-line ts/naming-convention
     interface Window {
-        E2EMemoryAPI: IE2EMemoryControllerAPI;
+        createNewInstance: () => void;
     }
 }
-
-test('memory', async ({ page }) => {
-    await page.goto('http://localhost:3000/sheets/');
-    await page.waitForTimeout(2000);
-
-    const memoryBeforeLoad = (await getMetrics(page)).JSHeapUsedSize;
-    console.log('Memory before load:', memoryBeforeLoad);
-
-    await page.evaluate(() => window.E2EMemoryAPI.loadAndRelease(1));
-    await page.waitForTimeout(5000); // wait for long enough to let the GC do its job
-    const memoryAfterFirstLoad = (await getMetrics(page)).JSHeapUsedSize;
-    console.log('Memory after first load:', memoryAfterFirstLoad);
-
-    await page.evaluate(() => window.E2EMemoryAPI.loadAndRelease(2));
-    const memoryAfterSecondLoad = (await getMetrics(page)).JSHeapUsedSize;
-    console.log('Memory after second load:', memoryAfterSecondLoad);
-
-    // max overflow for 3MB
-    const notLeaking = (memoryAfterSecondLoad <= memoryAfterFirstLoad)
-        || (memoryAfterSecondLoad - memoryAfterFirstLoad <= 2_500_000);
-    expect(notLeaking).toBeTruthy();
-});
-
-interface IMetrics {
-    JSHeapUsedSize: number;
-}
-
-/**
- * Return a performance metric from the chrome cdp session.
- * Note: Chrome-only
- * @param {Page} page page to attach cdpClient
- * @return {IMetrics}
- * @see {@link https://github.com/microsoft/playwright/issues/18071 Github RFE}
- */
-async function getMetrics(page: Page): Promise<IMetrics> {
-    const client = await page.context().newCDPSession(page);
-    await client.send('Performance.enable');
-    const perfMetricObject = await client.send('Performance.getMetrics');
-    const extractedMetric = perfMetricObject?.metrics;
-    const metricObject = extractedMetric.reduce((acc, { name, value }) => {
-        acc[name] = value;
-        return acc;
-    }, {});
-
-    return metricObject as unknown as IMetrics;
-}
-

@@ -167,6 +167,11 @@ const locale = {
                 formula: '公式',
                 none: '无',
             },
+            errorMessage: {
+                notBlank: '条件不能为空',
+                rangeError: '选区错误',
+                formulaError: '公式错误',
+            },
         },
     },
 };

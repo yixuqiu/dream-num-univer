@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { ITextRangeParam } from '@univerjs/core';
+import type { ITextRangeParam, Nullable } from '@univerjs/core';
+import type { INodePosition } from './interfaces';
 
 export interface ITextSelectionStyle {
     strokeWidth: number;
@@ -24,25 +25,38 @@ export interface ITextSelectionStyle {
 }
 
 export const NORMAL_TEXT_SELECTION_PLUGIN_STYLE: ITextSelectionStyle = {
-    strokeWidth: 1,
+    strokeWidth: 1.5,
     stroke: 'rgba(0, 0, 0, 0)',
     strokeActive: 'rgba(0, 0, 0, 1)',
     fill: 'rgba(0, 0, 0, 0.2)',
 };
 
 export interface ITextRangeWithStyle extends ITextRangeParam {
+    startNodePosition?: Nullable<INodePosition>;
+    endNodePosition?: Nullable<INodePosition>;
     style?: ITextSelectionStyle;
+}
+
+export interface IRectRangeWithStyle extends ITextRangeWithStyle {
+    startRow: number;
+    startColumn: number;
+    endRow: number;
+    endColumn: number;
+    tableId: string;
+    spanEntireRow: boolean;
+    spanEntireColumn: boolean;
+    spanEntireTable: boolean;
 }
 
 // Only use in add/replaceTextRanges methods.
-export interface ISuccinctTextRangeParam {
-    startOffset: number;
-    endOffset: number;
-    style?: ITextSelectionStyle;
-}
+export type ISuccinctDocRangeParam = Pick<ITextRangeWithStyle, 'startOffset' | 'endOffset' | 'segmentId' | 'segmentPage' | 'style' | 'rangeType'>;
 
-export enum RANGE_DIRECTION {
-    NONE = 'none',
-    BACKWARD = 'backward',
-    FORWARD = 'forward',
+export interface IDocSelectionInnerParam {
+    textRanges: ITextRangeWithStyle[];
+    rectRanges: IRectRangeWithStyle[];
+    segmentId: string;
+    isEditing: boolean;
+    style: ITextSelectionStyle;
+    segmentPage: number;
+    options?: { [key: string]: boolean };
 }

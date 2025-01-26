@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
 import type { Univer } from '../../univer';
-import type { IWorkbookData } from '../../types/interfaces/i-workbook-data';
-import { LocaleType } from '../../types/enum/locale-type';
-import { extractPureTextFromCell, type Worksheet } from '../worksheet';
-import { type IRange, RANGE_TYPE } from '../../types/interfaces/i-range';
+import type { IRange, IWorkbookData } from '../typedef';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DisposableCollection } from '../../shared/lifecycle';
 import { CellValueType } from '../../types/enum';
+import { LocaleType } from '../../types/enum/locale-type';
+import { RANGE_TYPE } from '../typedef';
+import { extractPureTextFromCell, type Worksheet } from '../worksheet';
 import { createCoreTestBed } from './create-core-test-bed';
 
 describe('test worksheet', () => {
@@ -33,7 +32,7 @@ describe('test worksheet', () => {
     function prepare(workbookData?: IWorkbookData) {
         const testBed = createCoreTestBed(workbookData);
         univer = testBed.univer;
-        worksheet = testBed.sheet.getActiveSheet();
+        worksheet = testBed.sheet.getActiveSheet()!;
     }
 
     afterEach(() => {

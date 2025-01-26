@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import type { ICommand, IMutationInfo } from '@univerjs/core';
+import type { IAccessor, ICommand, IMutationInfo } from '@univerjs/core';
+import type {
+    FormatType,
+    IRemoveNumfmtMutationParams,
+    ISetCellsNumfmt,
+    ISetNumfmtMutationParams,
+} from '@univerjs/sheets';
 import {
     CommandType,
     ICommandService,
@@ -22,12 +28,6 @@ import {
     IUniverInstanceService,
     sequenceExecute,
 } from '@univerjs/core';
-import type {
-    FormatType,
-    IRemoveNumfmtMutationParams,
-    ISetCellsNumfmt,
-    ISetNumfmtMutationParams,
-} from '@univerjs/sheets';
 import {
     factoryRemoveNumfmtUndoMutation,
     factorySetNumfmtUndoMutation,
@@ -37,7 +37,6 @@ import {
     SetNumfmtMutation,
     transformCellsToRange,
 } from '@univerjs/sheets';
-import type { IAccessor } from '@wendellhu/redi';
 
 export interface ISetNumfmtCommandParams {
     unitId?: string;

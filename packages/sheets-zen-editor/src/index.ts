@@ -14,5 +14,12 @@
  * limitations under the License.
  */
 
+import './global.css';
+
+export { CancelZenEditCommand, ConfirmZenEditCommand, OpenZenEditorCommand } from './commands/commands/zen-editor.command';
+
+// #region - all commands
+
 export { UniverSheetsZenEditorPlugin } from './plugin';
-export { enUS, zhCN } from './locale';
+
+// #endregion

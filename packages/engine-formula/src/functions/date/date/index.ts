@@ -24,11 +24,11 @@ import { NullValueObject, NumberValueObject } from '../../../engine/value-object
 import { BaseFunction } from '../../base-function';
 
 export class DateFunction extends BaseFunction {
-    override calculate(year: BaseValueObject, month: BaseValueObject, day: BaseValueObject) {
-        if (year == null || month == null || day == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 3;
 
+    override maxParams = 3;
+
+    override calculate(year: BaseValueObject, month: BaseValueObject, day: BaseValueObject) {
         if (year.isError()) {
             return year;
         }
@@ -99,8 +99,7 @@ export class DateFunction extends BaseFunction {
                 return ErrorValueObject.create(ErrorType.NUM);
             }
 
-            const valueObject = NumberValueObject.create(currentSerial);
-            valueObject.setPattern(DEFAULT_DATE_FORMAT);
+            const valueObject = NumberValueObject.create(currentSerial, DEFAULT_DATE_FORMAT);
 
             return valueObject;
         });

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import type { IRange } from '@univerjs/core';
 import { ObjectMatrix, Range } from '@univerjs/core';
+import type { IRange } from '@univerjs/core';
 
 export const createTopMatrixFromRanges = (ranges: IRange[]) => {
     const matrix = new ObjectMatrix<number>();
@@ -74,8 +74,9 @@ const findMaximalRectangle = (topMatrix: ObjectMatrix<number>) => {
             endColumn: col,
         };
         for (let k = col - 1; k >= 0; k--) {
-            if (!topMatrix.getValue(row, k)) break;
-            else {
+            if (!topMatrix.getValue(row, k)) {
+                break;
+            } else {
                 rows = Math.min(topMatrix.getValue(row, k) || 0, rows);
                 cols++;
                 const area = rows * cols;
@@ -91,14 +92,20 @@ const findMaximalRectangle = (topMatrix: ObjectMatrix<number>) => {
 const filterLeftMatrix = (topMatrix: ObjectMatrix<number>, range: IRange) => {
     Range.foreach(range, (row, col) => {
         topMatrix.realDeleteValue(row, col);
-        let theNextRow = row + 1;
-        let theNextRowValue = topMatrix.getValue(theNextRow, col) || 0;
-        while (theNextRowValue > 1) {
-            topMatrix.setValue(theNextRow, col, theNextRowValue - 1);
-            theNextRow += 1;
-            theNextRowValue = topMatrix.getValue(theNextRow, col) || 0;
-        }
     });
+
+    for (let col = range.startColumn; col <= range.endColumn; col++) {
+        const row = range.endRow + 1;
+        const v = topMatrix.getValue(row, col)!;
+        if (v > 0) {
+            topMatrix.setValue(row, col, 1);
+            let nextRow = row + 1;
+            while (topMatrix.getValue(nextRow, col)! > 0) {
+                topMatrix.setValue(nextRow, col, topMatrix.getValue(nextRow - 1, col)! + 1);
+                nextRow++;
+            }
+        }
+    }
     return topMatrix;
 };
 

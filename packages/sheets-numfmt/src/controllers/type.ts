@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-import { LifecycleStages, runOnLifecycle } from '@univerjs/core';
-import { createIdentifier } from '@wendellhu/redi';
+import { createIdentifier } from '@univerjs/core';
 
+export const INumfmtController = createIdentifier<INumfmtController>('INumfmtController');
 export interface INumfmtController {
     openPanel(): void;
 }
-export const INumfmtController = createIdentifier<INumfmtController>('INumfmtController');
-runOnLifecycle(LifecycleStages.Rendered, INumfmtController);

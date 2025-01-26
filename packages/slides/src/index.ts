@@ -14,6 +14,5 @@
  * limitations under the License.
  */
 
-export * from './slides-plugin';
+export { UniverSlidesPlugin } from './slides-plugin';
 export * from './views/render';
-export { enUS, zhCN } from './locale';

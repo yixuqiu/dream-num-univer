@@ -14,47 +14,59 @@
  * limitations under the License.
  */
 
-import type { Nullable, UnitModel, UnitType } from '@univerjs/core';
-import { Disposable } from '@univerjs/core';
-import type { IDisposable, Injector } from '@wendellhu/redi';
+import type { Dependency, DependencyIdentifier, IDisposable, Nullable, UnitModel, UnitType, UniverInstanceType } from '@univerjs/core';
 import type { Engine } from '../engine';
 import type { Scene } from '../scene';
 import type { RenderComponentType } from './render-manager.service';
+import { Disposable, Inject, Injector, isClassDependencyItem } from '@univerjs/core';
 
+/**
+ * Public interface of a {@link RenderUnit}.
+ *
+ * @property {string} unitId - The id of the RenderUnit.
+ */
 export interface IRender {
     unitId: string;
+    type: UniverInstanceType;
     engine: Engine;
     scene: Scene;
     mainComponent: Nullable<RenderComponentType>;
     components: Map<string, RenderComponentType>;
     isMainScene: boolean;
+    isThumbNail?: boolean;
+
+    with<T>(dependency: DependencyIdentifier<T>): T;
+    getRenderContext?(): IRenderContext;
 }
 
-// eslint-disable-next-line ts/no-explicit-any
-export interface IRenderControllerCtor<T extends UnitModel = UnitModel> { new(unit: IRenderContext<T>, ...args: any[]): IRenderController }
-export interface IRenderController extends IDisposable {}
+/**
+ * Every render module should implement this interface.
+ */
+export interface IRenderModule extends IDisposable { }
 
 /**
- * This object encapsulates methods or properties to render each element.
+ * Necessary context for a render module.This interface would be the first argument of render modules' constructor
+ * functions.
  */
-export interface IRenderContext<T extends UnitModel = UnitModel> extends IRender {
+export interface IRenderContext<T extends UnitModel = UnitModel> extends Omit<IRender, 'with'> {
     unit: T;
     type: UnitType;
 }
 
 /**
- * This class is responsible
+ * This class is necessary for Univer to render several units in the same webpage. It encapsulates the rendering
+ * context and rendering modules for a specific unit.
  */
 export class RenderUnit extends Disposable implements IRender {
-    readonly isRenderUnit: true;
+    readonly isRenderUnit: boolean = true;
 
     get unitId(): string { return this._renderContext.unitId; }
     get type(): UnitType { return this._renderContext.type; }
 
     private readonly _injector: Injector;
-    private readonly _renderControllers: IRenderController[] = [];
 
     private _renderContext: IRenderContext<UnitModel>;
+
     set isMainScene(is: boolean) { this._renderContext.isMainScene = is; }
     get isMainScene(): boolean { return this._renderContext.isMainScene; }
     set engine(engine: Engine) { this._renderContext.engine = engine; }
@@ -63,11 +75,11 @@ export class RenderUnit extends Disposable implements IRender {
     get mainComponent(): Nullable<RenderComponentType> { return this._renderContext.mainComponent; }
     set scene(scene: Scene) { this._renderContext.scene = scene; }
     get scene(): Scene { return this._renderContext.scene; }
-    get components() { return this._renderContext.components; }
+    get components(): Map<string, RenderComponentType> { return this._renderContext.components; }
 
     constructor(
-        parentInjector: Injector,
-        init: Pick<IRenderContext, 'engine' | 'scene' | 'isMainScene' | 'unit' >
+        init: Pick<IRenderContext, 'engine' | 'scene' | 'isMainScene' | 'unit'>,
+        @Inject(Injector) parentInjector: Injector
     ) {
         super();
 
@@ -85,18 +97,52 @@ export class RenderUnit extends Disposable implements IRender {
         };
     }
 
-    override dispose() {
-        this._renderControllers.forEach((controller) => controller.dispose());
-        this._renderControllers.length = 0;
+    override dispose(): void {
+        this._injector.dispose();
+        super.dispose();
     }
 
-    addRenderControllers(ctors: IRenderControllerCtor[]) {
-        this._initControllers(ctors);
+    /**
+     * Get a dependency from the RenderUnit's injector.
+     */
+    with<T>(dependency: DependencyIdentifier<T>): T {
+        return this._injector.get(dependency);
     }
 
-    private _initControllers(ctors: IRenderControllerCtor[]): void {
-        ctors
-            .map((ctor) => this._injector.createInstance(ctor, this._renderContext))
-            .forEach((controller) => this._renderControllers.push(controller));
+    /**
+     * Add render dependencies to the RenderUnit's injector. Note that the dependencies would be initialized immediately
+     * after being added.
+     */
+    addRenderDependencies(dependencies: Dependency[]): void {
+        this._initDependencies(dependencies);
+    }
+
+    private _initDependencies(dependencies: Dependency[]): void {
+        const j = this._injector;
+
+        dependencies.forEach((dep) => {
+            const [identifier, implOrNull] = Array.isArray(dep) ? dep : [dep, null];
+
+            if (!implOrNull) {
+                j.add([identifier, {
+                    useFactory: (): IRenderModule => j.createInstance(identifier, this._renderContext),
+                }]);
+            } else if (isClassDependencyItem(implOrNull)) {
+                j.add([identifier, {
+                    useFactory: (): IRenderModule => j.createInstance(implOrNull.useClass, this._renderContext),
+                }]);
+            } else {
+                throw new Error('[RenderUnit]: render dependency could only be an class!');
+            }
+        });
+
+        dependencies.forEach((dep) => {
+            const [identifier] = Array.isArray(dep) ? dep : [dep, null];
+            j.get(identifier);
+        });
+    }
+
+    getRenderContext(): IRenderContext {
+        return this._renderContext;
     }
 }

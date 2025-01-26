@@ -1,8 +1,10 @@
-name: 🔮 Sync mirror
+name: 🔮 Sync Mirror
 
 on:
     push:
-        branches: [main, dev]
+        branches:
+            - main
+            - dev
 
 jobs:
     sync:
