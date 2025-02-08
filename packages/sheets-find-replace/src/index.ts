@@ -14,5 +14,11 @@
  * limitations under the License.
  */
 
-export { enUS, zhCN } from './locale';
 export { UniverSheetsFindReplacePlugin } from './plugin';
+export { SheetsFindReplaceController } from './controllers/sheet-find-replace.controller';
+
+// #region - all commands
+
+export { SheetReplaceCommand } from './commands/commands/sheet-replace.command';
+
+// #endregion

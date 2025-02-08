@@ -17,22 +17,26 @@
 /* eslint-disable ts/no-explicit-any */
 
 import type { Nullable } from '../../shared';
-import type { ISelectionCellWithCoord } from './i-selection-data';
+import type { ICellDataForSheetInterceptor, ICellWithCoord } from '../../sheets/typedef';
+import type { Workbook } from '../../sheets/workbook';
+import type { Worksheet } from '../../sheets/worksheet';
 import type { IStyleData } from './i-style-data';
-import type { ICellDataForSheetInterceptor } from './i-cell-data';
 
 export interface ICellRenderContext {
-    data: ICellDataForSheetInterceptor;
+    data: Nullable<ICellDataForSheetInterceptor>;
     style: Nullable<IStyleData>;
-    primaryWithCoord: ISelectionCellWithCoord;
-    unitId?: string;
+    primaryWithCoord: ICellWithCoord;
+    unitId: string;
     subUnitId: string;
     row: number;
     col: number;
+    worksheet: Worksheet;
+    workbook?: Workbook;
 }
 
 /**
  * @debt This shouldn't exist in core package.
+ * @ignore
  *
  * @deprecated This interface is subject to change in the future.
  */

@@ -177,7 +177,7 @@ export class BaseValueObject extends ObjectClassType {
         return ErrorValueObject.create(ErrorType.NAME);
     }
 
-    compare(valueObject: BaseValueObject, operator: compareToken): BaseValueObject {
+    compare(valueObject: BaseValueObject, operator: compareToken, isCaseSensitive: boolean = false): BaseValueObject {
         /** abstract */
         return ErrorValueObject.create(ErrorType.NAME);
     }
@@ -297,6 +297,11 @@ export class BaseValueObject extends ObjectClassType {
         return ErrorValueObject.create(ErrorType.VALUE);
     }
 
+    cosh(): BaseValueObject {
+        /** abstract */
+        return ErrorValueObject.create(ErrorType.VALUE);
+    }
+
     acos(): BaseValueObject {
         /** abstract */
         return ErrorValueObject.create(ErrorType.VALUE);
@@ -308,6 +313,11 @@ export class BaseValueObject extends ObjectClassType {
     }
 
     sin(): BaseValueObject {
+        /** abstract */
+        return ErrorValueObject.create(ErrorType.VALUE);
+    }
+
+    sinh(): BaseValueObject {
         /** abstract */
         return ErrorValueObject.create(ErrorType.VALUE);
     }

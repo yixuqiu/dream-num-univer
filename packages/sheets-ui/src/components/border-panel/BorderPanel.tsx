@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import { BorderStyleTypes } from '@univerjs/core';
-import { ColorPicker, Dropdown, Menu, MenuItem } from '@univerjs/design';
+import { BorderStyleTypes, useDependency } from '@univerjs/core';
+import { ColorPicker, DropdownLegacy, Menu, MenuItem } from '@univerjs/design';
 import { MoreDownSingle, PaintBucket } from '@univerjs/icons';
 import { BorderStyleManagerService, type IBorderInfo } from '@univerjs/sheets';
 import { ComponentManager } from '@univerjs/ui';
-import { useDependency } from '@wendellhu/redi/react-bindings';
 import React from 'react';
 
 import { BorderLine } from './border-line/BorderLine';
@@ -102,7 +101,12 @@ export function BorderPanel(props: IBorderPanelProps) {
                 {BORDER_LINE_CHILDREN.map((item) => (
                     <div
                         key={item.value}
-                        className={borderStyleManagerService.getBorderInfo().type === item.value ? (`${styles.uiPluginSheetsBorderPanelPositionItemActive} ${styles.uiPluginSheetsBorderPanelPositionItem}`) : styles.uiPluginSheetsBorderPanelPositionItem}
+                        className={borderStyleManagerService.getBorderInfo().type === item.value
+                            ? (`
+                              ${styles.uiPluginSheetsBorderPanelPositionItemActive}
+                              ${styles.uiPluginSheetsBorderPanelPositionItem}
+                            `)
+                            : styles.uiPluginSheetsBorderPanelPositionItem}
                         onClick={(e) => {
                             e.stopPropagation();
                             handleClick(item.value, 'type');
@@ -115,7 +119,7 @@ export function BorderPanel(props: IBorderPanelProps) {
 
             <div className={styles.uiPluginSheetsBorderPanelStyles}>
                 <div>
-                    <Dropdown
+                    <DropdownLegacy
                         align={{
                             offset: [0, 18],
                         }}
@@ -126,16 +130,16 @@ export function BorderPanel(props: IBorderPanelProps) {
                         )}
                     >
                         <a className={styles.uiPluginSheetsBorderPanelButton} onClick={stopPropagation}>
-                            <PaintBucket extend={{ colorChannel1: value.color ?? 'rgb(var(--primary-color))' }} />
+                            <PaintBucket extend={{ colorChannel1: value?.color ?? 'rgb(var(--primary-color))' }} />
                             <span className={styles.uiPluginSheetsBorderPanelMoreIcon}>
                                 <MoreDownSingle />
                             </span>
                         </a>
-                    </Dropdown>
+                    </DropdownLegacy>
                 </div>
 
                 <div>
-                    <Dropdown
+                    <DropdownLegacy
                         align={{
                             offset: [0, 18],
                         }}
@@ -161,7 +165,7 @@ export function BorderPanel(props: IBorderPanelProps) {
                                 <MoreDownSingle />
                             </span>
                         </a>
-                    </Dropdown>
+                    </DropdownLegacy>
                 </div>
             </div>
         </section>

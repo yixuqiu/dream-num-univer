@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import React, { Component, createRef } from 'react';
+import type { IUniverDocsUIConfig } from '../../controllers/config.schema';
 
-import type { IUniverDocsUIConfig } from '../../basics';
+import React, { Component, createRef } from 'react';
 import style from './index.module.less';
 
 interface IBaseDocContainerProps {
@@ -43,6 +43,7 @@ export class DocContainer extends Component<IBaseDocContainerProps> {
 
     constructor(props: IBaseDocContainerProps) {
         super(props);
+
         this.changeSkin(props.config.container as string, 'default');
     }
 
@@ -205,7 +206,8 @@ export class DocContainer extends Component<IBaseDocContainerProps> {
                             style={{
                                 display: config.footer ? 'block' : 'none',
                             }}
-                        />
+                        >
+                        </footer>
                     </div>
                     <aside
                         style={{

@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-import type { Nullable } from '@univerjs/core';
-import { DisposableCollection, LocaleService, toDisposable } from '@univerjs/core';
+import type { IDisposable, Nullable } from '@univerjs/core';
+import { DisposableCollection, LocaleService, toDisposable, useDependency } from '@univerjs/core';
 import { Button, MessageType } from '@univerjs/design';
 import { IMessageService, IShortcutService } from '@univerjs/ui';
-import type { IDisposable } from '@wendellhu/redi';
-import { useDependency } from '@wendellhu/redi/react-bindings';
 import { editor } from 'monaco-editor';
 import React, { useCallback, useEffect, useRef } from 'react';
 
 import { ScriptEditorService } from '../../services/script-editor.service';
-import { UniscriptExecutionService } from '../../services/script-execution.service';
+import { IUniscriptExecutionService } from '../../services/script-execution.service';
 import styles from './index.module.less';
 
 export function ScriptEditorPanel() {
@@ -106,7 +104,7 @@ export function ScriptEditorPanel() {
 }
 
 function useExecution(monacoEditorRef: React.MutableRefObject<Nullable<editor.IStandaloneCodeEditor>>) {
-    const scriptService = useDependency(UniscriptExecutionService);
+    const scriptService = useDependency(IUniscriptExecutionService);
     const messageService = useDependency(IMessageService);
     const localeService = useDependency(LocaleService);
 

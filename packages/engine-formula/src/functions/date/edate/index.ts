@@ -27,11 +27,11 @@ import { BaseFunction } from '../../base-function';
  * TODO@Dushusir: support plaine text date: =EDATE("2020-1-1",1), =EDATE("2020/1/1",1) and other formats
  */
 export class Edate extends BaseFunction {
-    override calculate(startDate: BaseValueObject, months: BaseValueObject) {
-        if (startDate == null || months == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 2;
 
+    override maxParams = 2;
+
+    override calculate(startDate: BaseValueObject, months: BaseValueObject) {
         if (startDate.isError()) {
             return startDate;
         }
@@ -78,19 +78,16 @@ export class Edate extends BaseFunction {
 
             const monthsValue = Math.floor(+monthsValueObject.getValue());
 
-            const startDate = excelSerialToDate(startDateSerial);
+            const _startDate = excelSerialToDate(startDateSerial);
 
-            const year = startDate.getUTCFullYear();
-            const month = startDate.getUTCMonth() + monthsValue;
-            const day = startDate.getUTCDate();
+            const year = _startDate.getUTCFullYear();
+            const month = _startDate.getUTCMonth() + monthsValue;
+            const day = _startDate.getUTCDate();
 
             const resultDate = new Date(Date.UTC(year, month, day));
             const currentSerial = excelDateSerial(resultDate);
 
-            const valueObject = NumberValueObject.create(currentSerial);
-            valueObject.setPattern(DEFAULT_DATE_FORMAT);
-
-            return valueObject;
+            return NumberValueObject.create(currentSerial, DEFAULT_DATE_FORMAT);
         });
     }
 }

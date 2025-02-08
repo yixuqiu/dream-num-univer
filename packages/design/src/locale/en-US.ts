@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import PickerEnUs from 'rc-picker/lib/locale/en_US';
-import dajsEnUS from 'dayjs/locale/en';
 import type { ILocale } from './interface';
+import dajsEnUS from 'dayjs/locale/en';
+import PickerEnUs from 'rc-picker/lib/locale/en_US';
 
 const locale: ILocale = {
     design: {
@@ -30,6 +30,12 @@ const locale: ILocale = {
         Picker: {
             ...dajsEnUS,
             ...PickerEnUs,
+        },
+        CascaderList: {
+            empty: 'None',
+        },
+        Select: {
+            empty: 'None',
         },
     },
 };

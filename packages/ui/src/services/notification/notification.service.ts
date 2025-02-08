@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDisposable } from '@univerjs/core';
+import { createIdentifier } from '@univerjs/core';
 
-import type { INotificationMethodOptions } from '../../components/notification/Notification';
+import type { INotificationOptions } from '../../components/notification/Notification';
 
-export const INotificationService = createIdentifier<INotificationService>('univer.notification-service');
+export const INotificationService = createIdentifier<INotificationService>('ui.notification.service');
 
 export interface INotificationService {
-    show(params: INotificationMethodOptions): IDisposable;
+    show(params: INotificationOptions): IDisposable;
 }

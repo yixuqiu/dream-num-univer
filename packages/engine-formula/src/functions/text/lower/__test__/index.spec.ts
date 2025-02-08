@@ -16,52 +16,65 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { ErrorType } from '../../../../basics/error-type';
+import { ArrayValueObject, transformToValueObject } from '../../../../engine/value-object/array-value-object';
+import { StringValueObject } from '../../../../engine/value-object/primitive-object';
+import { getObjectValue } from '../../../__tests__/create-function-test-bed';
 import { FUNCTION_NAMES_TEXT } from '../../function-names';
 import { Lower } from '../index';
-import { BooleanValueObject, NumberValueObject, StringValueObject } from '../../../../engine/value-object/primitive-object';
-import { ArrayValueObject, transformToValue, transformToValueObject } from '../../../../engine/value-object/array-value-object';
-import { ErrorType } from '../../../../basics/error-type';
 
 describe('Test lower function', () => {
-    const textFunction = new Lower(FUNCTION_NAMES_TEXT.LOWER);
+    const testFunction = new Lower(FUNCTION_NAMES_TEXT.LOWER);
 
     describe('Lower', () => {
         it('Value is normal', () => {
-            const value = StringValueObject.create('Apt. 2B');
-            const result = textFunction.calculate(value);
-            expect(result.getValue()).toBe('apt. 2b');
-        });
-
-        it('Value is number', () => {
-            const value = NumberValueObject.create(1);
-            const result = textFunction.calculate(value);
-            expect(result.getValue()).toBe('1');
-        });
-
-        it('Value is boolean', () => {
-            const value = BooleanValueObject.create(true);
-            const result = textFunction.calculate(value);
-            expect(result.getValue()).toBe('true');
+            const text = StringValueObject.create('Univer');
+            const result = testFunction.calculate(text);
+            expect(getObjectValue(result)).toStrictEqual('univer');
         });
 
         it('Value is array', () => {
-            const text = new ArrayValueObject({
+            const text = ArrayValueObject.create({
                 calculateValueList: transformToValueObject([
-                    [1, ' ', 1.23, true, false, null, 'Univer表格シート繁體한국인'],
-                    [0, '100', '2.34', 'TEST', -3, ErrorType.VALUE, null],
+                    [1, ' ', '中文测试', true, false, null],
+                    [0, '100', '2.34', '2-Way Street', -3, ErrorType.NAME],
                 ]),
                 rowCount: 2,
-                columnCount: 7,
+                columnCount: 6,
                 unitId: '',
                 sheetId: '',
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(text);
-            expect(transformToValue(result.getArrayValue())).toStrictEqual([
-                ['1', ' ', '1.23', 'true', 'false', '', 'univer表格シート繁體한국인'],
-                ['0', '100', '2.34', 'test', '-3', '#VALUE!', ''],
+            const result = testFunction.calculate(text);
+            expect(getObjectValue(result)).toStrictEqual([
+                ['1', ' ', '中文测试', 'true', 'false', ''],
+                ['0', '100', '2.34', '2-way street', '-3', ErrorType.NAME],
             ]);
+
+            const text2 = ArrayValueObject.create({
+                calculateValueList: transformToValueObject([
+                    [' Hello Univer '],
+                ]),
+                rowCount: 1,
+                columnCount: 1,
+                unitId: '',
+                sheetId: '',
+                row: 0,
+                column: 0,
+            });
+            const result2 = testFunction.calculate(text2);
+            expect(getObjectValue(result2)).toStrictEqual(' hello univer ');
+        });
+
+        it('More test', () => {
+            const text = StringValueObject.create(',。、；:{}');
+            const result = testFunction.calculate(text);
+            expect(getObjectValue(result)).toStrictEqual(',。、；:{}');
+
+            const text2 = StringValueObject.create('Hello中文o😊Wo😊rld');
+            const result2 = testFunction.calculate(text2);
+            expect(getObjectValue(result2)).toStrictEqual('hello中文o😊wo😊rld');
         });
     });
 });

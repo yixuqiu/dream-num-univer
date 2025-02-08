@@ -1,10 +1,15 @@
+const jsdoc = require('eslint-plugin-jsdoc');
+const eslintPluginReadableTailwind = require('eslint-plugin-readable-tailwind');
+const noExternalImportsInFacade = require('./plugins/no-external-imports-in-facade');
+const noSelfPackageImports = require('./plugins/no-self-package-imports');
+
 exports.baseRules = {
     curly: ['error', 'multi-line'],
+    'no-param-reassign': ['warn'],
     'eol-last': ['error', 'always'],
-    'import/no-cycle': 'error',
     'import/no-self-import': 'error',
     'ts/no-explicit-any': 'warn',
-    'style/no-multiple-empty-lines': ['error', { max: 2, maxEOF: 1 }],
+    'style/no-multiple-empty-lines': ['error', { max: 1, maxEOF: 1 }],
     'style/brace-style': ['warn', '1tbs', { allowSingleLine: true }],
     'style/comma-dangle': ['error', {
         arrays: 'always-multiline',
@@ -14,6 +19,7 @@ exports.baseRules = {
         enums: 'always-multiline',
         functions: 'never',
     }],
+    'no-empty-function': 'off',
     'style/arrow-parens': ['error', 'always'],
     'ts/no-redeclare': 'off',
     'antfu/if-newline': 'off',
@@ -26,6 +32,9 @@ exports.baseRules = {
         SwitchCase: 1,
         ignoreComments: true,
     }],
+    'perfectionist/sort-imports': 'warn',
+    'perfectionist/sort-named-exports': 'warn',
+    'antfu/consistent-chaining': 'warn',
     'sort-imports': [
         'error',
         {
@@ -39,8 +48,16 @@ exports.baseRules = {
     ],
     'react/no-unstable-context-value': 'warn',
     'react/no-unstable-default-props': 'warn',
+    'command/command': 'off',
+    'jsdoc/tag-lines': 'off',
+    'import/consistent-type-specifier-style': 'warn',
+
+    // IMPORTANT: To ensure compatibility, some features of React 19 will be disabled.
+    'react/no-forward-ref': 'off',
+    'react/no-context-provider': 'off',
 
     // TODO: debatable rules
+    'react/no-duplicate-key': 'warn',
     'test/prefer-lowercase-title': 'off',
     'antfu/top-level-function': 'off',
     'style/operator-linebreak': 'off',
@@ -53,7 +70,12 @@ exports.baseRules = {
     // TODO: just for compatibility with old code
     'unused-imports/no-unused-vars': 'warn',
     'style/jsx-closing-tag-location': 'warn',
-    'ts/ban-types': 'warn',
+    // 'ts/ban-types': 'warn',
+    'ts/no-restricted-types': 'warn',
+    'ts/no-wrapper-object-types': 'warn',
+    'ts/no-empty-object-type': 'warn',
+    'ts/no-unsafe-function-type': 'warn',
+    'ts/no-unused-expressions': 'warn',
     'unicorn/prefer-dom-node-text-content': 'warn',
     'unicorn/prefer-number-properties': 'warn',
     'no-prototype-builtins': 'warn',
@@ -90,11 +112,20 @@ exports.baseRules = {
     'style/multiline-ternary': 'warn',
     'unicorn/prefer-type-error': 'warn',
     'accessor-pairs': 'warn',
+    'react/no-create-ref': 'warn',
 };
 
-exports.typescriptPreset = function typescriptPreset() {
+exports.typescriptPreset = () => {
     return {
         files: ['**/*.ts', '**/*.tsx'],
+        plugins: {
+            univer: {
+                rules: {
+                    'no-external-imports-in-facade': noExternalImportsInFacade,
+                    'no-self-package-imports': noSelfPackageImports,
+                },
+            },
+        },
         rules: {
             'ts/naming-convention': [
                 'warn',
@@ -118,6 +149,76 @@ exports.typescriptPreset = function typescriptPreset() {
         },
         languageOptions: {
             parser: require('@typescript-eslint/parser'),
+        },
+    };
+};
+
+exports.univerSourcePreset = () => {
+    return {
+        files: ['**/*.ts', '**/*.tsx'],
+        ignores: [
+            '**/__tests__/**/*',
+            '**/*.spec.ts',
+            '**/*.test.ts',
+        ],
+        rules: {
+            'univer/no-self-package-imports': 'error',
+        },
+        languageOptions: {
+            parser: require('@typescript-eslint/parser'),
+        },
+    };
+};
+
+exports.facadePreset = () => {
+    return {
+        files: ['**/src/facade/**/*.ts'],
+        ignores: [
+            '**/core/src/**/*.ts',
+            '**/__tests__/**/*',
+            '**/*.spec.ts',
+            '**/*.test.ts',
+        ],
+        rules: {
+            'ts/explicit-function-return-type': 'error',
+            'univer/no-external-imports-in-facade': 'error',
+            ...jsdoc.configs.recommended.rules,
+            'jsdoc/tag-lines': 'off',
+        },
+    };
+};
+
+exports.tailwindcssPreset = () => {
+    return {
+        files: ['**/*.{jsx,tsx}'],
+        languageOptions: {
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true,
+                },
+            },
+        },
+        plugins: {
+            'readable-tailwind': eslintPluginReadableTailwind,
+        },
+        rules: {
+            ...eslintPluginReadableTailwind.configs.warning.rules,
+            ...eslintPluginReadableTailwind.configs.error.rules,
+            'jsonc/sort-keys': ['warn'],
+            'readable-tailwind/multiline': ['warn', { printWidth: 120, group: 'newLine' }],
+            'react-hooks/rules-of-hooks': 'off',
+        },
+    };
+};
+
+exports.specPreset = () => {
+    return {
+        files: [
+            '**/*.spec.ts',
+            '**/__tests__/**/*.ts',
+        ],
+        rules: {
+            'ts/explicit-function-return-type': 'off',
         },
     };
 };

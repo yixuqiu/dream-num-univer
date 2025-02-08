@@ -3,7 +3,7 @@
     "extends": [
         "//"
     ],
-    "pipeline": {
+    "tasks": {
         "test": {
         },
 
@@ -12,10 +12,7 @@
         },
 
         "build": {
-            "cache": false
         },
-
-        "build:demo": {},
 
         "build:e2e": {},
 

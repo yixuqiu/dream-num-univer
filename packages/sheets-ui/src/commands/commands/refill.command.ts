@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
-import { CommandType } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import { IAutoFillService } from '../../services/auto-fill/auto-fill.service';
+import type { IAccessor, ICommand } from '@univerjs/core';
 import type { APPLY_TYPE } from '../../services/auto-fill/type';
+
+import { CommandType } from '@univerjs/core';
+import { IAutoFillService } from '../../services/auto-fill/auto-fill.service';
 
 interface IRefillCommandParams {
     type: APPLY_TYPE;
@@ -30,7 +29,6 @@ export const RefillCommand: ICommand = {
     type: CommandType.COMMAND,
     handler: async (accessor: IAccessor, params: IRefillCommandParams) => {
         const autoFillService = accessor.get(IAutoFillService);
-        autoFillService.applyType = params.type;
-        return true;
+        return autoFillService.fillData(params.type);
     },
 };

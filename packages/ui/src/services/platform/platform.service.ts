@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { createIdentifier } from '@wendellhu/redi';
+import { createIdentifier } from '@univerjs/core';
 
 /**
  * A service to provide context info of the host service.
@@ -25,9 +25,9 @@ export interface IPlatformService {
     readonly isLinux: boolean;
 }
 
-export const IPlatformService = createIdentifier<IPlatformService>('univer.platform-service');
+export const IPlatformService = createIdentifier<IPlatformService>('ui.platform.service');
 
-export class DesktopPlatformService implements IPlatformService {
+export class PlatformService implements IPlatformService {
     get isMac(): boolean {
         return /Mac/.test(navigator.appVersion);
     }

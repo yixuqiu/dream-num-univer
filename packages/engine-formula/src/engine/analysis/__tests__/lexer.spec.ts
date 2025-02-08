@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Univer, Workbook } from '@univerjs/core';
+import type { Injector, IWorkbookData, Univer, Workbook } from '@univerjs/core';
 import { LocaleType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { IDefinedNamesService } from '../../../services/defined-names.service';
@@ -71,7 +70,6 @@ describe('lexer test', () => {
     let formulaCurrentConfigService: IFormulaCurrentConfigService;
     let lexerTreeBuilder: LexerTreeBuilder;
 
-
     beforeEach(() => {
         const testBed = createCommandTestBed(TEST_WORKBOOK_DATA);
         univer = testBed.univer;
@@ -81,7 +79,6 @@ describe('lexer test', () => {
         definedNamesService = get(IDefinedNamesService);
         formulaCurrentConfigService = get(IFormulaCurrentConfigService);
         lexerTreeBuilder = get(LexerTreeBuilder);
-
 
         formulaCurrentConfigService.setExecuteUnitId('test');
         formulaCurrentConfigService.setExecuteSubUnitId('sheet1');

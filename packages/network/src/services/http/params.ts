@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
+type ValidParamType = string | number | boolean;
+
 export class HTTPParams {
-    constructor(readonly params?: { [key: string]: string | number | boolean }) {}
+    constructor(readonly params?: { [key: string]: ValidParamType | ValidParamType[] }) {
+        // empty
+    }
 
     toString(): string {
         if (!this.params) {
@@ -23,7 +27,16 @@ export class HTTPParams {
         }
 
         return Object.keys(this.params)
-            .map((key) => `${key}=${this.params![key]}`)
+            .map((key) => {
+                const value = this.params![key];
+                if (Array.isArray(value)) {
+                    return value
+                        .map((v) => `${key}=${v}`)
+                        .join('&');
+                }
+
+                return `${key}=${value}`;
+            })
             .join('&');
     }
 }

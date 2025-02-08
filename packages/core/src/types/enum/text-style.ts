@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+/**
+ * An enum that specifies the text direction of a cell.
+ */
 export enum TextDirection {
     UNSPECIFIED,
     LEFT_TO_RIGHT,
@@ -54,6 +57,8 @@ export enum HorizontalAlign {
     CENTER, //	The text is explicitly aligned to the center of the cell.
     RIGHT, //	The text is explicitly aligned to the right of the cell.
     JUSTIFIED, //	The paragraph is justified.
+    BOTH, //	The paragraph is justified.
+    DISTRIBUTED, //	The text is distributed across the width of the cell.
 }
 
 /**

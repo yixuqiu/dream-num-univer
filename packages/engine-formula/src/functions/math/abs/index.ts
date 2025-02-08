@@ -14,25 +14,25 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
 import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
-import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BaseFunction } from '../../base-function';
 
 export class Abs extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 1;
+
     override calculate(variant: BaseValueObject) {
-        if (variant == null) {
-            return ErrorValueObject.create(ErrorType.NA);
+        let _variant = variant;
+
+        if (_variant.isString()) {
+            _variant = _variant.convertToNumberObjectValue();
         }
 
-        if (variant.isString()) {
-            variant = variant.convertToNumberObjectValue();
+        if (_variant.isError()) {
+            return _variant;
         }
 
-        if (variant.isError()) {
-            return ErrorValueObject.create(ErrorType.VALUE);
-        }
-
-        return variant.abs();
+        return _variant.abs();
     }
 }

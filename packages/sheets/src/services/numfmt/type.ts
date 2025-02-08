@@ -15,8 +15,7 @@
  */
 
 import type { ICellData, IRange, Nullable, ObjectMatrix } from '@univerjs/core';
-import { LifecycleStages, runOnLifecycle } from '@univerjs/core';
-import { createIdentifier } from '@wendellhu/redi';
+import { createIdentifier } from '@univerjs/core';
 
 // eslint-disable-next-line ts/consistent-type-definitions
 export type INumfmtItem = {
@@ -47,6 +46,7 @@ export interface INumfmtItemWithCache {
     pattern: string;
 }
 
+export const INumfmtService = createIdentifier<INumfmtService>('INumfmtService');
 export interface INumfmtService {
     getValue(
         unitId: string,
@@ -62,6 +62,3 @@ export interface INumfmtService {
     ): void;
     deleteValues(unitId: string, subUnitId: string, values: IRange[]): void;
 }
-
-export const INumfmtService = createIdentifier<INumfmtService>('INumfmtService');
-runOnLifecycle(LifecycleStages.Ready, INumfmtService);

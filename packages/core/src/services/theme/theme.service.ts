@@ -15,9 +15,9 @@
  */
 
 import type { Observable } from 'rxjs';
-import { BehaviorSubject } from 'rxjs';
+import type { Nullable } from '../../shared/types';
 
-import type { Nullable } from '../../common/type-util';
+import { BehaviorSubject } from 'rxjs';
 import { Disposable, toDisposable } from '../../shared/lifecycle';
 
 export interface IStyleSheet {
@@ -36,14 +36,15 @@ export class ThemeService extends Disposable {
         this.disposeWithMe(toDisposable(() => this._currentTheme$.complete()));
     }
 
-    getCurrentTheme() {
+    getCurrentTheme(): IStyleSheet {
         if (!this._currentTheme) {
             throw new Error('[ThemeService]: current theme is not set!');
         }
+
         return this._currentTheme;
     }
 
-    setTheme(theme: IStyleSheet) {
+    setTheme(theme: IStyleSheet): void {
         this._currentTheme = theme;
         this._currentTheme$.next(theme);
     }

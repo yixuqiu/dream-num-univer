@@ -3,8 +3,9 @@ name: 📤 Preview Deploy
 on:
     workflow_run:
         workflows:
-            - 📦 Build
-        types: [completed]
+            - 🎬 Setup
+        types:
+            - completed
 
 permissions:
     contents: read
@@ -105,8 +106,19 @@ jobs:
                   repository: ${{ needs.setup.outputs.repo }}
                   ref: ${{ needs.setup.outputs.ref }}
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  run_install: false
+
             - name: Setup Node.js
-              uses: ./.github/actions/setup-node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install
 
             - name: Get commit message
               id: commit-message
@@ -154,8 +166,19 @@ jobs:
                   repository: ${{ needs.setup.outputs.repo }}
                   ref: ${{ needs.setup.outputs.ref }}
 
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  run_install: false
+
             - name: Setup Node.js
-              uses: ./.github/actions/setup-node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install
 
             # ================= Deploy Storybook =================
             - name: 📦 Build storybook

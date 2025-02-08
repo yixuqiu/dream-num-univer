@@ -15,10 +15,8 @@
  */
 
 import type { IMutationInfo } from '@univerjs/core';
-import { CommandType, Disposable, ICommandService, LifecycleStages, OnLifecycle } from '@univerjs/core';
-import { Inject, Injector } from '@wendellhu/redi';
-
 import type { IRemoteSyncMutationOptions } from '../../services/remote-instance/remote-instance.service';
+import { CommandType, Disposable, ICommandService, Inject, Injector } from '@univerjs/core';
 import {
     IRemoteInstanceService,
     IRemoteSyncService,
@@ -32,7 +30,6 @@ import { fromModule, toModule } from '../../services/rpc/rpc.service';
  * This controller is responsible for syncing data from the worker thread to
  * the primary thread.
  */
-@OnLifecycle(LifecycleStages.Starting, DataSyncReplicaController)
 export class DataSyncReplicaController extends Disposable {
     private _remoteSyncService!: IRemoteSyncService;
 
@@ -53,10 +50,7 @@ export class DataSyncReplicaController extends Disposable {
 
         this._injector.add([
             IRemoteSyncService,
-            {
-                useFactory: () =>
-                    toModule<IRemoteSyncService>(this._rpcChannelService.requestChannel(RemoteSyncServiceName)),
-            },
+            { useFactory: () => toModule<IRemoteSyncService>(this._rpcChannelService.requestChannel(RemoteSyncServiceName)) },
         ]);
         this._remoteSyncService = this._injector.get(IRemoteSyncService);
     }

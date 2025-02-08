@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import React, { useEffect } from 'react';
+import { useDependency } from '@univerjs/core';
 
-import { Dropdown, Input } from '@univerjs/design';
-import { MoreDownSingle } from '@univerjs/icons';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { DropdownOverlay, DropdownProvider, DropdownTrigger } from '@univerjs/design';
 import { IDefinedNamesService } from '@univerjs/engine-formula';
-import styles from './index.module.less';
+import { MoreDownSingle } from '@univerjs/icons';
+import clsx from 'clsx';
+import React, { useEffect, useState } from 'react';
 import { DefinedNameOverlay } from './DefinedNameOverlay';
+import styles from './index.module.less';
 
-export function DefinedName() {
-    const [rangeString, setRangeString] = React.useState('');
+export function DefinedName({ disable }: { disable: boolean }) {
+    const [rangeString, setRangeString] = useState('');
     const definedNamesService = useDependency(IDefinedNamesService);
 
     useEffect(() => {
@@ -35,17 +36,49 @@ export function DefinedName() {
         return () => {
             subscription.unsubscribe();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Empty dependency array means this effect runs once on mount and clean up on unmount
+
+    // TODO: @DR-Univer: Should be implemented
+    function handleChangeSelection() {
+
+    }
 
     return (
         <div className={styles.definedName}>
-            <Input value={rangeString} type="text" size="small" affixWrapperStyle={{ border: 'none', paddingLeft: '6px', paddingRight: '6px', height: '100%' }} />
+            <input
+                className={clsx(`
+                  univer-border-none univer-absolute univer-w-full univer-h-full univer-appearance-none
+                  univer-box-border univer-px-1.5
+                  focus:univer-outline-none
+                `, {
+                    [styles.defineNameInputDisable]: disable,
+                })}
+                type="text"
+                value={rangeString}
+                onChange={handleChangeSelection}
+            />
 
-            <Dropdown overlay={<DefinedNameOverlay />}>
-                <div className={styles.definedNameDropDown}>
-                    <MoreDownSingle />
-                </div>
-            </Dropdown>
+            <DropdownProvider>
+                <DropdownTrigger>
+                    <a
+                        className={clsx(`
+                          univer-flex univer-items-center univer-justify-center univer-px-1 univer-cursor-pointer
+                          univer-absolute univer-right-0 univer-h-full univer-transition-colors univer-duration-200
+                          hover:univer-bg-gray-100
+                        `,
+                        {
+                            'univer-text-gray-300 univer-cursor-not-allowed hover:univer-bg-transparent': disable,
+                        })}
+                    >
+                        <MoreDownSingle />
+                    </a>
+                </DropdownTrigger>
+
+                <DropdownOverlay className="univer-z-[1001]" offset={{ x: -75, y: 2 }}>
+                    <DefinedNameOverlay />
+                </DropdownOverlay>
+            </DropdownProvider>
         </div>
     );
 }
