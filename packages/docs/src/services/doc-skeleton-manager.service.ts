@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,137 +14,107 @@
  * limitations under the License.
  */
 
-import type { Nullable } from '@univerjs/core';
-import { IUniverInstanceService, LocaleService, RxDisposable, UniverInstanceType } from '@univerjs/core';
-import type { DocumentViewModel } from '@univerjs/engine-render';
-import { DocumentSkeleton } from '@univerjs/engine-render';
-import { Inject } from '@wendellhu/redi';
+import type { DocumentDataModel, Nullable } from '@univerjs/core';
+import type { IRenderContext, IRenderModule } from '@univerjs/engine-render';
+import { Inject, isInternalEditorID, IUniverInstanceService, LocaleService, RxDisposable, UniverInstanceType } from '@univerjs/core';
+import { DocumentSkeleton, DocumentViewModel } from '@univerjs/engine-render';
 import { BehaviorSubject, takeUntil } from 'rxjs';
 
-import type { IDocumentViewModelManagerParam } from './doc-view-model-manager.service';
-import { DocViewModelManagerService } from './doc-view-model-manager.service';
-
-export interface IDocSkeletonManagerParam {
-    unitId: string;
-    skeleton: DocumentSkeleton;
-    dirty: boolean;
-}
-
 /**
- * This service is for document build and manage doc skeletons.
+ * This service is for document build and manage doc skeletons. It also manages
+ * DocumentViewModels.
  */
-export class DocSkeletonManagerService extends RxDisposable {
-    private _currentSkeletonUnitId: string = '';
+export class DocSkeletonManagerService extends RxDisposable implements IRenderModule {
+    private _skeleton: DocumentSkeleton;
+    private _docViewModel: DocumentViewModel;
 
-    private _docSkeletonMap: Map<string, IDocSkeletonManagerParam> = new Map();
-
-    private readonly _currentSkeleton$ = new BehaviorSubject<Nullable<IDocSkeletonManagerParam>>(null);
+    private readonly _currentSkeleton$ = new BehaviorSubject<Nullable<DocumentSkeleton>>(null);
     readonly currentSkeleton$ = this._currentSkeleton$.asObservable();
 
     // CurrentSkeletonBefore for pre-triggered logic during registration
-    private readonly _currentSkeletonBefore$ = new BehaviorSubject<Nullable<IDocSkeletonManagerParam>>(null);
-
+    private readonly _currentSkeletonBefore$ = new BehaviorSubject<Nullable<DocumentSkeleton>>(null);
     readonly currentSkeletonBefore$ = this._currentSkeletonBefore$.asObservable();
 
+    private readonly _currentViewModel$ = new BehaviorSubject<Nullable<DocumentViewModel>>(null);
+    readonly currentViewModel$ = this._currentViewModel$.asObservable();
+
     constructor(
+        private readonly _context: IRenderContext<DocumentDataModel>,
         @Inject(LocaleService) private readonly _localeService: LocaleService,
-        @Inject(DocViewModelManagerService) private readonly _docViewModelManagerService: DocViewModelManagerService,
         @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService
     ) {
         super();
-        this._initialize();
-    }
 
-    private _initialize() {
         this._init();
+
+        this._univerInstanceService.getCurrentTypeOfUnit$<DocumentDataModel>(UniverInstanceType.UNIVER_DOC)
+            .pipe(takeUntil(this.dispose$))
+            .subscribe((documentModel) => {
+                if (documentModel && documentModel.getUnitId() === this._context.unitId) {
+                    this._update(documentModel);
+                }
+            });
     }
 
     override dispose(): void {
+        super.dispose();
+
         this._currentSkeletonBefore$.complete();
         this._currentSkeleton$.complete();
-        this._docSkeletonMap.clear();
+    }
+
+    getSkeleton(): DocumentSkeleton {
+        return this._skeleton;
+    }
+
+    getViewModel(): DocumentViewModel {
+        return this._docViewModel;
     }
 
     private _init() {
-        this._docViewModelManagerService.currentDocViewModel$
-            .pipe(takeUntil(this.dispose$))
-            .subscribe((docViewModel) => {
-                if (docViewModel == null) {
-                    return;
-                }
-
-                this._setCurrent(docViewModel);
-            });
-
-        this._docViewModelManagerService.getAllModel().forEach((docViewModel) => {
-            if (docViewModel == null) {
-                return;
-            }
-
-            this._setCurrent(docViewModel);
-        });
-
-        this._univerInstanceService.getTypeOfUnitDisposed$(UniverInstanceType.UNIVER_DOC).pipe(takeUntil(this.dispose$)).subscribe((documentModel) => {
-            this._docSkeletonMap.delete(documentModel.getUnitId());
-
-            this._currentSkeletonUnitId = this._univerInstanceService.getCurrentUnitForType(UniverInstanceType.UNIVER_DOC)?.getUnitId() ?? '';
-        });
+        const documentDataModel = this._context.unit;
+        this._update(documentDataModel);
     }
 
-    getCurrent(): Nullable<IDocSkeletonManagerParam> {
-        return this.getSkeletonByUnitId(this._currentSkeletonUnitId);
-    }
+    private _update(documentDataModel: DocumentDataModel) {
+        const unitId = this._context.unitId;
 
-    getAllSkeleton(): Map<string, IDocSkeletonManagerParam> {
-        return this._docSkeletonMap;
-    }
-
-    makeDirtyCurrent(state: boolean = true) {
-        this.makeDirty(this._currentSkeletonUnitId, state);
-    }
-
-    makeDirty(unitId: string, state: boolean = true) {
-        const param = this.getSkeletonByUnitId(unitId);
-        if (param == null) {
+        // No need to build view model, if data model has no body.
+        if (documentDataModel.getBody() == null) {
             return;
         }
 
-        param.dirty = state;
-    }
+        // Always need to reset document data model, because cell editor change doc instance every time.
+        if (this._docViewModel && isInternalEditorID(unitId)) {
+            this._docViewModel.reset(documentDataModel);
 
-    getSkeletonByUnitId(unitId: string): Nullable<IDocSkeletonManagerParam> {
-        return this._docSkeletonMap.get(unitId);
-    }
-
-    private _setCurrent(docViewModelParam: IDocumentViewModelManagerParam): Nullable<IDocSkeletonManagerParam> {
-        const { unitId } = docViewModelParam;
-
-        if (!this._docSkeletonMap.has(unitId)) {
-            const skeleton = this._buildSkeleton(docViewModelParam.docViewModel);
-
-            skeleton.calculate();
-
-            this._docSkeletonMap.set(unitId, {
-                unitId,
-                skeleton,
-                dirty: false,
-            });
-        } else {
-            const skeletonParam = this.getSkeletonByUnitId(unitId)!;
-            skeletonParam.skeleton.calculate();
-            skeletonParam.dirty = true;
+            this._context.unit = documentDataModel;
+        } else if (!this._docViewModel) {
+            this._docViewModel = this._buildDocViewModel(documentDataModel);
         }
 
-        this._currentSkeletonUnitId = unitId;
+        if (!this._skeleton) {
+            this._skeleton = this._buildSkeleton(this._docViewModel);
+        }
 
-        this._currentSkeletonBefore$.next(this.getCurrent());
+        const skeleton = this._skeleton;
+        skeleton.calculate();
 
-        this._currentSkeleton$.next(this.getCurrent());
+        // sub: packages/docs-ui/src/controllers/render-controllers/doc.render-controller.ts
+        this._currentSkeletonBefore$.next(skeleton);
 
-        return this.getCurrent();
+        // sub: packages/docs-ui/src/controllers/render-controllers/text-selection.render-controller.ts
+        this._currentSkeleton$.next(skeleton);
+
+        // sub: packages/docs/src/services/doc-interceptor/doc-interceptor.service.ts
+        this._currentViewModel$.next(this._docViewModel);
     }
 
     private _buildSkeleton(documentViewModel: DocumentViewModel) {
         return DocumentSkeleton.create(documentViewModel, this._localeService);
+    }
+
+    private _buildDocViewModel(documentDataModel: DocumentDataModel) {
+        return new DocumentViewModel(documentDataModel);
     }
 }

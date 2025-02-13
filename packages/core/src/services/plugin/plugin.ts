@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
-import type { Ctor, Injector } from '@wendellhu/redi';
-import { Disposable } from '../../shared';
+import type { Ctor, Injector } from '../../common/di';
 import { UniverInstanceType } from '../../common/unit';
+import { Disposable } from '../../shared';
 
-export type PluginCtor<T extends Plugin> = Ctor<T> & { type: UniverInstanceType; pluginName: string };
+export const DependentOnSymbol = Symbol('DependentOn');
+
+export type PluginCtor<T extends Plugin = Plugin> = Ctor<T> & {
+    type: UniverInstanceType;
+    pluginName: string;
+    [DependentOnSymbol]?: PluginCtor[];
+};
 
 /**
  * Plug-in base class, all plug-ins must inherit from this base class. Provide basic methods.
@@ -30,14 +36,21 @@ export abstract class Plugin extends Disposable {
 
     protected abstract _injector: Injector;
 
-    // eslint-disable-next-line unused-imports/no-unused-vars
-    onStarting(injector: Injector): void {}
+    onStarting(): void {
+        // empty
+    }
 
-    onReady(): void {}
+    onReady(): void {
+        // empty
+    }
 
-    onRendered(): void {}
+    onRendered(): void {
+        // empty
+    }
 
-    onSteady(): void {}
+    onSteady(): void {
+        // empty
+    }
 
     getUniverInstanceType(): UniverInstanceType {
         return (this.constructor as typeof Plugin).type;

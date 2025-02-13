@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* eslint-disable react-refresh/only-export-components */
 
 import { ConfigContext } from '@univerjs/design';
 import { CloseSingle, ErrorSingle, SuccessSingle, WarningSingle } from '@univerjs/icons';
@@ -33,7 +35,11 @@ const iconMap = {
     error: <ErrorSingle className={styles.notificationIconError} />,
 };
 
-export interface INotificationMethodOptions {
+export interface INotificationOptions {
+    /**
+     * Key of the notification.
+     */
+    key?: string;
     /**
      * Component type, optional success, warning, error
      */
@@ -64,9 +70,9 @@ export interface INotificationMethodOptions {
     lines?: number;
 }
 
-export const notificationObserver = new Subject<INotificationMethodOptions>();
+export const notificationObserver = new Subject<INotificationOptions>();
 
-export const PureContent = (props: INotificationMethodOptions) => {
+export const PureContent = (props: INotificationOptions) => {
     const { type, content, title, lines = 0 } = props;
 
     const contentClassName = clsx(styles.notificationContent, {
@@ -88,8 +94,7 @@ export const PureContent = (props: INotificationMethodOptions) => {
 
 export function Notification() {
     const { mountContainer } = useContext(ConfigContext);
-
-    if (!mountContainer) return <></>;
+    if (!mountContainer) return null;
 
     const [api, contextHolder] = useNotification({
         prefixCls: styles.notification,
@@ -117,6 +122,7 @@ export function Notification() {
                         lines={options.lines}
                     />
                 ),
+                key: options.key,
                 placement: options.placement ?? 'topRight',
                 duration: options.duration ?? 4.5,
                 closable: options.closable ?? true,
@@ -126,13 +132,13 @@ export function Notification() {
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
+    }, [api]);
 
     return <>{contextHolder}</>;
 }
 
 export const notification = {
-    show: (options: INotificationMethodOptions) => {
+    show: (options: INotificationOptions) => {
         notificationObserver.next(options);
     },
 };

@@ -2,9 +2,11 @@ name: 📦 Build
 
 on:
     push:
-        branches: [dev]
+        branches:
+            - dev
     pull_request:
-        branches: [dev]
+        branches:
+            - dev
 
 permissions:
     contents: read
@@ -29,32 +31,4 @@ jobs:
               uses: ./.github/actions/setup-node
 
             - name: 📦 Build
-              run: pnpm build
-
-    set-pr-info:
-        name: set PR info
-        runs-on: ubuntu-latest
-        steps:
-            - name: Save PR info
-              run: |
-                  echo ${{ github.event.pull_request.number }} > ./pr-id.txt
-                  echo ${{ github.head_ref }} >> ./pr-ref.txt
-                  echo ${{ github.event.pull_request.head.repo.full_name || github.repository }} >> ./pr-repo.txt
-
-            - name: Upload PR number
-              uses: actions/upload-artifact@v3
-              with:
-                  name: pr-id
-                  path: ./pr-id.txt
-
-            - name: Upload PR ref
-              uses: actions/upload-artifact@v3
-              with:
-                  name: pr-ref
-                  path: ./pr-ref.txt
-
-            - name: Upload PR repo
-              uses: actions/upload-artifact@v3
-              with:
-                  name: pr-repo
-                  path: ./pr-repo.txt
+              run: pnpm build:ci

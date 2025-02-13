@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
  */
 
 import type { Meta } from '@storybook/react';
-import type { Dependency } from '@wendellhu/redi';
-import { RediContext } from '@wendellhu/redi/react-bindings';
-import React, { useContext, useState } from 'react';
-
-import { DesktopLayoutService, ILayoutService } from '@univerjs/ui';
+import type { Dependency } from '@univerjs/core';
 import { LocaleService, LocaleType } from '@univerjs/core';
-import { FindReplaceService, IFindReplaceService } from '../../services/find-replace.service';
+import { DesktopLayoutService, ILayoutService, RediContext } from '@univerjs/ui';
+
+import React, { useContext, useMemo, useState } from 'react';
 import { FindReplaceController } from '../../controllers/find-replace.controller';
-import { enUS, zhCN } from '../../locale';
+import enUS from '../../locale/en-US';
+import ruRU from '../../locale/ru-RU';
+import zhCN from '../../locale/zh-CN';
+import { FindReplaceService, IFindReplaceService } from '../../services/find-replace.service';
 import { FindReplaceDialog } from './FindReplaceDialog';
 
 const meta: Meta = {
@@ -49,6 +50,7 @@ function FindDialogDemo() {
         injector?.get(LocaleService).load({
             [LocaleType.EN_US]: enUS,
             [LocaleType.ZH_CN]: zhCN,
+            [LocaleType.RU_RU]: ruRU,
         });
 
         deps.forEach((dependency) => injector?.add(dependency));
@@ -56,8 +58,10 @@ function FindDialogDemo() {
         return injector;
     });
 
+    const memoizedValue = useMemo(() => ({ injector: inject }), [inject]);
+
     return (
-        <RediContext.Provider value={{ injector: inject }}>
+        <RediContext.Provider value={memoizedValue}>
             <FindReplaceDialog />
         </RediContext.Provider>
     );
@@ -82,6 +86,7 @@ function ReplaceDialogDemo() {
         injector?.get(LocaleService).load({
             [LocaleType.EN_US]: enUS,
             [LocaleType.ZH_CN]: zhCN,
+            [LocaleType.RU_RU]: ruRU,
         });
 
         deps.forEach((dependency) => injector?.add(dependency));
@@ -89,8 +94,10 @@ function ReplaceDialogDemo() {
         return injector;
     });
 
+    const memoizedValue = useMemo(() => ({ injector: inject }), [inject]);
+
     return (
-        <RediContext.Provider value={{ injector: inject }}>
+        <RediContext.Provider value={memoizedValue}>
             <FindReplaceDialog />
         </RediContext.Provider>
     );

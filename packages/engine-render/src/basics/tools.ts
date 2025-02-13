@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,22 @@
  */
 
 import type {
+    ICellInfo,
+    ICellWithCoord,
+    IPosition,
     IRange,
     IRangeWithCoord,
     IScale,
-    ISelectionCell,
-    ISelectionCellWithCoord,
     IStyleBase,
-    LocaleService,
     Nullable,
 } from '@univerjs/core';
-import { BaselineOffset, FontStyleType, Tools } from '@univerjs/core';
-import * as cjk from 'cjk-regex';
+import type { IDocumentSkeletonFontStyle } from './i-document-skeleton-cached';
+import type { IBoundRectNoAngle } from './vector2';
 
+import { BaselineOffset, ColorKit, DEFAULT_STYLES, FontStyleType, getCellInfoInMergeData, Rectangle, Tools } from '@univerjs/core';
+import * as cjk from 'cjk-regex';
 import { FontCache } from '../components/docs/layout/shaping-engine/font-cache';
 import { DEFAULT_FONTFACE_PLANE } from './const';
-import type { IBoundRectNoAngle } from './vector2';
-import type { IDocumentSkeletonFontStyle } from './i-document-skeleton-cached';
 
 const DEG180 = 180;
 
@@ -245,18 +245,13 @@ export function fixLineWidthByScale(num: number, scale: number) {
     return Math.round(num * scale) / scale;
 }
 
-export const UNIVER_GLOBAL_DEFAULT_FONT_SIZE = 11;
-
-export const UNIVER_GLOBAL_DEFAULT_FONT_FAMILY = 'Arial';
-
 // eslint-disable-next-line max-lines-per-function
 export function getFontStyleString(
-    textStyle?: IStyleBase,
-    _localeService?: LocaleService
+    textStyle?: IStyleBase
 ): IDocumentSkeletonFontStyle {
-    const defaultFont = UNIVER_GLOBAL_DEFAULT_FONT_FAMILY;
+    const defaultFont = DEFAULT_STYLES.ff;
 
-    const defaultFontSize = UNIVER_GLOBAL_DEFAULT_FONT_SIZE;
+    const defaultFontSize = DEFAULT_STYLES.fs;
 
     if (!textStyle) {
         const fontString = `${defaultFontSize}pt  ${defaultFont}`;
@@ -501,7 +496,7 @@ export function getCellPositionByIndex(
     column: number,
     rowHeightAccumulation: number[],
     columnWidthAccumulation: number[]
-) {
+): IPosition {
     const startRow = row - 1;
     const startColumn = column - 1;
 
@@ -527,13 +522,25 @@ export function getCellPositionByIndex(
     };
 }
 
-export function getCellByIndex(
+/**
+ * @deprecated use same function in @univerjs/core
+ * @description Get the cell position information of the specified row and column, including the position information of the cell and the merge information of the cell
+ * @param {number} row The row index of the cell
+ * @param {number} column The column index of the cell
+ * @param {number[]} rowHeightAccumulation The accumulated height of each row
+ * @param {number[]} columnWidthAccumulation The accumulated width of each column
+ * @param {ICellInfo} mergeDataInfo The merge information of the cell
+ * @returns {ICellWithCoord} The cell position information of the specified row and column, including the position information of the cell and the merge information of the cell
+ */
+function getCellWithCoordByIndexCore(
     row: number,
     column: number,
     rowHeightAccumulation: number[],
     columnWidthAccumulation: number[],
-    mergeData: IRange[]
-): ISelectionCellWithCoord {
+    mergeDataInfo: ICellInfo
+): ICellWithCoord {
+    row = Tools.clamp(row, 0, rowHeightAccumulation.length - 1);
+    column = Tools.clamp(column, 0, columnWidthAccumulation.length - 1);
     // eslint-disable-next-line prefer-const
     let { startY, endY, startX, endX } = getCellPositionByIndex(
         row,
@@ -542,11 +549,7 @@ export function getCellByIndex(
         columnWidthAccumulation
     );
 
-    const { isMerged, isMergedMainCell, startRow, startColumn, endRow, endColumn } = getCellInfoInMergeData(
-        row,
-        column,
-        mergeData
-    );
+    const { isMerged, isMergedMainCell, startRow, startColumn, endRow, endColumn } = mergeDataInfo;
 
     let mergeInfo = {
         startRow,
@@ -561,7 +564,6 @@ export function getCellByIndex(
     };
 
     const rowAccumulationCount = rowHeightAccumulation.length - 1;
-
     const columnAccumulationCount = columnWidthAccumulation.length - 1;
 
     if (isMerged && startRow !== -1 && startColumn !== -1) {
@@ -604,70 +606,14 @@ export function getCellByIndex(
 }
 
 /**
- * Determines whether the cell(row, column) is within the range of the merged cells.
+ * @deprecated please use getCellWithCoordByIndexCore in @univerjs/core instead
  */
-export function getCellInfoInMergeData(row: number, column: number, mergeData?: IRange[]): ISelectionCell {
-    let isMerged = false; // The upper left cell only renders the content
-    let isMergedMainCell = false;
-    let newEndRow = row;
-    let newEndColumn = column;
-    let mergeRow = row;
-    let mergeColumn = column;
-
-    if (mergeData == null) {
-        return {
-            actualRow: row,
-            actualColumn: column,
-            isMergedMainCell,
-            isMerged,
-            endRow: newEndRow,
-            endColumn: newEndColumn,
-            startRow: mergeRow,
-            startColumn: mergeColumn,
-        };
-    }
-
-    for (let i = 0; i < mergeData.length; i++) {
-        const {
-            startRow: startRowMarge,
-            endRow: endRowMarge,
-            startColumn: startColumnMarge,
-            endColumn: endColumnMarge,
-        } = mergeData[i];
-        if (row === startRowMarge && column === startColumnMarge) {
-            newEndRow = endRowMarge;
-            newEndColumn = endColumnMarge;
-            mergeRow = startRowMarge;
-            mergeColumn = startColumnMarge;
-
-            isMergedMainCell = true;
-            break;
-        }
-        if (row >= startRowMarge && row <= endRowMarge && column >= startColumnMarge && column <= endColumnMarge) {
-            newEndRow = endRowMarge;
-            newEndColumn = endColumnMarge;
-            mergeRow = startRowMarge;
-            mergeColumn = startColumnMarge;
-
-            isMerged = true;
-            break;
-        }
-    }
-
-    return {
-        actualRow: row,
-        actualColumn: column,
-        isMergedMainCell,
-        isMerged,
-        endRow: newEndRow,
-        endColumn: newEndColumn,
-        startRow: mergeRow,
-        startColumn: mergeColumn,
-    };
-}
+const getCellByIndexWithMergeInfo = getCellWithCoordByIndexCore;
+export { getCellByIndexWithMergeInfo };
 
 /**
  * Determine whether there are any cells in a row that are not in the merged cells, mainly used for the calculation of auto height
+ * @deprecated please use SpreadsheetSkeleton@_hasUnMergedCellInRow
  */
 export function hasUnMergedCellInRow(
     row: number,
@@ -690,14 +636,12 @@ export function hasUnMergedCellInRow(
 }
 
 export function mergeInfoOffset(mergeInfo: IRangeWithCoord, offsetX: number, offsetY: number) {
-    const { startY, endY, startX, endX } = mergeInfo;
-    mergeInfo.startY = startY + offsetY;
-    mergeInfo.endY = endY + offsetY;
-    mergeInfo.startX = startX + offsetX;
-    mergeInfo.endX = endX + offsetX;
-
     return {
         ...mergeInfo,
+        startY: mergeInfo.startY + offsetY,
+        endY: mergeInfo.endY + offsetY,
+        startX: mergeInfo.startX + offsetX,
+        endX: mergeInfo.endX + offsetX,
     };
 }
 
@@ -760,4 +704,66 @@ export function ptToPixel(pt: number) {
 
 export function pixelToPt(px: number) {
     return px * PX_TO_PT_RATIO;
+}
+
+/**
+ * Is cell in view ranges.
+ * @param ranges
+ * @param rowIndex
+ * @param colIndex
+ * @returns boolean
+ */
+export function inViewRanges(ranges: IRange[], rowIndex: number, colIndex: number): boolean {
+    for (const range of ranges) {
+        if (rowIndex >= range.startRow && rowIndex <= range.endRow &&
+            colIndex >= range.startColumn && colIndex <= range.endColumn) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * If there is an intersection in ranges to the mainRanges, extend it to the first set of ranges.
+ * @param {IRange[]} mainRanges target ranges
+ * @param {IRange[]} ranges
+ */
+export function expandRangeIfIntersects(mainRanges: IRange[], ranges: IRange[]) {
+    const intersects = [];
+    for (const mainRange of mainRanges) {
+        for (const range of ranges) {
+            if (Rectangle.simpleRangesIntersect(mainRange, range)) {
+                intersects.push(range);
+            }
+        }
+    }
+    return mainRanges.concat(intersects); // do not use [...mainRanges, ...intersects], because concat is slightly faster than spread
+}
+
+export function clampRange(range: IRange, maxRow: number, maxColumn: number) {
+    return {
+        startRow: Tools.clamp(range.startRow, 0, maxRow),
+        endRow: Tools.clamp(range.endRow, 0, maxRow),
+        startColumn: Tools.clamp(range.startColumn, 0, maxColumn),
+        endColumn: Tools.clamp(range.endColumn, 0, maxColumn),
+    };
+}
+
+/**
+ * Get system highlight color in rgb format.
+ */
+export function getSystemHighlightColor() {
+    const hiddenEle = document.createElement('div');
+    hiddenEle.style.width = '0';
+    hiddenEle.style.height = '0';
+    hiddenEle.style.backgroundColor = 'highlight';
+    document.body.append(hiddenEle);
+
+    const highlightColor = getComputedStyle(hiddenEle).backgroundColor;
+
+    hiddenEle.remove();
+
+    const colorParser = new ColorKit(highlightColor);
+
+    return colorParser.toRgb();
 }

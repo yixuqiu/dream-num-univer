@@ -1,15 +1,23 @@
 {
     "typescript.tsdk": "node_modules/typescript/lib",
 
+    "editor.rulers": [120],
+
     "javascript.preferences.importModuleSpecifier": "relative",
     "typescript.preferences.importModuleSpecifier": "relative",
+
+    "commentTranslate.multiLineMerge": true,
     "commentTranslate.targetLanguage": "zh-CN",
     "commentTranslate.hover.enabled": true,
     "commentTranslate.source": "Google",
+
     "cSpell.words": [
+        "ABJAD",
         "adjustability",
+        "AIUEO",
         "Bandings",
         "Catmull",
+        "CHOSUNG",
         "clazz",
         "clsx",
         "codelf",
@@ -18,6 +26,7 @@
         "compositionend",
         "compositionstart",
         "compositionupdate",
+        "consts",
         "COUNTA",
         "CRDT",
         "customd",
@@ -25,18 +34,24 @@
         "DATEFMTLISG",
         "demi",
         "dppx",
+        "Duplicatable",
         "Dushusir",
         "endindex",
+        "endregion",
         "esbuild",
+        "Ethi",
         "evented",
         "excalidraw",
         "execa",
         "EXTRALIGHT",
         "FONTFACE",
         "fract",
+        "FULLSTOP",
         "gainsboro",
+        "GANADA",
         "GANTT",
         "Gggpound",
+        "Govett",
         "Gridlines",
         "Hanalei",
         "hdmx",
@@ -46,14 +61,17 @@
         "hoverable",
         "IHTTP",
         "ilvl",
+        "IROHA",
         "IRPC",
         "Jamo",
         "jikkai",
         "Jocs",
+        "JSONX",
         "justifiables",
         "Kaiti",
         "KANBAN",
         "kcode",
+        "kdbush",
         "keyof",
         "Lerp",
         "letterform",
@@ -64,41 +82,57 @@
         "Liti",
         "localforage",
         "LRTBV",
+        "LTRB",
         "Luckysheet",
+        "lumixraku",
         "makearray",
         "mengshukeji",
+        "Monoton",
         "Neue",
         "numfmt",
+        "OOXML",
         "opencollective",
         "opentype",
-        "OOXML",
         "Overlines",
+        "overscan",
         "Pacifico",
         "Plass",
         "pnmp",
+        "Polyton",
         "ponyfill",
+        "prst",
         "PWDEBUG",
         "Quan",
+        "rbush",
         "redi",
+        "rowheader",
         "shrinkability",
         "Sider",
         "strechability",
         "SUMIF",
         "SUMIFS",
+        "syncer",
         "Tahoma",
+        "tblp",
         "TBRL",
         "undoredo",
         "undos",
+        "Ungroup",
         "unhine",
         "Uniscript",
+        "Uniui",
         "univer",
         "univerdoc",
         "univerjs",
         "universheet",
         "universlide",
+        "Unkonwn",
         "Unmerge",
+        "Unorder",
+        "Unprotect",
         "unsync",
         "Verdana",
+        "viewbound",
         "viewports",
         "vlookup",
         "wendellhu",
@@ -107,23 +141,27 @@
         "Xinwei",
         "Xlookup",
         "XMATCH",
+        "XSSI",
+        "ybzky",
         "yuhongz"
     ],
     "vsicons.presets.angular": false,
 
-    // Enable the ESlint flat config support
-    "eslint.experimental.useFlatConfig": true,
-
     // Disable the default formatter, use eslint instead
     "prettier.enable": false,
-    "editor.formatOnSave": false,
+    "search.followSymlinks": false,
 
     // Auto fix
+    "editor.formatOnSave": false,
     "editor.codeActionsOnSave": {
         "source.fixAll.eslint": "explicit",
         "source.organizeImports": "never"
     },
-
+    "eslint.workingDirectories": [
+        { "mode": "auto" }
+    ],
+    // Enable the ESlint flat config support
+    "eslint.useFlatConfig": true,
     // Silent the stylistic rules in you IDE, but still auto fix them
     "eslint.rules.customizations": [
         { "rule": "style/*", "severity": "off" },
@@ -137,7 +175,6 @@
         { "rule": "*quotes", "severity": "off" },
         { "rule": "*semi", "severity": "off" }
     ],
-
     // Enable eslint for all supported languages
     "eslint.validate": [
         "javascript",
@@ -153,5 +190,9 @@
         "toml",
         "less",
         "css"
-    ]
+    ],
+
+    "editor.quickSuggestions": {
+        "strings": "on"
+    }
 }

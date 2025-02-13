@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { ICellData, IWorkbookData, Nullable, Univer } from '@univerjs/core';
+import type { ICellData, Injector, IWorkbookData, Nullable, Univer } from '@univerjs/core';
 import { IUniverInstanceService, LocaleType, ObjectMatrix } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { FormulaDataModel, initSheetFormulaData } from '../formula-data.model';
@@ -98,8 +97,6 @@ describe('Test formula data model', () => {
 
         describe('updateFormulaData', () => {
             it('delete formula with id', () => {
-                formulaDataModel.initFormulaData();
-
                 const unitId = 'test';
                 const sheetId = 'sheet1';
                 const cellValue = {
@@ -114,41 +111,30 @@ describe('Test formula data model', () => {
                 };
 
                 const result = {
-                    [unitId]: {
-                        [sheetId]: {
-                            0: {
-                                3: {
-                                    f: '=SUM(A1)',
-                                    si: '3e4r5t',
-                                },
-                            },
-                            2: {
-                                3: {
-                                    f: '=SUM(A3)',
-                                    si: 'OSPtzm',
-                                },
-                            },
-                            3: {
-                                3: {
-                                    f: '=SUM(A3)',
-                                    si: 'OSPtzm',
-                                    x: 0,
-                                    y: 1,
-                                },
-                            },
+                    1: {
+                        3: null,
+                    },
+                    2: {
+                        3: {
+                            f: '=SUM(A3)',
+                            si: 'OSPtzm',
+                        },
+                    },
+                    3: {
+                        3: {
+                            f: '=SUM(A3)',
+                            si: 'OSPtzm',
+                            x: 0,
+                            y: 1,
                         },
                     },
                 };
 
-                formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
-
-                const formulaData = formulaDataModel.getFormulaData();
-                expect(formulaData).toStrictEqual(result);
+                const newFormulaData = formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
+                expect(newFormulaData).toStrictEqual(result);
             });
 
             it('delete formulas with ids and formulas with only ids', () => {
-                formulaDataModel.initFormulaData();
-
                 const unitId = 'test';
                 const sheetId = 'sheet1';
                 const cellValue = {
@@ -179,27 +165,28 @@ describe('Test formula data model', () => {
                 };
 
                 const result = {
-                    [unitId]: {
-                        [sheetId]: {
-                            3: {
-                                3: {
-                                    f: '=SUM(A4)',
-                                    si: 'OSPtzm',
-                                },
-                            },
+                    0: {
+                        3: null,
+                    },
+                    1: {
+                        3: null,
+                    },
+                    2: {
+                        3: null,
+                    },
+                    3: {
+                        3: {
+                            f: '=SUM(A4)',
+                            si: 'OSPtzm',
                         },
                     },
                 };
 
-                formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
-
-                const formulaData = formulaDataModel.getFormulaData();
-                expect(formulaData).toStrictEqual(result);
+                const newFormulaData = formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
+                expect(newFormulaData).toStrictEqual(result);
             });
 
             it('delete the formula with only id', () => {
-                formulaDataModel.initFormulaData();
-
                 const unitId = 'test';
                 const sheetId = 'sheet1';
                 const cellValue = {
@@ -214,36 +201,27 @@ describe('Test formula data model', () => {
                 };
 
                 const result = {
-                    [unitId]: {
-                        [sheetId]: {
-                            0: {
-                                3: {
-                                    f: '=SUM(A1)',
-                                    si: '3e4r5t',
-                                },
-                            },
-                            1: {
-                                3: {
-                                    f: '=SUM(A2)',
-                                    si: 'OSPtzm',
-                                },
-                            },
-                            2: {
-                                3: {
-                                    f: '=SUM(A2)',
-                                    si: 'OSPtzm',
-                                    x: 0,
-                                    y: 1,
-                                },
-                            },
+                    1: {
+                        3: {
+                            f: '=SUM(A2)',
+                            si: 'OSPtzm',
                         },
+                    },
+                    2: {
+                        3: {
+                            f: '=SUM(A2)',
+                            si: 'OSPtzm',
+                            x: 0,
+                            y: 1,
+                        },
+                    },
+                    3: {
+                        3: null,
                     },
                 };
 
-                formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
-
-                const formulaData = formulaDataModel.getFormulaData();
-                expect(formulaData).toStrictEqual(result);
+                const newFormulaData = formulaDataModel.updateFormulaData(unitId, sheetId, cellValue);
+                expect(newFormulaData).toStrictEqual(result);
             });
         });
 
@@ -353,8 +331,6 @@ describe('Test formula data model', () => {
 
         describe('getFormulaStringByCell', () => {
             it('get formula string by cell', () => {
-                formulaDataModel.initFormulaData();
-
                 const unitId = 'test';
                 const sheetId = 'sheet1';
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
+import type { ModalStyles } from 'rc-dialog/lib/IDialogPropTypes';
+import type { DraggableData, DraggableEvent, DraggableEventHandler } from 'react-draggable';
 import { CloseSingle } from '@univerjs/icons';
 import RcDialog from 'rc-dialog';
 import React, { useContext, useRef, useState } from 'react';
-import type { DraggableData, DraggableEvent, DraggableEventHandler } from 'react-draggable';
-import Draggable from 'react-draggable';
 
+import Draggable from 'react-draggable';
 import { ConfigContext } from '../config-provider/ConfigProvider';
 import styles from './index.module.less';
 
@@ -86,10 +87,36 @@ export interface IDialogProps {
      * Callback when the dialog is closed.
      */
     onClose?: () => void;
+
+    /**
+     *  Whether the dialog should show a mask.
+     */
+    mask?: boolean;
+
+    /**
+     * additional className for dialog
+     */
+    className?: string;
+
+    /**
+     * The style of the customize.
+     */
+    dialogStyles?: ModalStyles;
+
+    /**
+     * whether show close button
+     */
+    closable?: boolean;
+
+    /**
+     * whether click mask to close, default is true
+     */
+    maskClosable?: boolean;
 }
 
 export function Dialog(props: IDialogProps) {
     const {
+        className,
         children,
         style,
         visible = false,
@@ -102,6 +129,10 @@ export function Dialog(props: IDialogProps) {
         preservePositionOnDestroy = false,
         footer,
         onClose,
+        mask,
+        dialogStyles,
+        closable,
+        maskClosable,
     } = props;
     const [dragDisabled, setDragDisabled] = useState(false);
     const [positionOffset, setPositionOffset] = useState<{ x: number; y: number } | null>(null);
@@ -115,6 +146,7 @@ export function Dialog(props: IDialogProps) {
                 style={{
                     width: '100%',
                     cursor: 'pointer',
+                    ...dialogStyles?.header,
                 }}
                 onMouseOver={() => {
                     if (dragDisabled) {
@@ -124,8 +156,12 @@ export function Dialog(props: IDialogProps) {
                 onMouseOut={() => {
                     setDragDisabled(true);
                 }}
-                onFocus={() => {}}
-                onBlur={() => {}}
+                onFocus={() => {
+                    // empty
+                }}
+                onBlur={() => {
+                    // empty
+                }}
             >
                 {title}
             </div>
@@ -136,7 +172,7 @@ export function Dialog(props: IDialogProps) {
 
     const modalRender = (modal: React.ReactNode) => {
         const [bounds, setBounds] = useState({ left: 0, top: 0, bottom: 0, right: 0 });
-        const draggleRef = useRef<HTMLDivElement>(null);
+        const draggleRef = useRef<HTMLDivElement>(null!);
 
         function handleStop(_event: MouseEvent, data: DraggableData) {
             if (preservePositionOnDestroy) {
@@ -177,11 +213,14 @@ export function Dialog(props: IDialogProps) {
             : modal;
     };
 
+    const needMask = mask ?? !draggable;
+
     return mountContainer && (
         <RcDialog
+            className={className}
             width={width}
             prefixCls={styles.dialog}
-            rootClassName={draggable ? styles.dialogRootDraggable : styles.dialogRoot}
+            rootClassName={!needMask ? styles.dialogRootDraggable : styles.dialogRoot}
             getContainer={() => mountContainer}
             visible={visible}
             title={TitleIfDraggable}
@@ -189,9 +228,12 @@ export function Dialog(props: IDialogProps) {
             closeIcon={closeIcon}
             destroyOnClose={destroyOnClose}
             footer={footer}
-            mask={!draggable}
+            mask={needMask}
             style={style}
             onClose={onClose}
+            styles={dialogStyles}
+            closable={closable}
+            maskClosable={maskClosable}
         >
             {children}
         </RcDialog>

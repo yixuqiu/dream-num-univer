@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,13 @@ export class AstRootNode extends BaseAstNode {
 
     override execute() {
         const children = this.getChildren();
+
+        if (children.length > 1) {
+            this.setValue(ErrorValueObject.create(ErrorType.VALUE));
+
+            return;
+        }
+
         const node = children[0];
         // if (node.nodeType === NodeType.FUNCTION) {
         //     await node.executeAsync(interpreterCalculateProps);

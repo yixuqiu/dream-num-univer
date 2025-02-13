@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,20 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+/* eslint-disable max-lines-per-function */
+
+import type { Dependency, IWorkbookData, Workbook } from '@univerjs/core';
+import type { ISheetData } from '../../basics/common';
+
+import type { BaseReferenceObject, FunctionVariantType } from '../../engine/reference-object/base-reference-object';
+import type { ArrayValueObject } from '../../engine/value-object/array-value-object';
+import type { BaseValueObject, ErrorValueObject } from '../../engine/value-object/base-value-object';
+
 import {
     CellValueType,
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
     LocaleType,
     LogLevel,
@@ -25,12 +35,7 @@ import {
     Plugin,
     Univer,
     UniverInstanceType,
-
 } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import type { ISheetData } from '../../basics/common';
 import { Lexer } from '../../engine/analysis/lexer';
 import { LexerTreeBuilder } from '../../engine/analysis/lexer-tree-builder';
 import { AstTreeBuilder } from '../../engine/analysis/parser';
@@ -44,19 +49,17 @@ import { ReferenceNodeFactory } from '../../engine/ast-node/reference-node';
 import { SuffixNodeFactory } from '../../engine/ast-node/suffix-node';
 import { UnionNodeFactory } from '../../engine/ast-node/union-node';
 import { ValueNodeFactory } from '../../engine/ast-node/value-node';
-import { FormulaDependencyGenerator } from '../../engine/dependency/formula-dependency';
+import { FormulaDependencyGenerator, IFormulaDependencyGenerator } from '../../engine/dependency/formula-dependency';
 import { Interpreter } from '../../engine/interpreter/interpreter';
-import type { FormulaDataModel } from '../../models/formula-data.model';
-import { CalculateFormulaService } from '../../services/calculate-formula.service';
+import { stripErrorMargin } from '../../engine/utils/math-kit';
+import { FormulaDataModel } from '../../models/formula-data.model';
+import { CalculateFormulaService, ICalculateFormulaService } from '../../services/calculate-formula.service';
 import { FormulaCurrentConfigService, IFormulaCurrentConfigService } from '../../services/current-data.service';
 import { DefinedNamesService, IDefinedNamesService } from '../../services/defined-names.service';
 import { FunctionService, IFunctionService } from '../../services/function.service';
 import { IOtherFormulaManagerService, OtherFormulaManagerService } from '../../services/other-formula-manager.service';
 import { FormulaRuntimeService, IFormulaRuntimeService } from '../../services/runtime.service';
 import { ISuperTableService, SuperTableService } from '../../services/super-table.service';
-import type { BaseValueObject, ErrorValueObject } from '../../engine/value-object/base-value-object';
-import type { BaseReferenceObject, FunctionVariantType } from '../../engine/reference-object/base-reference-object';
-import type { ArrayValueObject } from '../../engine/value-object/array-value-object';
 
 const getTestWorkbookData = (): IWorkbookData => {
     return {
@@ -147,6 +150,7 @@ const getTestWorkbookData = (): IWorkbookData => {
         styles: {},
     };
 };
+
 export function createFunctionTestBed(workbookData?: IWorkbookData, dependencies?: Dependency[]) {
     const univer = new Univer();
     const injector = univer.__getInjector();
@@ -168,8 +172,9 @@ export function createFunctionTestBed(workbookData?: IWorkbookData, dependencies
             super();
         }
 
-        override onStarting(injector: Injector): void {
-            injector.add([CalculateFormulaService]);
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([ICalculateFormulaService, { useClass: CalculateFormulaService }]);
             injector.add([Lexer]);
             injector.add([LexerTreeBuilder]);
 
@@ -180,7 +185,7 @@ export function createFunctionTestBed(workbookData?: IWorkbookData, dependencies
             injector.add([IDefinedNamesService, { useClass: DefinedNamesService }]);
             injector.add([ISuperTableService, { useClass: SuperTableService }]);
 
-            injector.add([FormulaDependencyGenerator]);
+            injector.add([IFormulaDependencyGenerator, { useClass: FormulaDependencyGenerator }]);
             injector.add([Interpreter]);
             injector.add([AstTreeBuilder]);
 
@@ -194,12 +199,9 @@ export function createFunctionTestBed(workbookData?: IWorkbookData, dependencies
             injector.add([SuffixNodeFactory]);
             injector.add([UnionNodeFactory]);
             injector.add([ValueNodeFactory]);
+            injector.add([FormulaDataModel]);
 
             dependencies?.forEach((d) => injector.add(d));
-        }
-
-        override onReady(): void {
-            this._formulaDataModel?.initFormulaData();
         }
     }
 
@@ -215,7 +217,7 @@ export function createFunctionTestBed(workbookData?: IWorkbookData, dependencies
     const sheetData: ISheetData = {};
     const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
     const unitId = workbook.getUnitId();
-    const sheetId = workbook.getActiveSheet().getSheetId();
+    const sheetId = workbook.getActiveSheet()!.getSheetId();
     workbook.getSheets().forEach((sheet) => {
         const sheetConfig = sheet.getConfig();
         sheetData[sheet.getSheetId()] = {
@@ -246,4 +248,13 @@ export function getObjectValue(result: FunctionVariantType) {
         return (result as ArrayValueObject).toValue();
     }
     return (result as BaseValueObject).getValue();
+}
+
+export function stripArrayValue(array: (string | number | boolean | null)[][]) {
+    return array.map((row) => row.map((cell) => {
+        if (typeof cell === 'number') {
+            return stripErrorMargin(cell);
+        }
+        return cell;
+    }));
 }

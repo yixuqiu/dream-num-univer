@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_EMPTY_DOCUMENT_VALUE } from '@univerjs/core';
+import { BuildTextUtils } from '@univerjs/core';
 import type { ICellData, Nullable } from '@univerjs/core';
 
 export function getCellValue(cell: Nullable<ICellData>) {
@@ -30,8 +30,7 @@ export function getCellValue(cell: Nullable<ICellData>) {
         }
 
         const data = body.dataStream;
-        const lastString = data.substring(data.length - 2, data.length);
-        const newDataStream = lastString === DEFAULT_EMPTY_DOCUMENT_VALUE ? data.substring(0, data.length - 2) : data;
+        const newDataStream = BuildTextUtils.transform.getPlainText(data);
 
         return newDataStream;
     }

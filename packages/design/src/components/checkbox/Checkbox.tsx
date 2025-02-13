@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,13 +60,15 @@ export interface ICheckboxProps {
      * Set the handler to handle `click` event
      */
     onChange?: (value: string | number | boolean) => void;
+
+    contentClassName?: string;
 }
 
 /**
  * Checkbox Component
  */
 export function Checkbox(props: ICheckboxProps) {
-    const { children, className, style, checked = false, indeterminate = false, value, disabled = false, onChange } = props;
+    const { children, className, style, checked = false, indeterminate = false, value, disabled = false, onChange, contentClassName } = props;
 
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -102,7 +104,7 @@ export function Checkbox(props: ICheckboxProps) {
                 <span className={styles.checkboxTargetInner} />
             </span>
 
-            <span>{children}</span>
+            <span className={contentClassName}>{children}</span>
         </label>
     );
 }

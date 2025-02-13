@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -202,16 +202,25 @@ function compareFontInfoDistance(a: FontDistance, b: FontDistance) {
 }
 
 async function checkLocalFontsPermission() {
+    if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
+        return false;
+    }
+
     if (typeof window === 'undefined') {
-        return;
+        return false;
     }
     if (window.navigator == null || window.navigator?.permissions == null) {
         return false;
     }
 
-    const status = await window.navigator.permissions.query({ name: 'local-fonts' as PermissionName });
+    try {
+        const status = await window.navigator.permissions.query({ name: 'local-fonts' as PermissionName });
 
-    return status.state === 'granted';
+        return status.state === 'granted';
+    // eslint-disable-next-line unused-imports/no-unused-vars
+    } catch (_err) {
+        return false;
+    }
 }
 
 class FontLibrary {

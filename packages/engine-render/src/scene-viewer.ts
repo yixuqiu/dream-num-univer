@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,17 @@
 
 import type { IKeyValue, Nullable } from '@univerjs/core';
 
+import type { IObjectFullState } from './basics/interfaces';
+import type { IViewportInfo, Vector2 } from './basics/vector2';
+import type { UniverRenderingContext } from './context';
+import type { Scene } from './scene';
 import { BaseObject } from './base-object';
 import { RENDER_CLASS_TYPE } from './basics/const';
-import type { IObjectFullState } from './basics/interfaces';
-import type { IViewportBound, Vector2 } from './basics/vector2';
-import type { UniverRenderingContext } from './context';
-import type { ThinScene } from './thin-scene';
 
 export class SceneViewer extends BaseObject {
-    private _subScenes = new Map<string, ThinScene>();
+    private _subScenes = new Map<string, Scene>();
 
-    private _activeSubScene: Nullable<ThinScene>;
+    private _activeSubScene: Nullable<Scene>;
 
     private _allowSelectedClipElement = false;
 
@@ -40,14 +40,14 @@ export class SceneViewer extends BaseObject {
         return RENDER_CLASS_TYPE.SCENE_VIEWER;
     }
 
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;
         }
 
         if (bounds) {
-            const { left, top, right, bottom } = bounds.viewBound;
+            const { left, top, right, bottom } = bounds.cacheBound || bounds.viewBound;
 
             if (
                 this.width + this.strokeWidth + this.left < left ||
@@ -86,7 +86,7 @@ export class SceneViewer extends BaseObject {
         }
     }
 
-    addSubScene(scene: ThinScene) {
+    addSubScene(scene: Scene) {
         this._activeSubScene = scene;
         this._subScenes.set(scene.sceneKey, scene);
         this.makeDirty();
@@ -130,8 +130,7 @@ export class SceneViewer extends BaseObject {
             return;
         }
 
-        const trans = this.transform.clone().invert();
-        const tCoord = trans.applyPoint(coord);
+        const tCoord = this.transform.invert().applyPoint(coord);
 
         return this._activeSubScene?.pick(tCoord);
     }

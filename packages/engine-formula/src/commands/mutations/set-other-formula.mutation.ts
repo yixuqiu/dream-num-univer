@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,23 @@
  */
 
 import type { IMutation } from '@univerjs/core';
-import { CommandType } from '@univerjs/core';
+import type { IOtherFormulaDataItem } from '../../basics/common';
 
-import type { IFormulaDataItem } from '../../basics/common';
+import { CommandType } from '@univerjs/core';
 
 export interface ISetOtherFormulaMutationParams {
     unitId: string;
     subUnitId: string;
-    formulaMap: Record<string, IFormulaDataItem>;
+    formulaMap: Record<string, IOtherFormulaDataItem>;
 };
 export interface IRemoveOtherFormulaMutationParams {
     unitId: string;
     subUnitId: string;
     formulaIdList: string[];
 };
+
+// TODO: remove these two mutations to use RPC instead.
+
 /**
  * In the formula engine, the mutation is solely responsible for communication between the worker and the main thread.
  * It requires setting local to true during execution.

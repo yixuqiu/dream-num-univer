@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,23 @@
  * limitations under the License.
  */
 
-import type { Injector } from '@wendellhu/redi';
-import { beforeEach, describe, expect, it } from 'vitest';
-
-import type { IWorkbookData } from '@univerjs/core';
-import { CellValueType, LocaleType } from '@univerjs/core';
-import { Lexer } from '../../../../engine/analysis/lexer';
+import type { Injector, IWorkbookData } from '@univerjs/core';
 import type { LexerNode } from '../../../../engine/analysis/lexer-node';
-import { AstTreeBuilder } from '../../../../engine/analysis/parser';
+
 import type { BaseAstNode } from '../../../../engine/ast-node/base-ast-node';
+import type { ArrayValueObject } from '../../../../engine/value-object/array-value-object';
+import type { BaseValueObject, ErrorValueObject } from '../../../../engine/value-object/base-value-object';
+import { CellValueType, LocaleType } from '@univerjs/core';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { Lexer } from '../../../../engine/analysis/lexer';
+import { AstTreeBuilder } from '../../../../engine/analysis/parser';
 import { Interpreter } from '../../../../engine/interpreter/interpreter';
+import { generateExecuteAstNodeData } from '../../../../engine/utils/ast-node-tool';
 import { IFormulaCurrentConfigService } from '../../../../services/current-data.service';
 import { IFunctionService } from '../../../../services/function.service';
 import { IFormulaRuntimeService } from '../../../../services/runtime.service';
 import { createFunctionTestBed } from '../../../__tests__/create-function-test-bed';
 import { FUNCTION_NAMES_INFORMATION } from '../../function-names';
-import type { BaseValueObject, ErrorValueObject } from '../../../../engine/value-object/base-value-object';
-import type { ArrayValueObject } from '../../../../engine/value-object/array-value-object';
 import { Isref } from '../index';
 
 const getTestWorkbookData = (): IWorkbookData => {
@@ -145,7 +145,7 @@ describe('Test isref function', () => {
     let lexer: Lexer;
     let astTreeBuilder: AstTreeBuilder;
     let interpreter: Interpreter;
-    let calculate: (formula: string) => Promise<(string | number | boolean | null)[][] | string | number | boolean>;
+    let calculate: (formula: string) => (string | number | boolean | null)[][] | string | number | boolean;
 
     beforeEach(() => {
         const testBed = createFunctionTestBed(getTestWorkbookData());
@@ -165,6 +165,7 @@ describe('Test isref function', () => {
         formulaCurrentConfigService.load({
             formulaData: {},
             arrayFormulaCellData: {},
+            arrayFormulaRange: {},
             forceCalculate: false,
             dirtyRanges: [],
             dirtyNameMap: {},
@@ -192,12 +193,12 @@ describe('Test isref function', () => {
             new Isref(FUNCTION_NAMES_INFORMATION.ISREF)
         );
 
-        calculate = async (formula: string) => {
+        calculate = (formula: string) => {
             const lexerNode = lexer.treeBuilder(formula);
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             if ((result as ErrorValueObject).isError()) {
                 return (result as ErrorValueObject).getValue();

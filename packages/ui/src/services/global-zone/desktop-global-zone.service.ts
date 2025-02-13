@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 import { toDisposable } from '@univerjs/core';
-import { type IDisposable, Inject } from '@wendellhu/redi';
+import { type IDisposable, Inject } from '@univerjs/core';
 import type { ForwardRefExoticComponent } from 'react';
 import { Subject } from 'rxjs';
 
@@ -27,11 +27,12 @@ export class DesktopGlobalZoneService implements IGlobalZoneService {
     readonly componentKey$ = new Subject<string>();
     private _componentKey = '';
 
-
     constructor(
         @Inject(ComponentManager)
         private readonly _componentManager: ComponentManager
-    ) {}
+    ) {
+        // empty
+    }
 
     get componentKey() {
         return this._componentKey;

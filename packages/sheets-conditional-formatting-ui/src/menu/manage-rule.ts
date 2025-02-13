@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,142 +14,154 @@
  * limitations under the License.
  */
 
-import { merge, Observable } from 'rxjs';
-import type { ComponentManager, IMenuSelectorItem } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
-import { getMenuHiddenObservable, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
-import { SelectionManagerService, SetWorksheetActiveOperation } from '@univerjs/sheets';
-
-import { debounceTime } from 'rxjs/operators';
-import type { Workbook } from '@univerjs/core';
-import { ICommandService, IUniverInstanceService, LocaleService, Rectangle, UniverInstanceType } from '@univerjs/core';
-import { Conditions } from '@univerjs/icons';
+import type { IAccessor, Workbook } from '@univerjs/core';
+import type { IMenuSelectorItem } from '@univerjs/ui';
+import { ICommandService, IUniverInstanceService, Rectangle, UniverInstanceType } from '@univerjs/core';
+import { checkRangesEditablePermission, RangeProtectionPermissionEditPoint, SetWorksheetActiveOperation, SheetsSelectionsService, WorkbookEditablePermission, WorksheetEditPermission, WorksheetSetCellStylePermission } from '@univerjs/sheets';
 import { AddConditionalRuleMutation, ConditionalFormattingRuleModel, DeleteConditionalRuleMutation, MoveConditionalRuleMutation, SetConditionalRuleMutation } from '@univerjs/sheets-conditional-formatting';
 
+import { getCurrentRangeDisable$ } from '@univerjs/sheets-ui';
+import { getMenuHiddenObservable, MenuItemType } from '@univerjs/ui';
+import { merge, Observable } from 'rxjs';
+
+import { debounceTime } from 'rxjs/operators';
 import { CF_MENU_OPERATION, OpenConditionalFormattingOperator } from '../commands/operations/open-conditional-formatting-panel';
 
-const commandList = [SetWorksheetActiveOperation.id, AddConditionalRuleMutation.id, SetConditionalRuleMutation.id, DeleteConditionalRuleMutation.id, MoveConditionalRuleMutation.id];
+const commandList = [
+    SetWorksheetActiveOperation.id,
+    AddConditionalRuleMutation.id,
+    SetConditionalRuleMutation.id,
+    DeleteConditionalRuleMutation.id,
+    MoveConditionalRuleMutation.id,
+];
 
-export const FactoryManageConditionalFormattingRule = (componentManager: ComponentManager) => {
-    const key = 'conditional-formatting-menu-icon';
-    componentManager.register(key, Conditions);
-    return (accessor: IAccessor) => {
-        const localeService = accessor.get(LocaleService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const commandService = accessor.get(ICommandService);
-        const univerInstanceService = accessor.get(IUniverInstanceService);
-        const conditionalFormattingRuleModel = accessor.get(ConditionalFormattingRuleModel);
-        const clearRangeEnable$ = new Observable<boolean>((subscriber) => merge(
-            selectionManagerService.selectionMoveEnd$,
-            new Observable<null>((commandSubscribe) => {
-                const disposable = commandService.onCommandExecuted((commandInfo) => {
-                    const { id, params } = commandInfo;
-                    const unitId = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)?.getUnitId();
-                    if (commandList.includes(id) && (params as { unitId: string }).unitId === unitId) {
-                        commandSubscribe.next(null);
-                    }
-                });
-                return () => disposable.dispose();
-            })
-        ).pipe(debounceTime(16)).subscribe(() => {
-            const ranges = selectionManagerService.getSelections()?.map((selection) => selection.range) || [];
+const commonSelections = [
+    {
+        label: 'sheet.cf.ruleType.highlightCell',
+        value: CF_MENU_OPERATION.highlightCell,
+    },
+    {
+        label: 'sheet.cf.panel.rankAndAverage',
+        value: CF_MENU_OPERATION.rank,
+    },
+    {
+        label: 'sheet.cf.ruleType.formula',
+        value: CF_MENU_OPERATION.formula,
+    },
+    {
+        label: 'sheet.cf.ruleType.colorScale',
+        value: CF_MENU_OPERATION.colorScale,
+    },
+    {
+        label: 'sheet.cf.ruleType.dataBar',
+        value: CF_MENU_OPERATION.dataBar,
+    }, {
+        label: 'sheet.cf.ruleType.iconSet',
+        value: CF_MENU_OPERATION.icon,
+    },
+    {
+        label: 'sheet.cf.menu.manageConditionalFormatting',
+        value: CF_MENU_OPERATION.viewRule,
+    }, {
+        label: 'sheet.cf.menu.createConditionalFormatting',
+        value: CF_MENU_OPERATION.createRule,
+    },
+    {
+        label: 'sheet.cf.menu.clearRangeRules',
+        value: CF_MENU_OPERATION.clearRangeRules,
+        disabled: false,
+    },
+    {
+        label: 'sheet.cf.menu.clearWorkSheetRules',
+        value: CF_MENU_OPERATION.clearWorkSheetRules,
+    },
+];
+
+export const FactoryManageConditionalFormattingRule = (accessor: IAccessor): IMenuSelectorItem => {
+    const selectionManagerService = accessor.get(SheetsSelectionsService);
+    const commandService = accessor.get(ICommandService);
+    const univerInstanceService = accessor.get(IUniverInstanceService);
+    const conditionalFormattingRuleModel = accessor.get(ConditionalFormattingRuleModel);
+
+    const clearRangeEnable$ = new Observable<boolean>((subscriber) => merge(
+        selectionManagerService.selectionMoveEnd$,
+        selectionManagerService.selectionSet$,
+        new Observable<null>((commandSubscribe) => {
+            const disposable = commandService.onCommandExecuted((commandInfo) => {
+                const { id, params } = commandInfo;
+                const unitId = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)?.getUnitId();
+                if (commandList.includes(id) && (params as { unitId: string }).unitId === unitId) {
+                    commandSubscribe.next(null);
+                }
+            });
+            return () => disposable.dispose();
+        })
+    ).pipe(debounceTime(16)).subscribe(() => {
+        const ranges = selectionManagerService.getCurrentSelections()?.map((selection) => selection.range) || [];
+        const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
+        if (!workbook) return;
+        const worksheet = workbook.getActiveSheet();
+        if (!worksheet) return;
+
+        const allRule = conditionalFormattingRuleModel.getSubunitRules(workbook.getUnitId(), worksheet.getSheetId()) || [];
+        const ruleList = allRule.filter((rule) => rule.ranges.some((ruleRange) => ranges.some((range) => Rectangle.intersects(range, ruleRange))));
+        const hasPermission = ruleList.map((rule) => rule.ranges).every((ranges) => {
+            return checkRangesEditablePermission(accessor, workbook.getUnitId(), worksheet.getSheetId(), ranges);
+        });
+        subscriber.next(hasPermission);
+    }));
+    const clearSheetEnable$ = new Observable<boolean>((subscriber) =>
+        new Observable<null>((commandSubscribe) => {
+            const disposable = commandService.onCommandExecuted((commandInfo) => {
+                const { id, params } = commandInfo;
+                const unitId = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)?.getUnitId();
+                if (commandList.includes(id) && (params as { unitId: string }).unitId === unitId) {
+                    commandSubscribe.next(null);
+                }
+            });
+            return () => disposable.dispose();
+        }).pipe(debounceTime(16)).subscribe(() => {
             const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
             if (!workbook) return;
-            const allRule = conditionalFormattingRuleModel.getSubunitRules(workbook.getUnitId(), workbook.getActiveSheet().getSheetId()) || [];
-            const ruleList = allRule.filter((rule) => rule.ranges.some((ruleRange) => ranges.some((range) => Rectangle.intersects(range, ruleRange))));
-            subscriber.next(!!ruleList.length);
-        }));
-        const clearSheetEnable$ = new Observable<boolean>((subscriber) =>
-            merge(
-                selectionManagerService.selectionMoveEnd$,
-                new Observable<null>((commandSubscribe) => {
-                    const disposable = commandService.onCommandExecuted((commandInfo) => {
-                        const { id, params } = commandInfo;
-                        const unitId = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)?.getUnitId();
-                        if (commandList.includes(id) && (params as { unitId: string }).unitId === unitId) {
-                            commandSubscribe.next(null);
-                        }
-                    });
-                    return () => disposable.dispose();
-                })
-            ).pipe(debounceTime(16)).subscribe(() => {
-                const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
-                if (!workbook) return;
-                const allRule = conditionalFormattingRuleModel.getSubunitRules(workbook.getUnitId(), workbook.getActiveSheet().getSheetId()) || [];
-                subscriber.next(!!allRule.length);
-            })
-        );
-        const selections$ = new Observable((subscriber) => {
-            const commonSelections = getCommonSelection(localeService);
-            clearRangeEnable$.subscribe((v) => {
-                const item = commonSelections.find((item) => item.value === CF_MENU_OPERATION.clearRangeRules);
-                if (item) {
-                    item.disabled = !v;
-                    subscriber.next(commonSelections);
-                }
-            });
-            clearSheetEnable$.subscribe((v) => {
-                const item = commonSelections.find((item) => item.value === CF_MENU_OPERATION.clearWorkSheetRules);
-                if (item) {
-                    item.disabled = !v;
-                    subscriber.next(commonSelections);
-                }
-            });
-            subscriber.next(commonSelections);
-        });
-        return {
-            id: OpenConditionalFormattingOperator.id,
-            type: MenuItemType.SELECTOR,
-            group: MenuGroup.TOOLBAR_FORMULAS_INSERT,
-            positions: [MenuPosition.TOOLBAR_START],
-            icon: key,
-            tooltip: localeService.t('sheet.cf.title'),
-            selections: selections$,
-            hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
-        } as IMenuSelectorItem;
-    };
-};
+            const worksheet = workbook.getActiveSheet();
+            if (!worksheet) return;
 
-function getCommonSelection(localeService: LocaleService) {
-    return [
-        {
-            label: localeService.t('sheet.cf.ruleType.highlightCell'),
-            value: CF_MENU_OPERATION.highlightCell,
-        },
-        {
-            label: localeService.t('sheet.cf.panel.rankAndAverage'),
-            value: CF_MENU_OPERATION.rank,
-        },
-        {
-            label: localeService.t('sheet.cf.ruleType.formula'),
-            value: CF_MENU_OPERATION.formula,
-        },
-        {
-            label: localeService.t('sheet.cf.ruleType.colorScale'),
-            value: CF_MENU_OPERATION.colorScale,
-        },
-        {
-            label: localeService.t('sheet.cf.ruleType.dataBar'),
-            value: CF_MENU_OPERATION.dataBar,
-        }, {
-            label: localeService.t('sheet.cf.ruleType.iconSet'),
-            value: CF_MENU_OPERATION.icon,
-        },
-        {
-            label: localeService.t('sheet.cf.menu.manageConditionalFormatting'),
-            value: CF_MENU_OPERATION.viewRule,
-        }, {
-            label: localeService.t('sheet.cf.menu.createConditionalFormatting'),
-            value: CF_MENU_OPERATION.createRule,
-        },
-        {
-            label: localeService.t('sheet.cf.menu.clearRangeRules'),
-            value: CF_MENU_OPERATION.clearRangeRules,
-            disabled: false,
-        },
-        {
-            label: localeService.t('sheet.cf.menu.clearWorkSheetRules'),
-            value: CF_MENU_OPERATION.clearWorkSheetRules,
-        },
-    ];
-}
+            const allRule = conditionalFormattingRuleModel.getSubunitRules(workbook.getUnitId(), worksheet.getSheetId()) || [];
+            if (!allRule.length) {
+                subscriber.next(false);
+                return false;
+            }
+
+            const hasPermission = allRule.map((rule) => rule.ranges).every((ranges) => {
+                return checkRangesEditablePermission(accessor, workbook.getUnitId(), worksheet.getSheetId(), ranges);
+            });
+            subscriber.next(hasPermission);
+        })
+    );
+    const selections$ = new Observable((subscriber) => {
+        clearRangeEnable$.subscribe((v) => {
+            const item = commonSelections.find((item) => item.value === CF_MENU_OPERATION.clearRangeRules);
+            if (item) {
+                item.disabled = !v;
+                subscriber.next(commonSelections);
+            }
+        });
+        clearSheetEnable$.subscribe((v) => {
+            const item = commonSelections.find((item) => item.value === CF_MENU_OPERATION.clearWorkSheetRules);
+            if (item) {
+                item.disabled = !v;
+                subscriber.next(commonSelections);
+            }
+        });
+        subscriber.next(commonSelections);
+    });
+    return {
+        id: OpenConditionalFormattingOperator.id,
+        type: MenuItemType.SELECTOR,
+        icon: 'Conditions',
+        tooltip: 'sheet.cf.title',
+        selections: selections$,
+        hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
+        disabled$: getCurrentRangeDisable$(accessor, { workbookTypes: [WorkbookEditablePermission], worksheetTypes: [WorksheetSetCellStylePermission, WorksheetEditPermission], rangeTypes: [RangeProtectionPermissionEditPoint] }),
+    } as IMenuSelectorItem;
+};

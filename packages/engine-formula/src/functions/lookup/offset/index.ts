@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,26 @@
  */
 
 import { ErrorType } from '../../../basics/error-type';
-import type { BaseReferenceObject, FunctionVariantType } from '../../../engine/reference-object/base-reference-object';
 import { expandArrayValueObject } from '../../../engine/utils/array-object';
-import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
-import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
 import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
+import type { BaseReferenceObject, FunctionVariantType } from '../../../engine/reference-object/base-reference-object';
+import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
+import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
 
 export class Offset extends BaseFunction {
+    override minParams = 3;
+
+    override maxParams = 5;
+
     override needsReferenceObject = true;
 
+    override isAddress() {
+        return true;
+    }
+
+    // eslint-disable-next-line max-lines-per-function, complexity
     override calculate(
         reference: FunctionVariantType,
         rows: FunctionVariantType,
@@ -33,10 +42,6 @@ export class Offset extends BaseFunction {
         height?: FunctionVariantType,
         width?: FunctionVariantType
     ) {
-        if (reference == null || rows == null || columns == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
         if (reference.isError()) {
             return reference;
         }
@@ -61,64 +66,77 @@ export class Offset extends BaseFunction {
             return ErrorValueObject.create(ErrorType.VALUE);
         }
 
-        reference = reference as BaseReferenceObject;
+        const rowCount = (reference as BaseReferenceObject).getRowCount();
+        const columnCount = (reference as BaseReferenceObject).getColumnCount();
 
-        const rowCount = reference.getRowCount();
-        const columnCount = reference.getColumnCount();
+        let _rows = rows;
 
-        if (rows.isReferenceObject()) {
-            rows = (rows as BaseReferenceObject).toArrayValueObject();
+        if (_rows.isReferenceObject()) {
+            _rows = (_rows as BaseReferenceObject).toArrayValueObject();
         }
 
-        if (columns.isReferenceObject()) {
-            columns = (columns as BaseReferenceObject).toArrayValueObject();
+        let _columns = columns;
+
+        if (_columns.isReferenceObject()) {
+            _columns = (_columns as BaseReferenceObject).toArrayValueObject();
         }
 
-        // The default row height is the row height of reference.
-        if (!height) {
-            height = NumberValueObject.create(rowCount);
-        } else if (height.isReferenceObject()) {
-            height = (height as BaseReferenceObject).toArrayValueObject();
+        let _height = height ?? NumberValueObject.create(rowCount);
+
+        if (_height.isReferenceObject()) {
+            _height = (_height as BaseReferenceObject).toArrayValueObject();
         }
 
-        // The default column width is the column width of reference.
-        if (!width) {
-            width = NumberValueObject.create(columnCount);
-        } else if (width.isReferenceObject()) {
-            width = (width as BaseReferenceObject).toArrayValueObject();
+        if ((_height as BaseValueObject).isNull()) {
+            _height = NumberValueObject.create(rowCount);
+        }
+
+        let _width = width ?? NumberValueObject.create(columnCount);
+
+        if (_width.isReferenceObject()) {
+            _width = (_width as BaseReferenceObject).toArrayValueObject();
+        }
+
+        if ((_width as BaseValueObject).isNull()) {
+            _width = NumberValueObject.create(columnCount);
         }
 
         // If rows/columns/height/width is a range, it needs to be extended
         // get max row length
         const maxRowLength = Math.max(
-            rows.isArray() ? (rows as ArrayValueObject).getRowCount() : 1,
-            columns.isArray() ? (columns as ArrayValueObject).getRowCount() : 1,
-            height.isArray() ? (height as ArrayValueObject).getRowCount() : 1,
-            width.isArray() ? (width as ArrayValueObject).getRowCount() : 1
+            _rows.isArray() ? (_rows as ArrayValueObject).getRowCount() : 1,
+            _columns.isArray() ? (_columns as ArrayValueObject).getRowCount() : 1,
+            _height.isArray() ? (_height as ArrayValueObject).getRowCount() : 1,
+            _width.isArray() ? (_width as ArrayValueObject).getRowCount() : 1
         );
 
         // get max column length
         const maxColumnLength = Math.max(
-            rows.isArray() ? (rows as ArrayValueObject).getColumnCount() : 1,
-            columns.isArray() ? (columns as ArrayValueObject).getColumnCount() : 1,
-            height.isArray() ? (height as ArrayValueObject).getColumnCount() : 1,
-            width.isArray() ? (width as ArrayValueObject).getColumnCount() : 1
+            _rows.isArray() ? (_rows as ArrayValueObject).getColumnCount() : 1,
+            _columns.isArray() ? (_columns as ArrayValueObject).getColumnCount() : 1,
+            _height.isArray() ? (_height as ArrayValueObject).getColumnCount() : 1,
+            _width.isArray() ? (_width as ArrayValueObject).getColumnCount() : 1
         );
 
-        rows = rows as BaseValueObject;
-        columns = columns as BaseValueObject;
-        height = height as BaseValueObject;
-        width = width as BaseValueObject;
+        _rows = _rows as BaseValueObject;
+        _columns = _columns as BaseValueObject;
+        _height = _height as BaseValueObject;
+        _width = _width as BaseValueObject;
 
         // If any parameter of row/columns/height/width is an array(not single cell reference), an error will be reported, and the error report also needs to be expanded and specific error information is required. Otherwise, calculate the offset.
         if (maxRowLength === 1 && maxColumnLength === 1) {
-            return this._handleSingleObject(reference, rows, columns, height, width);
+            _rows = _rows.isArray() ? (_rows as ArrayValueObject).get(0, 0) as BaseValueObject : _rows;
+            _columns = _columns.isArray() ? (_columns as ArrayValueObject).get(0, 0) as BaseValueObject : _columns;
+            _height = _height.isArray() ? (_height as ArrayValueObject).get(0, 0) as BaseValueObject : _height;
+            _width = _width.isArray() ? (_width as ArrayValueObject).get(0, 0) as BaseValueObject : _width;
+
+            return this._handleSingleObject(reference as BaseReferenceObject, _rows, _columns, _height, _width);
         }
 
-        const rowsArray = expandArrayValueObject(maxRowLength, maxColumnLength, rows, ErrorValueObject.create(ErrorType.NA));
-        const columnsArray = expandArrayValueObject(maxRowLength, maxColumnLength, columns, ErrorValueObject.create(ErrorType.NA));
-        const heightArray = expandArrayValueObject(maxRowLength, maxColumnLength, height, ErrorValueObject.create(ErrorType.NA));
-        const widthArray = expandArrayValueObject(maxRowLength, maxColumnLength, width, ErrorValueObject.create(ErrorType.NA));
+        const rowsArray = expandArrayValueObject(maxRowLength, maxColumnLength, _rows, ErrorValueObject.create(ErrorType.NA));
+        const columnsArray = expandArrayValueObject(maxRowLength, maxColumnLength, _columns, ErrorValueObject.create(ErrorType.NA));
+        const heightArray = expandArrayValueObject(maxRowLength, maxColumnLength, _height, ErrorValueObject.create(ErrorType.NA));
+        const widthArray = expandArrayValueObject(maxRowLength, maxColumnLength, _width, ErrorValueObject.create(ErrorType.NA));
 
         return rowsArray.mapValue((rowsValue, rowIndex, columnIndex) => {
             const columnsValue = columnsArray.get(rowIndex, columnIndex) as BaseValueObject;
@@ -146,11 +164,32 @@ export class Offset extends BaseFunction {
         });
     }
 
+    // eslint-disable-next-line
     private _handleSingleObject(reference: BaseReferenceObject, rowsValue: BaseValueObject, columnsValue: BaseValueObject, heightValue: BaseValueObject, widthValue: BaseValueObject, isReportError = false) {
-        const { startRow: referenceStartRow, startColumn: referenceStartColumn } = reference.getRangeData();
+        const { startRow: referenceStartRow, startColumn: referenceStartColumn } = reference.getRangePosition();
 
-        const rowOffset = this.getIndexNumValue(rowsValue);
-        const columnOffset = this.getIndexNumValue(columnsValue);
+        let _rowsValue = rowsValue;
+
+        if (_rowsValue.isString()) {
+            _rowsValue = _rowsValue.convertToNumberObjectValue();
+        }
+
+        if (_rowsValue.isError()) {
+            return _rowsValue;
+        }
+
+        let _columnsValue = columnsValue;
+
+        if (_columnsValue.isString()) {
+            _columnsValue = _columnsValue.convertToNumberObjectValue();
+        }
+
+        if (_columnsValue.isError()) {
+            return _columnsValue;
+        }
+
+        const rowOffset = +_rowsValue.getValue();
+        const columnOffset = +_columnsValue.getValue();
 
         if (typeof rowOffset !== 'number' || typeof columnOffset !== 'number') {
             return ErrorValueObject.create(ErrorType.VALUE);

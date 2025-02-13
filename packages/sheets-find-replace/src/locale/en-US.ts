@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-export default {
+import type zhCN from './zh-CN';
+
+const locale: typeof zhCN = {
     'sheet-find-replace': {
         replace: {
             'partial-failure': 'Failed to replace some cells',
@@ -22,3 +24,5 @@ export default {
         },
     },
 };
+
+export default locale;

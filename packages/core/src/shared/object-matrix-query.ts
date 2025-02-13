@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import type { Nullable } from '../common/type-util';
 import { Range } from '../sheets/range';
-import type { IRange } from '../types/interfaces';
-import type { ObjectMatrix } from './object-matrix';
+import { ObjectMatrix } from './object-matrix';
+import { Rectangle } from './rectangle';
+import type { IRange } from '../sheets/typedef';
+import type { Nullable } from './types';
 
 function maximalRectangle<T>(matrix: T[][], match: (val: T) => boolean) {
     if (matrix.length === 0 || matrix[0].length === 0) return null;
@@ -84,6 +85,9 @@ function resetMatrix<T>(matrix: Nullable<T>[][], range: IRange) {
     });
 }
 
+/**
+ * @deprecated this function could cause memory out of use in large range.
+ */
 export function queryObjectMatrix<T>(matrix: ObjectMatrix<T>, match: (value: T) => boolean) {
     const arrayMatrix = matrix.toFullArray();
     const results: IRange[] = [];
@@ -98,4 +102,22 @@ export function queryObjectMatrix<T>(matrix: ObjectMatrix<T>, match: (value: T) 
     }
 
     return results;
+}
+
+export function multiSubtractMultiRanges(ranges1: IRange[], ranges2: IRange[]): IRange[] {
+    const matrix = new ObjectMatrix<number>();
+
+    ranges1.forEach((range) => {
+        Range.foreach(range, (row, col) => {
+            matrix.setValue(row, col, 1);
+        });
+    });
+
+    ranges2.forEach((range) => {
+        Range.foreach(range, (row, col) => {
+            matrix.setValue(row, col, 0);
+        });
+    });
+
+    return Rectangle.mergeRanges(queryObjectMatrix(matrix, (value) => value === 1));
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+import type { Dependency, IWorkbookData, Workbook } from '@univerjs/core';
 import {
     BooleanNumber,
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
     LocaleService,
     LocaleType,
@@ -27,14 +29,14 @@ import {
     Univer,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
 import enUS from '../../../locale/en-US';
+import { RangeProtectionRuleModel } from '../../../model/range-protection-rule.model';
 import { BorderStyleManagerService } from '../../../services/border-style-manager.service';
-import { SelectionManagerService } from '../../../services/selection-manager.service';
+import { WorkbookPermissionService } from '../../../services/permission/workbook-permission/workbook-permission.service';
+import { WorksheetProtectionPointModel, WorksheetProtectionRuleModel } from '../../../services/permission/worksheet-permission';
+import { WorksheetPermissionService } from '../../../services/permission/worksheet-permission/worksheet-permission.service';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
 import { SheetInterceptorService } from '../../../services/sheet-interceptor/sheet-interceptor.service';
-import { SheetPermissionService } from '../../../services/permission';
 
 const TEST_WORKBOOK_DATA_DEMO: IWorkbookData = {
     id: 'test',
@@ -90,22 +92,29 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
             @Inject(Injector) override readonly _injector: Injector
         ) {
             super();
-
-            this._injector = _injector;
         }
 
-        override onStarting(injector: Injector): void {
-            injector.add([SelectionManagerService]);
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([WorksheetPermissionService]);
+            injector.add([WorksheetProtectionPointModel]);
+            injector.add([RangeProtectionRuleModel]);
+            injector.add([WorkbookPermissionService]);
+            injector.add([WorksheetProtectionRuleModel]);
+            injector.add([SheetsSelectionsService]);
             injector.add([BorderStyleManagerService]);
             injector.add([SheetInterceptorService]);
-            injector.add([SheetPermissionService]);
 
             dependencies?.forEach((d) => injector.add(d));
+
+            this._injector.get(SheetInterceptorService);
+            this._injector.get(WorkbookPermissionService);
+            this._injector.get(WorksheetPermissionService);
         }
     }
 
     univer.registerPlugin(TestPlugin);
-    const sheet = univer.createUniverSheet(Tools.deepClone(workbookData || TEST_WORKBOOK_DATA_DEMO));
+    const sheet = univer.createUnit<IWorkbookData, Workbook>(UniverInstanceType.UNIVER_SHEET, Tools.deepClone(workbookData || TEST_WORKBOOK_DATA_DEMO));
 
     const univerInstanceService = injector.get(IUniverInstanceService);
     univerInstanceService.focusUnit('test');

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,32 +14,28 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
+/* eslint-disable ts/no-explicit-any */
 
-import type { Nullable } from '../common/type-util';
+import type { IDisposable } from '../common/di';
+import type { IInterceptor } from '../common/interceptor';
+import type { Nullable } from '../shared/types';
+import type { ICellData, ICellDataForSheetInterceptor } from './typedef';
+import { InterceptorEffectEnum } from '../common/interceptor';
 import { Disposable, toDisposable } from '../shared/lifecycle';
-import type { ICellData, ICellDataForSheetInterceptor } from '../types/interfaces/i-cell-data';
 
 /**
+ * A cell content interceptor is used to intercept the cell content. It can change or completely replace the cell content.
+ *
  * @internal
  */
 export interface ICellContentInterceptor {
-    getCell: (row: number, col: number) => Nullable<ICellDataForSheetInterceptor>;
-}
-
-export interface IRowFilteredInterceptor {}
-
-export interface IRowVisibleInterceptor {}
-
-export interface IColVisibleInterceptor {}
-
-export interface ISheetViewModel {
-    registerCellContentInterceptor: (interceptor: ICellContentInterceptor) => IDisposable;
-    registerRowFilteredInterceptor: (interceptor: IRowFilteredInterceptor) => IDisposable;
-    registerRowVisibleInterceptor: (interceptor: IRowVisibleInterceptor) => IDisposable;
-    registerColVisibleInterceptor: (interceptor: IColVisibleInterceptor) => IDisposable;
-
-    getCell: (row: number, col: number) => Nullable<ICellDataForSheetInterceptor>;
+    getCell: (
+        row: number,
+        col: number,
+        effect: InterceptorEffectEnum,
+        key?: string,
+        filter?: (interceptor: IInterceptor<any, any>) => boolean
+    ) => Nullable<ICellDataForSheetInterceptor>;
 }
 
 /**
@@ -48,6 +44,12 @@ export interface ISheetViewModel {
 export interface IRowFilteredInterceptor {
     getRowFiltered(row: number): boolean;
 }
+
+export interface IRowFilteredInterceptor {}
+
+export interface IRowVisibleInterceptor {}
+
+export interface IColVisibleInterceptor {}
 
 /**
  * @internal
@@ -69,9 +71,27 @@ export class SheetViewModel extends Disposable {
         this._rowFilteredInterceptor = null;
     }
 
-    getCell(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
+    getCell(row: number, col: number): Nullable<ICellDataForSheetInterceptor>;
+    getCell(row: number, col: number, key: string, filter: (interceptor: IInterceptor<any, any>) => boolean): Nullable<ICellDataForSheetInterceptor>;
+    getCell(row: number, col: number, key?: string, filter?: (interceptor: IInterceptor<any, any>) => boolean): Nullable<ICellDataForSheetInterceptor> {
         if (this._cellContentInterceptor) {
-            return this._cellContentInterceptor.getCell(row, col);
+            return this._cellContentInterceptor.getCell(row, col, InterceptorEffectEnum.Value | InterceptorEffectEnum.Style, key, filter);
+        }
+
+        return this.getRawCell(row, col);
+    }
+
+    getCellValueOnly(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
+        if (this._cellContentInterceptor) {
+            return this._cellContentInterceptor.getCell(row, col, InterceptorEffectEnum.Value);
+        }
+
+        return this.getRawCell(row, col);
+    }
+
+    getCellStyleOnly(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
+        if (this._cellContentInterceptor) {
+            return this._cellContentInterceptor.getCell(row, col, InterceptorEffectEnum.Style);
         }
 
         return this.getRawCell(row, col);

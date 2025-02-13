@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,4 +14,11 @@
  * limitations under the License.
  */
 
-export const functionArray = [];
+import { ArrayConstrain } from './array-constrain';
+import { Flatten } from './flatten';
+import { FUNCTION_NAMES_ARRAY } from './function-names';
+
+export const functionArray = [
+    [ArrayConstrain, FUNCTION_NAMES_ARRAY.ARRAY_CONSTRAIN],
+    [Flatten, FUNCTION_NAMES_ARRAY.FLATTEN],
+];

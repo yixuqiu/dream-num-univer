@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,24 @@
  * limitations under the License.
  */
 
-export { UniverSheetsFormulaPlugin } from './formula-ui-plugin';
-export { enUS, zhCN } from './locale';
-export { IDescriptionService } from './services/description.service';
-export { DescriptionService } from './services/description.service';
-export {
-    FormulaCustomFunctionService,
-    IFormulaCustomFunctionService,
-} from './services/formula-custom-function.service';
+export { type IInsertFunction, type IInsertFunctionCommandParams, InsertFunctionCommand } from './commands/commands/insert-function.command';
+export { OtherFormulaMarkDirty } from './commands/mutations/formula.mutation';
+export { UpdateDefinedNameController } from './controllers/update-defined-name.controller';
+export { TriggerCalculationController } from './controllers/trigger-calculation.controller';
+export { CalculationMode, type IUniverSheetsFormulaBaseConfig, PLUGIN_CONFIG_KEY_BASE } from './controllers/config.schema';
+export type { IRegisterAsyncFunction, IRegisterFunction, ISingleFunctionRegisterParams } from './services/register-function.service';
+
+// #region - all commands
+
+export { UpdateFormulaController } from './controllers/update-formula.controller';
+export { DescriptionService, IDescriptionService, type ISearchItem } from './services/description.service';
+export type { IFormulaInfo, IOtherFormulaResult } from './services/formula-common';
+export { FormulaRefRangeService } from './services/formula-ref-range.service';
 export type { IRegisterFunctionParams, IUnregisterFunctionParams } from './services/register-function.service';
 export { RegisterFunctionService } from './services/register-function.service';
 export { IRegisterFunctionService } from './services/register-function.service';
-export { FormulaRefRangeService } from './services/formula-ref-range.service';
-export { SPECIAL_PASTE_FORMULA } from './commands/commands/formula-clipboard.command';
 export { RegisterOtherFormulaService } from './services/register-other-formula.service';
-export type { IFormulaInfo, IOtherFormulaResult } from './services/formula-common';
+export { IRemoteRegisterFunctionService, RemoteRegisterFunctionService } from './services/remote/remote-register-function.service';
+export { UniverRemoteSheetsFormulaPlugin, UniverSheetsFormulaPlugin } from './sheets-formula.plugin';
+
+// #endregion

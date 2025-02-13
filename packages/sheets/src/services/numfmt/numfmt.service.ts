@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 import type { IRange } from '@univerjs/core';
+import type { INumfmtService } from './type';
+
 import {
     Disposable,
     ILogService,
@@ -22,8 +24,6 @@ import {
     IUniverInstanceService,
     Range,
 } from '@univerjs/core';
-
-import type { INumfmtService } from './type';
 
 export class NumfmtService extends Disposable implements INumfmtService {
     constructor(
@@ -106,7 +106,7 @@ export class NumfmtService extends Disposable implements INumfmtService {
                         const styleId = styles.setValue(style);
                         styleId && matrix.setValue(row, col, { s: styleId });
                     } else {
-                        const oldStyle = (cell.s && styles.get(cell.s)) || {};
+                        const oldStyle = styles.getStyleByCell(cell) || {};
                         const newStyle = { ...oldStyle, n: { pattern: value.pattern } };
                         const styleId = styles.setValue(newStyle);
                         cell.s = styleId;

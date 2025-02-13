@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,26 @@
  */
 
 import type { HTTPHeaders } from './headers';
+import type { HTTPRequest } from './request';
+
+export type HTTPEvent<T> = HTTPResponse<T> | HTTPProgress;
+export enum HTTPEventType {
+    DownloadProgress,
+    Response,
+}
+
+interface IHTTPEvent {
+    type: HTTPEventType;
+}
+
+export type HTTPResponseBody = string | ArrayBuffer | Blob | object | null;
 
 /**
- * There are multiple events could be resolved from the HTTP server.
+ * Wraps success response info.
  */
-export type HTTPEvent<T> = HTTPResponse<T> | HTTPResponseError;
+export class HTTPResponse<T> implements IHTTPEvent {
+    readonly type = HTTPEventType.Response;
 
-/** Wraps (success) response info. */
-export class HTTPResponse<T> {
     readonly body: T;
     readonly headers: HTTPHeaders;
     readonly status: number;
@@ -46,27 +58,31 @@ export class HTTPResponse<T> {
     }
 }
 
-export class HTTPResponseError {
-    readonly headers: HTTPHeaders;
-    readonly status: number;
-    readonly statusText: string;
-    readonly error: any;
+/**
+ * Progress event for HTTP request. Usually used for reporting download/upload progress or SSE streaming.
+ */
+export class HTTPProgress implements IHTTPEvent {
+    readonly type = HTTPEventType.DownloadProgress;
 
-    constructor({
-        headers,
-        status,
-        statusText,
-        error,
-    }: {
-        headers: HTTPHeaders;
-        status: number;
-        statusText: string;
-        error: any;
-    }) {
-        this.headers = headers;
-        this.status = status;
-        this.statusText = statusText;
-        this.error = error;
+    constructor(
+        /**
+         * Total number of bytes to download. Depending on the request or
+         * response, this may not be computable and thus may not be present.
+         */
+        public readonly total: number | undefined,
+
+        /**
+         * Number of bytes downloaded.
+         */
+        public readonly loaded: number,
+        /**
+         * The partial response body as downloaded so far.
+         *
+         * Only present if the responseType was `text`.
+         */
+        public readonly partialText?: string | undefined
+    ) {
+        // empty
     }
 }
 
@@ -75,5 +91,39 @@ export class ResponseHeader {
         readonly headers: HTTPHeaders,
         readonly status: number,
         readonly statusText: string
-    ) {}
+    ) {
+        // empty
+    }
 }
+
+// #region error
+
+export class HTTPResponseError {
+    readonly request: HTTPRequest;
+    readonly headers?: HTTPHeaders;
+    readonly status?: number;
+    readonly statusText?: string;
+    readonly error: any;
+
+    constructor({
+        request,
+        headers,
+        status,
+        statusText,
+        error,
+    }: {
+        request: HTTPRequest;
+        headers?: HTTPHeaders;
+        status?: number;
+        statusText?: string;
+        error: any;
+    }) {
+        this.request = request;
+        this.headers = headers;
+        this.status = status;
+        this.statusText = statusText;
+        this.error = error;
+    }
+}
+
+// #endregion

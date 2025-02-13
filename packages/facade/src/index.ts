@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-export type { FontLine, FontStyle, FontWeight } from './apis/sheets/f-range';
-export { FUniver } from './apis/facade';
-export { FRange } from './apis/sheets/f-range';
-export { FSelection } from './apis/sheets/f-selection';
-export { FWorkbook } from './apis/sheets/f-workbook';
-export { FWorksheet } from './apis/sheets/f-worksheet';
+import './apis/everything';
+import './apis/facade';
+
+export * from './apis/everything';
+
+console.error(`[!DEPRECATION WARNING!] @univerjs/facade and @univerjs-pro/facade is deprecated and will be removed in v0.6.0.
+Please refer to our official guide to migrate. https://univer.ai/guides/sheet/getting-started/facade`);

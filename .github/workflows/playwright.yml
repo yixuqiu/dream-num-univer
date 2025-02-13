@@ -1,26 +1,20 @@
 name: 🎭 Playwright Tests
 
 on:
-    push:
-        branches: [main, dev]
     pull_request:
-        branches: [main, dev]
+        branches:
+            - dev
 
 jobs:
-    test:
-        timeout-minutes: 60
+    e2e-test:
         runs-on: ubuntu-latest
 
         env:
-            TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-            TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+            GH_TOKEN: ${{ github.token }}
 
         steps:
             - name: Checkout
               uses: actions/checkout@v4
-              with:
-                  repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-                  ref: ${{ github.head_ref }}
 
             - name: Setup Node.js
               uses: ./.github/actions/setup-node
@@ -28,16 +22,40 @@ jobs:
             - name: Install Playwright Browsers
               run: pnpm exec playwright install --with-deps chromium
 
-            # build the example locally and run from the built files
             - name: Build E2E Client
               run: pnpm build:e2e
 
             - name: Run Playwright Tests
               run: pnpm exec playwright test
 
-            - uses: actions/upload-artifact@v3
+            - name: 🚀 Deploy to Vercel
+              uses: amondnet/vercel-action@v25
+              if: failure()
+              id: vercel-e2e-report # we only need to upload to Vercel if this CI fails
+              with:
+                  vercel-token: ${{ secrets.VERCEL_TOKEN }}
+                  vercel-org-id: ${{ secrets.ORG_ID }}
+                  vercel-project-id: ${{ secrets.PROJECT_ID_E2E }}
+
+            - name: Write Playwright Report to PR Comment
+              uses: daun/playwright-report-summary@v3
               if: always()
+              with:
+                  report-file: playwright-report.json
+                  custom-info: 'For more information, [see full report](${{ steps.vercel-e2e-report.outputs.preview-url }})'
+
+            - name: Upload Artifact
+              uses: actions/upload-artifact@v4
+              if: ${{ !cancelled() }}
               with:
                   name: playwright-report
                   path: playwright-report/
                   retention-days: 30
+
+            - name: Upload HeapSnapshots
+              uses: actions/upload-artifact@v4
+              if: ${{ failure() }}
+              with:
+                  name: snapshots
+                  path: test-results/*.heapsnapshot
+                  retention-days: 3

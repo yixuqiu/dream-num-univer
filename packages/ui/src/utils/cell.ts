@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ export const DEFAULT_BACKGROUND_COLOR_RGB = 'rgb(0,0,0)';
  * @param $dom
  * @returns
  */
+// eslint-disable-next-line max-lines-per-function
 export function handleDomToJson($dom: HTMLElement): IDocumentData | string {
     let nodeList = $dom.childNodes; // skip container itself
 
@@ -155,9 +156,8 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
         l: '',
     };
 
-    cssTextArray.forEach((s) => {
-        const originStr = s;
-        s = s.toLowerCase();
+    cssTextArray.forEach((originStr) => {
+        const s = originStr.toLowerCase();
         const key = textTrim(s.substr(0, s.indexOf(':')));
         const value = textTrim(s.substr(s.indexOf(':') + 1));
 
@@ -179,8 +179,9 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
         }
         // font family
         else if (key === 'font-family') {
-            const value = textTrim(originStr.substr(originStr.indexOf(':') + 1));
-            styleList.ff = value;
+            const trimValue = textTrim(originStr);
+            const fontFamily = extractFontFamily(trimValue);
+            styleList.ff = fontFamily;
         }
         // font size
         else if (key === 'font-size') {
@@ -203,8 +204,9 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
         }
         // font color
         else if (key === 'color') {
+            const colorKit = new ColorKit(value);
             styleList.cl = {
-                rgb: value,
+                rgb: colorKit.isValid ? colorKit.toRgbString() : 'rgb(0,0,0)',
             };
         }
         // fill color / background
@@ -379,18 +381,20 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
             }
         }
 
-        // wrap text
-        if (key === 'overflow-wrap' || key === 'word-wrap') {
-            if (value === 'break-word') {
-                styleList.tb = 3;
-            }
-        } else if (key === 'text-overflow') {
-            if (value === 'clip') {
-                styleList.tb = 2;
-            }
-        } else if (key === 'text-break') {
-            if (value === 'overflow') {
-                styleList.tb = 1;
+        // wrap text (`white-space` property has a higher priority.)
+        if (styleList.tb !== 1) {
+            if (key === 'overflow-wrap' || key === 'word-wrap') {
+                if (value === 'break-word') {
+                    styleList.tb = 3;
+                }
+            } else if (key === 'text-overflow') {
+                if (value === 'clip') {
+                    styleList.tb = 2;
+                }
+            } else if (key === 'text-break') {
+                if (value === 'overflow') {
+                    styleList.tb = 1;
+                }
             }
         }
 
@@ -403,7 +407,6 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
                 styleList.tb = 2;
             }
         }
-
 
         if (key === 'border-color') {
             const colors = handleBorder(value, ')');
@@ -499,7 +502,7 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
             arr.splice(0, 2);
             const color = arr.join('');
             const lineType = getBorderStyleType(type);
-            if (lineType !== BorderStyleTypes.NONE) {
+            if (lineType !== BorderStyleTypes.NONE && color) {
                 const obj = {
                     cl: {
                         rgb: color,
@@ -523,7 +526,7 @@ export function handleStringToStyle($dom?: HTMLElement, cssStyle: string = '') {
                     };
                 }
             }
-        } else if (key === 'data-rotate') {
+        } else if (key === '--data-rotate') {
             const regex = /[+-]?\d+/;
             const match = value.match(regex);
 
@@ -937,4 +940,10 @@ function getPtFontSizeByPx(size: number) {
     if (ptSize < MIN_FONT_SIZE) return MIN_FONT_SIZE;
     if (ptSize > MAX_FONT_SIZE) return MAX_FONT_SIZE;
     return ptSize;
+}
+
+function extractFontFamily(styleStr: string) {
+    const regex = /font-family:\s*(?:"([^"]+)"|'([^']+)'|([^;]+))/i;
+    const matches = styleStr.match(regex);
+    return matches ? (matches[1] || matches[2] || matches[3]).trim() : null;
 }

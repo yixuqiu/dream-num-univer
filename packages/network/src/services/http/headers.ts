@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,21 +27,13 @@ export const ApplicationJSONType = 'application/json';
 export class HTTPHeaders {
     private readonly _headers: Map<string, string[]> = new Map();
 
-    constructor(headers?: IHeadersConstructorProps | string) {
+    constructor(headers?: IHeadersConstructorProps | Headers | string) {
         if (typeof headers === 'string') {
-            // split header text and serialize them to HTTPHeaders
-            headers.split('\n').forEach((header) => {
-                const [name, value] = header.split(':');
-                if (name && value) {
-                    this._setHeader(name, value);
-                }
-            });
-        } else {
-            if (headers) {
-                Object.keys(headers).forEach(([name, value]) => {
-                    this._setHeader(name, value);
-                });
-            }
+            this._handleHeadersString(headers);
+        } else if (headers instanceof Headers) {
+            this._handleHeaders(headers);
+        } else if (headers) {
+            this._handleHeadersConstructorProps(headers);
         }
     }
 
@@ -58,6 +50,22 @@ export class HTTPHeaders {
         return this._headers.has(k) ? this._headers.get(k)! : null;
     }
 
+    set(key: string, value: string | number | boolean): void {
+        this._setHeader(key, value);
+    }
+
+    toHeadersInit(): HeadersInit {
+        const headers: HeadersInit = {};
+        this._headers.forEach((values, key) => {
+            headers[key] = values.join(',');
+        });
+
+        headers.accept ??= 'application/json, text/plain, */*';
+        headers['content-type'] ??= 'application/json;charset=UTF-8';
+
+        return headers;
+    }
+
     private _setHeader(name: string, value: string | number | boolean): void {
         const lowerCase = name.toLowerCase();
         if (this._headers.has(lowerCase)) {
@@ -65,5 +73,22 @@ export class HTTPHeaders {
         } else {
             this._headers.set(lowerCase, [value.toString()]);
         }
+    }
+
+    private _handleHeadersString(headers: string): void {
+        headers.split('\n').forEach((header) => {
+            const [name, value] = header.split(':');
+            if (name && value) {
+                this._setHeader(name, value);
+            }
+        });
+    }
+
+    private _handleHeadersConstructorProps(headers: IHeadersConstructorProps): void {
+        Object.entries(headers).forEach(([name, value]) => this._setHeader(name, value));
+    }
+
+    private _handleHeaders(headers: Headers): void {
+        headers.forEach((value, name) => this._setHeader(name, value));
     }
 }

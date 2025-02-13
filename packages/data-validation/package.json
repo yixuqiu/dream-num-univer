@@ -1,6 +1,6 @@
 {
     "name": "@univerjs/data-validation",
-    "version": "0.1.9",
+    "version": "0.6.0-alpha.0",
     "private": false,
     "description": "Data validation library for Univer",
     "author": "DreamNum <developer@univer.ai>",
@@ -20,19 +20,15 @@
     "keywords": [
         "univer"
     ],
-    "sideEffects": [
-        "**/*.css"
-    ],
     "exports": {
         ".": "./src/index.ts",
         "./*": "./src/*"
     },
-    "main": "./lib/cjs/index.js",
-    "module": "./lib/esm/index.js",
+    "main": "./src/index.ts",
     "types": "./lib/types/index.d.ts",
     "publishConfig": {
         "access": "public",
-        "main": "./lib/cjs/index.js",
+        "main": "./lib/es/index.js",
         "module": "./lib/es/index.js",
         "exports": {
             ".": {
@@ -59,22 +55,22 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "coverage": "vitest run --coverage",
-        "build": "tsc && vite build"
+        "build": "univer-cli build"
     },
     "peerDependencies": {
-        "@univerjs/core": "workspace:*",
-        "@univerjs/sheets": "workspace:*",
-        "@wendellhu/redi": "^0.13.3",
         "rxjs": ">=7.0.0"
     },
+    "dependencies": {
+        "@univerjs/core": "workspace:*"
+    },
     "devDependencies": {
+        "@univerjs-infra/shared": "workspace:*",
         "@univerjs/core": "workspace:*",
-        "@univerjs/shared": "workspace:*",
+        "@univerjs/protocol": "0.1.43",
         "@univerjs/sheets": "workspace:*",
-        "@wendellhu/redi": "^0.13.3",
         "rxjs": "^7.8.1",
-        "typescript": "^5.4.5",
-        "vite": "^5.2.10",
-        "vitest": "^1.5.0"
+        "typescript": "^5.7.3",
+        "vite": "^6.1.0",
+        "vitest": "^3.0.5"
     }
 }

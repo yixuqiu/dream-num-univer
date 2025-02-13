@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from 'vitest';
 import type { IDocumentBody } from '../../../../types/interfaces/i-document-data';
+import type { IRetainAction } from '../action-types';
+import { describe, expect, it } from 'vitest';
 import { BooleanNumber } from '../../../../types/enum/text-style';
+import { PresetListType } from '../../preset-list-type';
+import { TextXActionType } from '../action-types';
 import { composeBody, getBodySlice, isUselessRetainAction } from '../utils';
-import type { IRetainAction } from '../../action-types';
-import { TextXActionType } from '../../action-types';
 
 describe('test text-x utils', () => {
     it('test getBodySlice fn', () => {
@@ -47,7 +48,7 @@ describe('test text-x utils', () => {
             }],
         };
 
-        const sliceBody = getBodySlice(body, 3, 8);
+        const sliceBody = getBodySlice(body, 3, 8, false);
         expect(sliceBody).toEqual({
             dataStream: 'lo\nwo',
             textRuns: [
@@ -70,7 +71,7 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 2,
             }],
-        });
+        } as IDocumentBody);
     });
 
     it('test getBodySlice fn with a larger range', () => {
@@ -105,7 +106,7 @@ describe('test text-x utils', () => {
             }],
         };
 
-        const sliceBody = getBodySlice(body, 2, 8);
+        const sliceBody = getBodySlice(body, 2, 8, false);
         expect(sliceBody).toEqual({
             dataStream: 'llo\nwo',
             textRuns: [
@@ -233,7 +234,7 @@ describe('test text-x utils', () => {
         }).toThrowError();
     });
 
-    it('test composeBody fn both width paragraphs', () => {
+    it('test composeBody both with paragraphs', () => {
         const thisBody: IDocumentBody = {
             dataStream: 'hello\nworld',
             paragraphs: [{
@@ -246,9 +247,9 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             }],
         };
@@ -260,9 +261,65 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
+                },
+            }],
+        });
+    });
+
+    it('test composeBody both with paragraphs and one has bullet list', () => {
+        const thisBody: IDocumentBody = {
+            dataStream: '',
+            paragraphs: [{
+                startIndex: 0,
+                paragraphStyle: {
+                    lineSpacing: 2,
+                },
+                bullet: {
+                    listType: PresetListType.BULLET_LIST,
+                    listId: 'testBullet',
+                    nestingLevel: 0,
+                    textStyle: {
+                        fs: 15,
+                    },
+                },
+            }],
+        };
+
+        const otherBody: IDocumentBody = {
+            dataStream: '',
+            paragraphs: [{
+                startIndex: 0,
+                paragraphStyle: {
+                    lineSpacing: 1,
+                    spaceBelow: {
+                        v: 20,
+                    },
+                },
+            }],
+        };
+
+        const composedBody = composeBody(thisBody, otherBody);
+
+        expect(composedBody).toEqual({
+            dataStream: '',
+            paragraphs: [{
+                startIndex: 0,
+                paragraphStyle: {
+                    lineSpacing: 1,
+                    spaceBelow: {
+                        v: 20,
+                    },
+                },
+                bullet: {
+                    listType: PresetListType.BULLET_LIST,
+                    listId: 'testBullet',
+                    nestingLevel: 0,
+                    textStyle: {
+                        fs: 15,
+                    },
                 },
             }],
         });
@@ -281,9 +338,9 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             }],
         };
@@ -297,9 +354,9 @@ describe('test text-x utils', () => {
             }, {
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             }],
         });
@@ -318,9 +375,9 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             }],
         };
@@ -332,9 +389,9 @@ describe('test text-x utils', () => {
             paragraphs: [{
                 startIndex: 5,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             }, {
                 startIndex: 8,
@@ -373,7 +430,7 @@ describe('test text-x utils', () => {
         };
 
         expect(isUselessRetainAction(action1)).toBe(true);
-        expect(isUselessRetainAction(action2)).toBe(true);
+        expect(isUselessRetainAction(action2)).toBe(false);
         expect(isUselessRetainAction(action3)).toBe(false);
     });
 });

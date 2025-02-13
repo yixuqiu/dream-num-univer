@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { stripArrayValue } from '../../../functions/__tests__/create-function-test-bed';
 import { ArrayValueObject, transformToValueObject } from '../array-value-object';
 import { NumberValueObject } from '../primitive-object';
 
@@ -171,8 +172,8 @@ describe('arrayValueObject ceil method test', () => {
             const ceilValueObject = NumberValueObject.create(1);
 
             expect((originArrayValueObject.ceil(ceilValueObject) as ArrayValueObject).toValue()).toStrictEqual([
-                [1, '#VALUE!', 1.3, 1, 0],
-                [0, 100, 2.4, '#VALUE!', -3],
+                [1, '#VALUE!', 1.3, 1, -0],
+                [-0, 100, 2.4, '#VALUE!', -3],
             ]);
         });
 
@@ -191,7 +192,7 @@ describe('arrayValueObject ceil method test', () => {
                 column: 0,
             });
 
-            expect((originValueObject.ceil(ceilArrayValueObject) as ArrayValueObject).toValue()).toStrictEqual([
+            expect(stripArrayValue((originValueObject.ceil(ceilArrayValueObject) as ArrayValueObject).toValue())).toStrictEqual([
                 [1, '#VALUE!', 1, 1, 1],
                 [1, 1, 1, '#VALUE!', 1000],
             ]);

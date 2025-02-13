@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-import type { IMessageMethodOptions, IMessageProps } from '@univerjs/design';
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IMessageProps } from '@univerjs/design';
+import { createIdentifier } from '@univerjs/core';
 
-export const IMessageService = createIdentifier<IMessageService>('univer.message-service');
+export const IMessageService = createIdentifier<IMessageService>('ui.message.service');
 
 export interface IMessageService {
-    show(options: IMessageMethodOptions & Omit<IMessageProps, 'key'>): IDisposable;
-
-    setContainer(container: HTMLElement): void;
+    show(options: IMessageProps): void;
 }

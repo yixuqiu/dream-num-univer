@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,50 @@
  * limitations under the License.
  */
 
-import { toDisposable } from '@univerjs/core';
-import { type IDisposable, Inject } from '@wendellhu/redi';
-import type { ForwardRefExoticComponent } from 'react';
-import { Subject } from 'rxjs';
-
-import { ComponentManager } from '../../common/component-manager';
+import type { ComponentType } from '../../common/component-manager';
 import type { IZenZoneService } from './zen-zone.service';
+import { toDisposable } from '@univerjs/core';
 
-export class DesktopZenZoneService implements IZenZoneService {
-    readonly visible$ = new Subject<boolean>();
-    readonly componentKey$ = new Subject<string>();
+import { type IDisposable, Inject } from '@univerjs/core';
+import { BehaviorSubject, ReplaySubject } from 'rxjs';
+import { ComponentManager } from '../../common/component-manager';
 
-    constructor(@Inject(ComponentManager) private readonly _componentManager: ComponentManager) {}
+export class DesktopZenZoneService implements IZenZoneService, IDisposable {
+    readonly visible$ = new BehaviorSubject<boolean>(false);
+    readonly componentKey$ = new ReplaySubject<string>();
 
-    set(key: string, component: ForwardRefExoticComponent<any>): IDisposable {
+    private readonly _temporaryHidden$ = new BehaviorSubject<boolean>(false);
+    readonly temporaryHidden$ = this._temporaryHidden$.asObservable();
+
+    private _visible = false;
+    get visible() {
+        return this._visible;
+    }
+
+    get temporaryHidden() {
+        return this._temporaryHidden$.getValue();
+    }
+
+    constructor(@Inject(ComponentManager) private readonly _componentManager: ComponentManager) {
+        // super
+    }
+
+    dispose(): void {
+        this.visible$.next(false);
+        this.visible$.complete();
+
+        this.componentKey$.complete();
+    }
+
+    hide(): void {
+        this._temporaryHidden$.next(true);
+    }
+
+    show(): void {
+        this._temporaryHidden$.next(false);
+    }
+
+    set(key: string, component: ComponentType): IDisposable {
         this._componentManager.register(key, component);
         this.componentKey$.next(key);
 
@@ -40,10 +69,12 @@ export class DesktopZenZoneService implements IZenZoneService {
     }
 
     open(): void {
+        this._visible = true;
         this.visible$.next(true);
     }
 
     close() {
+        this._visible = false;
         this.visible$.next(false);
     }
 }

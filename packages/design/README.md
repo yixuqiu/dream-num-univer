@@ -1,9 +1,10 @@
 # @univerjs/design
 
-[![npm version](https://img.shields.io/npm/v/@univerjs/design)](https://npmjs.org/package/@univerjs/design)
-[![license](https://img.shields.io/npm/l/@univerjs/design)](https://img.shields.io/npm/l/@univerjs/design)
-![CSS Included](https://img.shields.io/badge/CSS_Included-blue?logo=CSS3)
-![i18n](https://img.shields.io/badge/zh--CN%20%7C%20en--US-cornflowerblue?label=i18n)
+## Package Overview
+
+| Package Name | UMD Namespace | Version | License | Downloads | Contains CSS | Contains i18n locales |
+| --- | --- | --- | --- | --- | :---: | :---: |
+| `@univerjs/design` | `UniverDesign` | [![][npm-version-shield]][npm-version-link] | ![][npm-license-shield] | ![][npm-downloads-shield] | ⭕️ | ⭕️ |
 
 ## Introduction
 
@@ -14,7 +15,7 @@ The components are developed using React and less, and you can find out more inf
 ![](./assets/design.jpeg)
 
 :::note
-If you only need to extend the toolbar, context menu, and so on, you can directly use the extension interfaces provided by `@univerjs/ui` without implementing the UI yourself. For more information, please refer to [Extending UI](https://univer.ai/guides/customization/ui).
+If you only need to extend the toolbar, context menu, and so on, you can directly use the extension interfaces provided by `@univerjs/ui` without implementing the UI yourself. For more information, please refer to [Extending UI](https://univer.ai/guides/sheet/customization/ui).
 :::
 
 ## Usage
@@ -45,3 +46,9 @@ new Univer({
     // theme: greenTheme,
 });
 ```
+
+<!-- Links -->
+[npm-version-shield]: https://img.shields.io/npm/v/@univerjs/design?style=flat-square
+[npm-version-link]: https://npmjs.com/package/@univerjs/design
+[npm-license-shield]: https://img.shields.io/npm/l/@univerjs/design?style=flat-square
+[npm-downloads-shield]: https://img.shields.io/npm/dm/@univerjs/design?style=flat-square

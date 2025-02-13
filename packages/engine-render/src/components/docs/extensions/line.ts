@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
  */
 
 import type { IScale, ITextDecoration } from '@univerjs/core';
-import { BaselineOffset, BooleanNumber, getColorStyle, TextDecoration } from '@univerjs/core';
-
-import { COLOR_BLACK_RGB, DEFAULT_OFFSET_SPACING, FIX_ONE_PIXEL_BLUR_OFFSET } from '../../../basics/const';
-import { calculateRectRotate } from '../../../basics/draw';
 import type { IDocumentSkeletonGlyph } from '../../../basics/i-document-skeleton-cached';
+
+import type { UniverRenderingContext } from '../../../context';
+import { BaselineOffset, BooleanNumber, getColorStyle, TextDecoration } from '@univerjs/core';
+import { COLOR_BLACK_RGB, DEFAULT_OFFSET_SPACING } from '../../../basics/const';
+import { calculateRectRotate } from '../../../basics/draw';
 import { degToRad, getScale } from '../../../basics/tools';
 import { Vector2 } from '../../../basics/vector2';
-import type { UniverRenderingContext } from '../../../context';
 import { DocumentsSpanAndLineExtensionRegistry } from '../../extension';
 import { docExtension } from '../doc-extension';
 
@@ -37,30 +37,28 @@ export class Line extends docExtension {
 
     private _preBackgroundColor = '';
 
-    override draw(ctx: UniverRenderingContext, parentScale: IScale, span: IDocumentSkeletonGlyph) {
-        const line = span.parent?.parent;
-        if (!line) {
+    override draw(ctx: UniverRenderingContext, parentScale: IScale, glyph: IDocumentSkeletonGlyph) {
+        const line = glyph.parent?.parent;
+        const { ts: textStyle, bBox, content } = glyph;
+
+        if (line == null || textStyle == null || content === '\r') {
             return;
         }
 
-        const { contentHeight = 0, asc } = line;
-        const { ts: textStyle, bBox } = span;
-        if (!textStyle) {
-            return;
-        }
-
+        const { asc, dsc } = line;
         const { sp: strikeoutPosition, spo, sbo, bd } = bBox;
-
         const scale = getScale(parentScale);
-
         const DELTA = 0.5;
-
-        const { ul: underline, st: strikethrough, ol: overline, va: baselineOffset } = textStyle;
+        const { ul: underline, st: strikethrough, ol: overline, va: baselineOffset, bbl: bottomBorderLine } = textStyle;
 
         if (underline) {
-            const startY = contentHeight + DEFAULT_OFFSET_SPACING - 3;
+            const startY = asc + dsc;
+            this._drawLine(ctx, glyph, underline, startY, scale);
+        }
 
-            this._drawLine(ctx, span, underline, startY, scale);
+        if (bottomBorderLine) {
+            const startY = asc + dsc + 3;
+            this._drawLine(ctx, glyph, bottomBorderLine, startY, scale, 2);
         }
 
         if (strikethrough) {
@@ -80,13 +78,13 @@ export class Line extends docExtension {
                 startY += sbo;
             }
 
-            this._drawLine(ctx, span, strikethrough, startY, scale);
+            this._drawLine(ctx, glyph, strikethrough, startY, scale);
         }
 
         if (overline) {
             const startY = -DEFAULT_OFFSET_SPACING - DELTA;
 
-            this._drawLine(ctx, span, overline, startY, scale);
+            this._drawLine(ctx, glyph, overline, startY, scale);
         }
     }
 
@@ -96,59 +94,66 @@ export class Line extends docExtension {
 
     private _drawLine(
         ctx: UniverRenderingContext,
-        span: IDocumentSkeletonGlyph,
+        glyph: IDocumentSkeletonGlyph,
         line: ITextDecoration,
         startY: number,
-        _scale: number
+        _scale: number,
+        lineWidth = 1
     ) {
-        const { s: show, cl: colorStyle, t: lineType, c = BooleanNumber.TRUE } = line;
+        let { s: show, cl: colorStyle, t: lineType, c = BooleanNumber.TRUE } = line;
 
-        if (show === BooleanNumber.TRUE) {
-            const {
-                originTranslate = Vector2.create(0, 0),
-                alignOffset = Vector2.create(0, 0),
-                renderConfig = {},
-            } = this.extensionOffset;
-
-            const { left, width } = span;
-
-            const { centerAngle: centerAngleDeg = 0, vertexAngle: vertexAngleDeg = 0 } = renderConfig;
-
-            const centerAngle = degToRad(centerAngleDeg);
-            const vertexAngle = degToRad(vertexAngleDeg);
-
-            ctx.save();
-
-            ctx.translateWithPrecisionRatio(FIX_ONE_PIXEL_BLUR_OFFSET, FIX_ONE_PIXEL_BLUR_OFFSET);
-
-            ctx.beginPath();
-            const color =
-                (c === BooleanNumber.TRUE ? getColorStyle(span.ts?.cl) : getColorStyle(colorStyle)) || COLOR_BLACK_RGB;
-            ctx.strokeStyle = color;
-
-            this._setLineType(ctx, lineType || TextDecoration.SINGLE);
-
-            const start = calculateRectRotate(
-                originTranslate.addByPoint(left, startY),
-                Vector2.create(0, 0),
-                centerAngle,
-                vertexAngle,
-                alignOffset
-            );
-            const end = calculateRectRotate(
-                originTranslate.addByPoint(left + width, startY),
-                Vector2.create(0, 0),
-                centerAngle,
-                vertexAngle,
-                alignOffset
-            );
-
-            ctx.moveToByPrecision(start.x, start.y);
-            ctx.lineToByPrecision(end.x, end.y);
-            ctx.stroke();
-
-            ctx.restore();
+        if (show !== BooleanNumber.TRUE) {
+            return;
         }
+
+        if (c == null) {
+            c = BooleanNumber.TRUE;
+        }
+
+        const {
+            originTranslate = Vector2.create(0, 0),
+            alignOffset = Vector2.create(0, 0),
+            renderConfig = {},
+        } = this.extensionOffset;
+
+        const { left, width } = glyph;
+
+        const { centerAngle: centerAngleDeg = 0, vertexAngle: vertexAngleDeg = 0 } = renderConfig;
+
+        ctx.save();
+
+        // translate with precision is handled in moveToByPrecision and lineToByPrecision. NO NEED to do this again!
+        // ctx.translateWithPrecision(FIX_ONE_PIXEL_BLUR_OFFSET, FIX_ONE_PIXEL_BLUR_OFFSET);
+
+        const color =
+            (c === BooleanNumber.TRUE ? getColorStyle(glyph.ts?.cl) : getColorStyle(colorStyle)) || COLOR_BLACK_RGB;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lineWidth;
+
+        this._setLineType(ctx, lineType || TextDecoration.SINGLE);
+
+        const centerAngle = degToRad(centerAngleDeg);
+        const vertexAngle = degToRad(vertexAngleDeg);
+        const start = calculateRectRotate(
+            originTranslate.addByPoint(left, startY),
+            Vector2.create(0, 0),
+            centerAngle,
+            vertexAngle,
+            alignOffset
+        );
+        const end = calculateRectRotate(
+            originTranslate.addByPoint(left + width, startY),
+            Vector2.create(0, 0),
+            centerAngle,
+            vertexAngle,
+            alignOffset
+        );
+
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        ctx.restore();
     }
 
     private _setLineType(ctx: UniverRenderingContext, style: TextDecoration) {

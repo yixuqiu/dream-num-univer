@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { ITextDecoration, ITextRotation, Univer } from '@univerjs/core';
+import type { IColorStyle, Injector, ITextDecoration, ITextRotation, Univer, Workbook } from '@univerjs/core';
+import type { ISetStyleCommandParams } from '../set-style.command';
 import {
     BooleanNumber,
     FontItalic,
@@ -25,14 +26,16 @@ import {
     RANGE_TYPE,
     RedoCommand,
     UndoCommand,
+    UniverInstanceType,
     VerticalAlign,
     WrapStrategy,
 } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../../services/selection-manager.service';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
+import { InsertSheetMutation } from '../../mutations/insert-sheet.mutation';
 import { SetRangeValuesMutation } from '../../mutations/set-range-values.mutation';
+import { InsertSheetCommand } from '../insert-sheet.command';
 import {
     SetBackgroundColorCommand,
     SetBoldCommand,
@@ -77,20 +80,61 @@ describe("Test commands used for updating cells' styles", () => {
         commandService.registerCommand(SetTextRotationCommand);
         commandService.registerCommand(SetStyleCommand);
         commandService.registerCommand(SetRangeValuesMutation);
+        commandService.registerCommand(InsertSheetCommand);
+        commandService.registerCommand(InsertSheetMutation);
     });
 
     afterEach(() => univer.dispose());
 
+    it('set array of style', async () => {
+        const range = { startRow: 1, startColumn: 1, endColumn: 3, endRow: 3, rangeType: RANGE_TYPE.NORMAL };
+
+        function getFontColor(row: number, col: number) {
+            return get(IUniverInstanceService)
+                .getUniverSheetInstance('test')!
+                .getSheetBySheetId('sheet1')!
+                .getRange(row, col)
+                .getFontColor();
+        }
+
+        const defaultColor = '#000';
+        const color1 = '#aaa';
+        const color2 = '#bbb';
+        const color3 = '#ccc';
+        const commandParams: ISetStyleCommandParams<IColorStyle[][]> = {
+            range,
+            /** Set style by array */
+            style: {
+                type: 'cl',
+                value: [
+                    [{ rgb: color1 }, { rgb: color1 }, { rgb: color1 }],
+                    [{ rgb: color2 }, { rgb: color2 }, { rgb: color2 }],
+                    [{ rgb: color3 }, { rgb: color3 }, { rgb: color3 }],
+                ],
+            },
+        };
+        expect(await commandService.executeCommand(SetStyleCommand.id, commandParams)).toBeTruthy();
+        expect(getFontColor(0, 0)).toBe(defaultColor);
+        expect(getFontColor(1, 1)).toBe(color1);
+        expect(getFontColor(2, 1)).toBe(color2);
+        expect(getFontColor(3, 1)).toBe(color3);
+        // undo
+        expect(await commandService.executeCommand(UndoCommand.id)).toBeTruthy();
+        expect(getFontColor(1, 1)).toBe(defaultColor);
+        expect(getFontColor(2, 1)).toBe(defaultColor);
+        expect(getFontColor(3, 1)).toBe(defaultColor);
+        // redo
+        expect(await commandService.executeCommand(RedoCommand.id)).toBeTruthy();
+        expect(getFontColor(1, 1)).toBe(color1);
+        expect(getFontColor(2, 1)).toBe(color2);
+        expect(getFontColor(3, 1)).toBe(color3);
+    });
+
     describe('bold', () => {
         describe('correct situations', () => {
             it('will toggle bold style when there is a selected range', async () => {
-                const selectionManagerService = get(SelectionManagerService);
-                selectionManagerService.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManagerService.add([
+                const selectionManagerService = get(SheetsSelectionsService);
+                selectionManagerService.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: {
@@ -139,13 +183,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('italic', () => {
         describe('correct situations', () => {
             it('will toggle italic style when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 1, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: {
@@ -194,13 +233,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('underline', () => {
         describe('correct situations', () => {
             it('will toggle underline style when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: {
@@ -251,13 +285,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('strike-through', () => {
         describe('correct situations', () => {
             it('will toggle strike-through style when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: {
@@ -308,13 +337,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('font size', () => {
         describe('correct situations', () => {
             it('will change font size when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -354,13 +378,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('font family', () => {
         describe('correct situations', () => {
             it('will change font family when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -400,13 +419,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('font color', () => {
         describe('correct situations', () => {
             it('will change font color when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: {
@@ -502,13 +516,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('background color', () => {
         describe('correct situations', () => {
             it('will change background color when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -550,13 +559,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('vertical text align', () => {
         describe('correct situations', () => {
             it('will change vertical text align when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -598,13 +602,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('horizontal text align', () => {
         describe('correct situations', () => {
             it('will change horizontal text align when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -648,13 +647,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('text wrap', () => {
         describe('correct situations', () => {
             it('will change text wrap when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -675,15 +669,15 @@ describe("Test commands used for updating cells' styles", () => {
                         value: WrapStrategy.WRAP,
                     })
                 ).toBeTruthy();
-                expect(getTextWrap()).toBe(WrapStrategy.WRAP);
+                expect(getTextWrap()).toBe(BooleanNumber.TRUE);
 
                 // undo
                 expect(await commandService.executeCommand(UndoCommand.id)).toBeTruthy();
-                expect(getTextWrap()).toBe(WrapStrategy.UNSPECIFIED);
+                expect(getTextWrap()).toBe(BooleanNumber.FALSE);
 
                 // redo
                 expect(await commandService.executeCommand(RedoCommand.id)).toBeTruthy();
-                expect(getTextWrap()).toBe(WrapStrategy.WRAP);
+                expect(getTextWrap()).toBe(BooleanNumber.TRUE);
             });
         });
 
@@ -698,13 +692,8 @@ describe("Test commands used for updating cells' styles", () => {
     describe('text rotation', () => {
         describe('correct situations', () => {
             it('will change text rotation when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -769,6 +758,54 @@ describe("Test commands used for updating cells' styles", () => {
                 const result = await commandService.executeCommand(SetTextRotationCommand.id);
                 expect(result).toBeFalsy();
             });
+        });
+    });
+
+    describe('set style with specific range', () => {
+        it('should use the correct unitId and subUnitId when range is provided', async () => {
+            const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
+
+            // Insert a new sheet
+            expect(await commandService.executeCommand(InsertSheetCommand.id)).toBeTruthy();
+
+            const newSheet = workbook.getSheets()[1]; // Get the newly inserted sheet
+            const unitId = workbook.getUnitId();
+            const subUnitId = newSheet.getSheetId();
+
+            const range = { startRow: 0, startColumn: 0, endColumn: 1, endRow: 1, rangeType: RANGE_TYPE.NORMAL };
+
+            const commandParams: ISetStyleCommandParams<IColorStyle> = {
+                range,
+                unitId,
+                subUnitId,
+                style: {
+                    type: 'bg',
+                    value: { rgb: '#FF0000' },
+                },
+            };
+
+            expect(await commandService.executeCommand(SetStyleCommand.id, commandParams)).toBeTruthy();
+
+            // Verify that the background color was set correctly
+            const getBackgroundColor = (row: number, col: number) =>
+                workbook.getSheetBySheetId(subUnitId)!
+                    .getRange(row, col)
+                    .getBackground();
+
+            expect(getBackgroundColor(0, 0)).toBe('#FF0000');
+            expect(getBackgroundColor(0, 1)).toBe('#FF0000');
+            expect(getBackgroundColor(1, 0)).toBe('#FF0000');
+            expect(getBackgroundColor(1, 1)).toBe('#FF0000');
+
+            // undo
+            expect(await commandService.executeCommand(UndoCommand.id)).toBeTruthy();
+            expect(getBackgroundColor(0, 0)).toBe('#fff');
+            expect(getBackgroundColor(1, 1)).toBe('#fff');
+
+            // redo
+            expect(await commandService.executeCommand(RedoCommand.id)).toBeTruthy();
+            expect(getBackgroundColor(0, 0)).toBe('#FF0000');
+            expect(getBackgroundColor(1, 1)).toBe('#FF0000');
         });
     });
 });

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,27 @@
  * limitations under the License.
  */
 
-import type { Direction, ICommand, IRange } from '@univerjs/core';
-import { CommandType, ICommandService, IUniverInstanceService, RANGE_TYPE, Rectangle, Tools } from '@univerjs/core';
+import type { ICommand, IRange } from '@univerjs/core';
+import type {
+    ISetSelectionsOperationParams,
+} from '@univerjs/sheets';
+import { CommandType, Direction, ICommandService, IUniverInstanceService, RANGE_TYPE, Rectangle, Tools } from '@univerjs/core';
+
+import { IRenderManagerService } from '@univerjs/engine-render';
 import {
+    expandToContinuousRange,
     getCellAtRowCol,
+    getSelectionsService,
     getSheetCommandTarget,
-    NORMAL_SELECTION_PLUGIN_NAME,
-    SelectionManagerService,
+    SelectionMoveType,
     SetSelectionsOperation,
 } from '@univerjs/sheets';
 import { KeyCode } from '@univerjs/ui';
-
+import { SelectAllService } from '../../services/select-all/select-all.service';
+import { ISheetSelectionRenderService } from '../../services/selection/base-selection-render.service';
 import { ShortcutExperienceService } from '../../services/shortcut-experience.service';
 import {
     checkIfShrink,
-    expandToContinuousRange,
     expandToNextCell,
     expandToNextGapRange,
     expandToWholeSheet,
@@ -52,15 +58,24 @@ export interface IMoveSelectionCommandParams {
     direction: Direction;
     jumpOver?: JumpOver;
     nextStep?: number;
+    extra?: string;
+    fromCurrentSelection?: boolean;
+}
+
+export interface IMoveSelectionEnterAndTabCommandParams {
+    direction: Direction;
+    keycode: KeyCode;
+    extra?: string;
+    fromCurrentSelection?: boolean;
 }
 
 /**
- * Move selection
+ * Move selection (Mainly by keyboard arrow keys, For Tab and Enter key, check @MoveSelectionEnterAndTabCommand)
  */
 export const MoveSelectionCommand: ICommand<IMoveSelectionCommandParams> = {
     id: 'sheet.command.move-selection',
     type: CommandType.COMMAND,
-    handler: async (accessor, params) => {
+    handler: (accessor, params) => {
         if (!params) {
             return false;
         }
@@ -69,12 +84,12 @@ export const MoveSelectionCommand: ICommand<IMoveSelectionCommandParams> = {
         if (!target) return false;
 
         const { workbook, worksheet } = target;
-        const selection = accessor.get(SelectionManagerService).getLast();
+        const selection = getSelectionsService(accessor, params.fromCurrentSelection).getCurrentLastSelection();
         if (!selection) {
             return false;
         }
 
-        const { direction, jumpOver } = params;
+        const { direction, jumpOver, extra } = params;
         const { range, primary } = selection;
         const startRange = getStartRange(range, primary, direction);
 
@@ -88,115 +103,18 @@ export const MoveSelectionCommand: ICommand<IMoveSelectionCommandParams> = {
         if (Rectangle.equals(destRange, startRange)) {
             return false;
         }
-
+        const unitId = workbook.getUnitId();
         // If there are changes to the selection, clear the start position saved by the tab.
         // This function works in conjunction with the enter and tab shortcuts.
         accessor.get(ShortcutExperienceService).remove({
-            unitId: workbook.getUnitId(),
+            unitId,
             sheetId: worksheet.getSheetId(),
             keycode: KeyCode.TAB,
         });
 
-        return accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
-            unitId: workbook.getUnitId(),
-            subUnitId: worksheet.getSheetId(),
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            selections: [
-                {
-                    range: Rectangle.clone(destRange),
-                    primary: {
-                        startRow: destRange.startRow,
-                        startColumn: destRange.startColumn,
-                        endRow: destRange.endRow,
-                        endColumn: destRange.endColumn,
-                        actualRow: next.startRow,
-                        actualColumn: next.startColumn,
-                        isMerged: destRange.isMerged,
-                        isMergedMainCell:
-                            destRange.startRow === next.startRow && destRange.startColumn === next.startColumn,
-                    },
-                },
-            ],
-        });
-    },
-};
-
-export interface IMoveSelectionEnterAndTabCommandParams {
-    direction: Direction;
-    keycode: KeyCode;
-}
-
-/**
- * Move selection for enter and tab.
- */
-export const MoveSelectionEnterAndTabCommand: ICommand<IMoveSelectionEnterAndTabCommandParams> = {
-    id: 'sheet.command.move-selection-enter-tab',
-    type: CommandType.COMMAND,
-    handler: async (accessor, params) => {
-        if (!params) {
-            return false;
-        }
-
-        const target = getSheetCommandTarget(accessor.get(IUniverInstanceService));
-        if (!target) return false;
-
-        const { workbook, worksheet } = target;
-
-        const selection = accessor.get(SelectionManagerService).getLast();
-        if (!selection) {
-            return false;
-        }
-
-        const unitId = workbook.getUnitId();
-        const sheetId = worksheet.getSheetId();
-        if (!selection) {
-            return false;
-        }
-
-        const { direction, keycode } = params;
-        const { range, primary } = selection;
-        let startRange = getStartRange(range, primary, direction);
-        const shortcutExperienceService = accessor.get(ShortcutExperienceService);
-
-        const shortcutExperienceParam = shortcutExperienceService.getCurrentBySearch({
-            unitId,
-            sheetId,
-            keycode: KeyCode.TAB,
-        });
-
-        let resultRange;
-        const { startRow, endRow, startColumn, endColumn } = range;
-        if (!Rectangle.equals(range, primary)) {
-            // Handle the situation of moving the active cell within the selection area.
-            shortcutExperienceService.remove({
-                unitId,
-                sheetId,
-                keycode: KeyCode.TAB,
-            });
-
-            const newPrimary = Tools.deepClone(primary);
-
-            const next = findNextRange(
-                {
-                    startRow: newPrimary.startRow,
-                    startColumn: newPrimary.startColumn,
-                    endRow: newPrimary.endRow,
-                    endColumn: newPrimary.endColumn,
-                },
-                direction,
-                worksheet,
-                {
-                    startRow,
-                    endRow,
-                    startColumn,
-                    endColumn,
-                }
-            );
-
-            const destRange = getCellAtRowCol(next.startRow, next.startColumn, worksheet);
-
-            resultRange = {
-                range: Rectangle.clone(range),
+        const selections = [
+            {
+                range: Rectangle.clone(destRange),
                 primary: {
                     startRow: destRange.startRow,
                     startColumn: destRange.startColumn,
@@ -208,6 +126,120 @@ export const MoveSelectionEnterAndTabCommand: ICommand<IMoveSelectionEnterAndTab
                     isMergedMainCell:
                         destRange.startRow === next.startRow && destRange.startColumn === next.startColumn,
                 },
+            },
+        ];
+        const rs = accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
+            unitId: workbook.getUnitId(),
+            subUnitId: worksheet.getSheetId(),
+            selections,
+            type: SelectionMoveType.MOVE_END,
+            extra,
+        } as ISetSelectionsOperationParams);
+        return rs;
+    },
+};
+
+/**
+ * Move selection for enter and tab.
+ */
+export const MoveSelectionEnterAndTabCommand: ICommand<IMoveSelectionEnterAndTabCommandParams> = {
+    id: 'sheet.command.move-selection-enter-tab',
+    type: CommandType.COMMAND,
+    // eslint-disable-next-line max-lines-per-function, complexity
+    handler: (accessor, params) => {
+        if (!params) {
+            return false;
+        }
+
+        const target = getSheetCommandTarget(accessor.get(IUniverInstanceService));
+        if (!target) return false;
+
+        const { workbook, worksheet } = target;
+        const selectionsService = getSelectionsService(accessor);
+        const { direction, keycode } = params;
+        const isReverse = direction === Direction.LEFT || direction === Direction.UP;
+
+        const selections = selectionsService.getCurrentSelections().concat();
+        const currentSelectionIndex = selections.findIndex((s) => s.primary);
+        const selection = selections[currentSelectionIndex];
+        if (!selection) {
+            return false;
+        }
+        // for shift tab or shift enter, the direction should be reversed. so we need find the previous selection.
+        const delta = isReverse ? -1 : 1;
+        const nextSelection = currentSelectionIndex + delta !== selections.length ? selections[currentSelectionIndex + delta] : selections[0];
+        const nextSelectionIndex = selections.findIndex((s) => s === nextSelection);
+
+        const unitId = workbook.getUnitId();
+        const sheetId = worksheet.getSheetId();
+        if (!selection) {
+            return false;
+        }
+
+        const { range } = selection;
+        const primary = selection.primary!;
+        let startRange = getStartRange(range, primary, direction);
+        const shortcutExperienceService = accessor.get(ShortcutExperienceService);
+
+        const shortcutExperienceParam = shortcutExperienceService.getCurrentBySearch({
+            unitId,
+            sheetId,
+            keycode: KeyCode.TAB,
+        });
+
+        let resultRange;
+
+        const { startRow, endRow, startColumn, endColumn } = range;
+
+        // for the last cell in the selection, the next cell should be the next selection's start cell.
+        const isLastCell = isReverse ? primary.startRow === startRow && primary.startColumn === startColumn : primary.endRow === endRow && primary.endColumn === endColumn;
+        // not single cell should be handled by the move-selection active cell
+        if (!Rectangle.equals(range, primary)) {
+            // Handle the situation of moving the active cell within the selection area.
+            shortcutExperienceService.remove({
+                unitId,
+                sheetId,
+                keycode: KeyCode.TAB,
+            });
+
+            const newPrimary = Tools.deepClone(primary);
+
+            const next = isLastCell
+                ? nextSelection.range :
+                findNextRange(
+                    {
+                        startRow: newPrimary.startRow,
+                        startColumn: newPrimary.startColumn,
+                        endRow: newPrimary.endRow,
+                        endColumn: newPrimary.endColumn,
+                    },
+                    direction,
+                    worksheet,
+                    {
+                        startRow,
+                        endRow,
+                        startColumn,
+                        endColumn,
+                    }
+                );
+
+            const useLeftTopAsDest = isLastCell && isReverse;
+            const destRange = useLeftTopAsDest ? getCellAtRowCol(next.endRow, next.endColumn, worksheet) : getCellAtRowCol(next.startRow, next.startColumn, worksheet);
+
+            resultRange = {
+                range: isLastCell ? nextSelection.range : Rectangle.clone(range),
+                primary: {
+                    startRow: destRange.startRow,
+                    startColumn: destRange.startColumn,
+                    endRow: destRange.endRow,
+                    endColumn: destRange.endColumn,
+                    actualRow: useLeftTopAsDest ? destRange.startRow : next.startRow,
+                    actualColumn: useLeftTopAsDest ? destRange.startColumn : next.startColumn,
+                    isMerged: destRange.isMerged,
+                    isMergedMainCell:
+                        destRange.startRow === next.startRow && destRange.startColumn === next.startColumn,
+                },
+                style: isLastCell ? nextSelection.style : selection.style,
             };
         } else {
             // Handle the regular situation of moving the selection area.
@@ -259,12 +291,25 @@ export const MoveSelectionEnterAndTabCommand: ICommand<IMoveSelectionEnterAndTab
             };
         }
 
-        return accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
+        if (isLastCell) {
+            selections[currentSelectionIndex].primary = null;
+            selections[nextSelectionIndex] = resultRange;
+            selectionsService.setSelections(unitId, sheetId, [], SelectionMoveType.MOVE_END);
+        } else {
+            selections[currentSelectionIndex] = resultRange;
+        }
+
+        const rs = accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
             unitId,
             subUnitId: sheetId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            selections: [resultRange],
+            type: SelectionMoveType.MOVE_END,
+            selections,
+            extra: params.extra,
         });
+        const renderManagerService = accessor.get(IRenderManagerService);
+        const selectionService = renderManagerService.getRenderById(unitId)?.with(ISheetSelectionRenderService);
+        selectionService?.refreshSelectionMoveEnd();
+        return rs;
     },
 };
 
@@ -272,6 +317,7 @@ export interface IExpandSelectionCommandParams {
     direction: Direction;
     jumpOver?: JumpOver;
     nextStep?: number;
+    extra?: string;
 }
 
 // Though the command's name is "expand-selection", it actually does not expand but shrink the selection.
@@ -279,7 +325,7 @@ export interface IExpandSelectionCommandParams {
 export const ExpandSelectionCommand: ICommand<IExpandSelectionCommandParams> = {
     id: 'sheet.command.expand-selection',
     type: CommandType.COMMAND,
-    handler: async (accessor, params) => {
+    handler: (accessor, params) => {
         if (!params) return false;
 
         const target = getSheetCommandTarget(accessor.get(IUniverInstanceService));
@@ -287,11 +333,11 @@ export const ExpandSelectionCommand: ICommand<IExpandSelectionCommandParams> = {
 
         const { worksheet, unitId, subUnitId } = target;
 
-        const selection = accessor.get(SelectionManagerService).getLast();
+        const selection = getSelectionsService(accessor).getCurrentLastSelection();
         if (!selection) return false;
 
         const { range: startRange, primary } = selection;
-        const { jumpOver, direction } = params;
+        const { jumpOver, direction, extra } = params;
 
         const isShrink = checkIfShrink(selection, direction, worksheet);
         const destRange = !isShrink
@@ -306,21 +352,23 @@ export const ExpandSelectionCommand: ICommand<IExpandSelectionCommandParams> = {
                     worksheet
                 )
                 : shrinkToNextCell(startRange, direction, worksheet);
+        destRange.rangeType = selection.range.rangeType;
 
         if (Rectangle.equals(destRange, startRange)) {
             return false;
         }
 
-        return accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
+        return accessor.get(ICommandService).syncExecuteCommand(SetSelectionsOperation.id, {
             unitId,
             subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+            type: SelectionMoveType.ONLY_SET,
             selections: [
                 {
                     range: destRange,
                     primary, // this remains unchanged
                 },
             ],
+            extra,
         });
     },
 };
@@ -330,35 +378,25 @@ export interface ISelectAllCommandParams {
     loop?: boolean;
 }
 
-let RANGES_STACK: IRange[] = [];
-
-let SELECTED_RANGE_WORKSHEET = '';
-
 /**
  * This command expand selection to all neighbor ranges. If there are no neighbor ranges. Select the whole sheet.
  */
 export const SelectAllCommand: ICommand<ISelectAllCommandParams> = {
     id: 'sheet.command.select-all',
     type: CommandType.COMMAND,
-    onDispose() {
-        RANGES_STACK = [];
-        SELECTED_RANGE_WORKSHEET = '';
-    },
     handler: async (accessor, params = { expandToGapFirst: true, loop: false }) => {
-        const selection = accessor.get(SelectionManagerService).getLast();
         const target = getSheetCommandTarget(accessor.get(IUniverInstanceService));
         if (!target) return false;
+        const selection = getSelectionsService(accessor).getCurrentLastSelection();
+        if (!selection) return false;
+
+        const selectAllService = accessor.get(SelectAllService);
 
         const { worksheet, unitId, subUnitId } = target;
-
-        if (!selection || !worksheet) {
-            return false;
-        }
-
         const id = `${unitId}|${subUnitId}`;
-        if (id !== SELECTED_RANGE_WORKSHEET) {
-            RANGES_STACK = [];
-            SELECTED_RANGE_WORKSHEET = id;
+        if (id !== selectAllService.selectedRangeWorksheet) {
+            selectAllService.rangesStack = [];
+            selectAllService.selectedRangeWorksheet = id;
         }
 
         const maxRow = worksheet.getMaxRows();
@@ -371,9 +409,9 @@ export const SelectAllCommand: ICommand<ISelectAllCommandParams> = {
             range.startRow === 0 &&
             range.startColumn === 0;
 
-        if (!RANGES_STACK.some((s) => Rectangle.equals(s, range))) {
-            RANGES_STACK = [];
-            RANGES_STACK.push(range);
+        if (!selectAllService.rangesStack.some((s) => Rectangle.equals(s, range))) {
+            selectAllService.rangesStack = [];
+            selectAllService.rangesStack.push(range);
         }
 
         let destRange: IRange;
@@ -381,12 +419,12 @@ export const SelectAllCommand: ICommand<ISelectAllCommandParams> = {
         // determined what kind of adjustment it should get
         if (isWholeSheetSelected) {
             if (loop) {
-                const currentSelectionIndex = RANGES_STACK.findIndex((s) => Rectangle.equals(s, range));
-                if (currentSelectionIndex !== RANGES_STACK.length - 1) {
+                const currentSelectionIndex = selectAllService.rangesStack.findIndex((s) => Rectangle.equals(s, range));
+                if (currentSelectionIndex !== selectAllService.rangesStack.length - 1) {
                     return false;
                 }
 
-                destRange = RANGES_STACK[0];
+                destRange = selectAllService.rangesStack[0];
             } else {
                 return false;
             }
@@ -400,14 +438,14 @@ export const SelectAllCommand: ICommand<ISelectAllCommandParams> = {
             destRange = expandToWholeSheet(worksheet);
         }
 
-        if (!RANGES_STACK.some((s) => Rectangle.equals(s, destRange))) {
-            RANGES_STACK.push(destRange);
+        if (!selectAllService.rangesStack.some((s) => Rectangle.equals(s, destRange))) {
+            selectAllService.rangesStack.push(destRange);
         }
 
         return accessor.get(ICommandService).executeCommand(SetSelectionsOperation.id, {
             unitId,
             subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+
             selections: [
                 {
                     range: destRange,

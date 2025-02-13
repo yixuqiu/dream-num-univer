@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,8 @@
 
 import type { Observer } from 'rxjs';
 import { Observable, Subject } from 'rxjs';
-import { Disposable } from '@univerjs/core';
+import { Disposable, Injector } from '@univerjs/core';
 
-import { Injector } from '@wendellhu/redi';
 import { IHTTPImplementation } from '../implementations/implementation';
 import type { HTTPRequest } from '../request';
 import type { HTTPEvent, HTTPResponse, HTTPResponseError } from '../response';

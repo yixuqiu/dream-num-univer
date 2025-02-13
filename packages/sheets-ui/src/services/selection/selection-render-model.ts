@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,70 +14,47 @@
  * limitations under the License.
  */
 
-import type { IRangeWithCoord, ISelectionCellWithCoord, ISelectionWithCoord, Nullable } from '@univerjs/core';
-import { makeCellToSelection, RANGE_TYPE } from '@univerjs/core';
+import type { ICellWithCoord, IRangeWithCoord, Nullable } from '@univerjs/core';
+import type { ISelectionWithCoord } from '@univerjs/sheets';
+import { convertCellToRange, RANGE_TYPE } from '@univerjs/core';
 
+/**
+ * Data model for SelectionControl.model
+ * NOT Same as @univerjs/sheet.WorkbookSelectionModel, that's data model for Workbook
+ */
 export class SelectionRenderModel implements IRangeWithCoord {
     private _startColumn: number = -1;
-
     private _startRow: number = -1;
-
     private _endColumn: number = -1;
-
     private _endRow: number = -1;
-
     private _startX: number = 0;
-
     private _startY: number = 0;
-
     private _endX: number = 0;
-
     private _endY: number = 0;
 
-    private _currentCell: Nullable<ISelectionCellWithCoord>;
-
+    /**
+     * The highlight cell of a selection. aka: current cell
+     */
+    private _primary: Nullable<ICellWithCoord>;
     private _rangeType: RANGE_TYPE = RANGE_TYPE.NORMAL;
 
-    get startColumn() {
-        return this._startColumn;
+    constructor() {
     }
 
-    get startRow() {
-        return this._startRow;
-    }
+    get startColumn() { return this._startColumn; }
+    get startRow() { return this._startRow; }
+    get endColumn() { return this._endColumn; }
+    get endRow() { return this._endRow; }
+    get startX() { return this._startX; }
+    get startY() { return this._startY; }
+    get endX() { return this._endX; }
+    get endY() { return this._endY; }
+    get currentCell() { return this._primary; }
+    get rangeType() { return this._rangeType; }
 
-    get endColumn() {
-        return this._endColumn;
-    }
-
-    get endRow() {
-        return this._endRow;
-    }
-
-    get startX() {
-        return this._startX;
-    }
-
-    get startY() {
-        return this._startY;
-    }
-
-    get endX() {
-        return this._endX;
-    }
-
-    get endY() {
-        return this._endY;
-    }
-
-    get currentCell() {
-        return this._currentCell;
-    }
-
-    get rangeType() {
-        return this._rangeType;
-    }
-
+    /**
+     * @deprecated, Duplicate with `Rectangle`
+     */
     isEqual(rangeWithCoord: IRangeWithCoord) {
         const { startColumn, startRow, endColumn, endRow } = this;
         const {
@@ -86,9 +63,7 @@ export class SelectionRenderModel implements IRangeWithCoord {
             endColumn: newEndColumn,
             endRow: newEndRow,
         } = rangeWithCoord;
-        // if (type !== newType) {
-        //     return false;
-        // }
+
         if (
             startColumn === newStartColumn &&
             startRow === newStartRow &&
@@ -97,9 +72,13 @@ export class SelectionRenderModel implements IRangeWithCoord {
         ) {
             return true;
         }
+
         return false;
     }
 
+    /**
+     * @deprecated, Duplicate with `Rectangle`
+     */
     isInclude(rangeWithCoord: IRangeWithCoord) {
         const { startColumn, startRow, endColumn, endRow } = this;
         const {
@@ -109,10 +88,6 @@ export class SelectionRenderModel implements IRangeWithCoord {
             endRow: newEndRow,
         } = rangeWithCoord;
 
-        // if (type !== newType) {
-        //     return false;
-        // }
-
         if (
             !(newEndColumn < startColumn || newStartColumn > endColumn || newStartRow > endRow || newEndRow < startRow)
         ) {
@@ -121,98 +96,86 @@ export class SelectionRenderModel implements IRangeWithCoord {
         return false;
     }
 
-    highlightToSelection() {
-        return makeCellToSelection(this._currentCell);
+    highlightToSelection(): Nullable<IRangeWithCoord> {
+        if (!this._primary) return;
+        return convertCellToRange(this._primary);
     }
 
-    getRange() {
+    getRange(): IRangeWithCoord {
         return {
             startColumn: this._startColumn,
             startRow: this._startRow,
             endColumn: this._endColumn,
             endRow: this._endRow,
-
             startX: this._startX,
             startY: this._startY,
             endX: this._endX,
             endY: this._endY,
-
             rangeType: this.rangeType,
         };
     }
 
     getCell() {
-        return this._currentCell;
+        return this._primary;
     }
 
     getRangeType() {
         return this._rangeType;
     }
 
+    setRangeType(rangeType: RANGE_TYPE) {
+        this._rangeType = rangeType;
+    }
+
     getValue(): ISelectionWithCoord {
         return {
-            rangeWithCoord: {
-                startColumn: this._startColumn,
-                startRow: this._startRow,
-                endColumn: this._endColumn,
-                endRow: this._endRow,
-
-                startX: this._startX,
-                startY: this._startY,
-                endX: this._endX,
-                endY: this._endY,
-
-                rangeType: this._rangeType,
-            },
-            primaryWithCoord: this._currentCell,
+            rangeWithCoord: this.getRange(),
+            primaryWithCoord: this._primary,
         };
     }
 
-    setValue(newSelectionRange: IRangeWithCoord, currentCell: Nullable<ISelectionCellWithCoord>) {
+    setValue(newSelectionRange: IRangeWithCoord, currentCell: Nullable<ICellWithCoord>) {
         const {
             startColumn,
             startRow,
             endColumn,
             endRow,
-
             startX,
             startY,
             endX,
             endY,
-
             rangeType,
         } = newSelectionRange;
 
         this._startColumn = startColumn;
-
         this._startRow = startRow;
-
         this._endColumn = endColumn;
-
         this._endRow = endRow;
-
         this._startX = startX;
-
         this._startY = startY;
-
         this._endX = endX;
-
         this._endY = endY;
 
-        if (rangeType != null) {
+        // !! rangeType various from 0 ~ 3
+        if (rangeType !== undefined) {
             this._rangeType = rangeType;
         }
-
-        this.setCurrentCell(currentCell);
+        if (currentCell !== undefined) {
+            this.setCurrentCell(currentCell);
+        }
     }
 
-    setCurrentCell(currentCell: Nullable<ISelectionCellWithCoord>) {
-        if (currentCell) {
-            this._currentCell = currentCell;
-        }
+    /**
+     * Set primary cell.
+     * @TODO lumixraku there are 3 concepts for same thing, primary and current and highlight
+     * highlight is best. primary sometimes means the actual cell(actual means ignore merge)
+     * @param currentCell
+     */
+    setCurrentCell(currentCell: Nullable<ICellWithCoord>) {
+        this._primary = currentCell;
     }
 
     clearCurrentCell() {
-        this._currentCell = null;
+        this._primary = null;
     }
 }

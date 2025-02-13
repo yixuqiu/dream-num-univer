@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-import { ICommandService, IContextService, ThemeService } from '@univerjs/core';
+import { ICommandService, IContextService, Inject, ThemeService } from '@univerjs/core';
 import { type IMouseEvent, type IPointerEvent, type IShapeProps, Shape, type UniverRenderingContext2D } from '@univerjs/engine-render';
 
-import { Inject } from '@wendellhu/redi';
-import type { IOpenFilterPanelOperationParams } from '../../commands/sheets-filter.operation';
-import { FILTER_PANEL_OPENED_KEY, OpenFilterPanelOperation } from '../../commands/sheets-filter.operation';
+import { FILTER_PANEL_OPENED_KEY, type IOpenFilterPanelOperationParams, OpenFilterPanelOperation } from '../../commands/operations/sheets-filter.operation';
 import { FilterButton } from './drawings';
 
 export const FILTER_ICON_SIZE = 16;
@@ -54,9 +52,9 @@ export class SheetsFilterButtonShape extends Shape<ISheetsFilterButtonShapeProps
         this.setShapeProps(props);
 
         // Here we need to make sure that the event is on the rectangle range.
-        this.onPointerDownObserver.add((evt) => this.onPointerDown(evt));
-        this.onPointerEnterObserver.add(() => this.onPointerEnter());
-        this.onPointerLeaveObserver.add(() => this.onPointerLeave());
+        this.onPointerDown$.subscribeEvent((evt) => this.onPointerDown(evt));
+        this.onPointerEnter$.subscribeEvent(() => this.onPointerEnter());
+        this.onPointerLeave$.subscribeEvent(() => this.onPointerLeave());
     }
 
     setShapeProps(props: Partial<ISheetsFilterButtonShapeProps>): void {
@@ -114,7 +112,9 @@ export class SheetsFilterButtonShape extends Shape<ISheetsFilterButtonShapeProps
 
         const { col, unitId, subUnitId } = this._filterParams!;
         const opened = this._contextService.getContextValue(FILTER_PANEL_OPENED_KEY);
-        if (opened) return;
+        if (opened || !this._commandService.hasCommand(OpenFilterPanelOperation.id)) {
+            return;
+        }
 
         setTimeout(() => {
             this._commandService.executeCommand(OpenFilterPanelOperation.id, {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { ICellData, IRange, IStyleData, IWorkbookData, Nullable, Univer } from '@univerjs/core';
+import type { ICellData, Injector, IRange, IStyleData, IWorkbookData, Nullable, Univer } from '@univerjs/core';
 import {
     ICommandService,
     IUniverInstanceService,
@@ -24,10 +24,9 @@ import {
     RedoCommand,
     UndoCommand,
 } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
 import { AddWorksheetMergeMutation } from '../../mutations/add-worksheet-merge.mutation';
 import { InsertColMutation, InsertRowMutation } from '../../mutations/insert-row-col.mutation';
 import { MoveRangeMutation } from '../../mutations/move-range.mutation';
@@ -156,7 +155,7 @@ describe('Test delete range commands', () => {
     let univer: Univer;
     let get: Injector['get'];
     let commandService: ICommandService;
-    let selectionManager: SelectionManagerService;
+    let selectionManager: SheetsSelectionsService;
     let getValueByPosition: (
         startRow: number,
         startColumn: number,
@@ -200,12 +199,7 @@ describe('Test delete range commands', () => {
         commandService.registerCommand(MoveRangeMutation);
         commandService.registerCommand(SetRangeValuesMutation);
 
-        selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
+        selectionManager = get(SheetsSelectionsService);
 
         getValueByPosition = (
             startRow: number,
@@ -263,7 +257,7 @@ describe('Test delete range commands', () => {
     describe('Delete range move left', () => {
         describe('correct situations', () => {
             it('will insert range when there is a selected range, no merged cells', async () => {
-                selectionManager.replace([
+                selectionManager.setSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -295,7 +289,7 @@ describe('Test delete range commands', () => {
 
         describe('fault situations', () => {
             it('will not apply when there is no selected ranges', async () => {
-                selectionManager.clear();
+                selectionManager.clearCurrentSelections();
                 const result = await commandService.executeCommand(DeleteRangeMoveLeftCommand.id);
                 expect(result).toBeFalsy();
             });
@@ -304,7 +298,7 @@ describe('Test delete range commands', () => {
     describe('Delete range move up', () => {
         describe('correct situations', () => {
             it('will insert range when there is a selected range, no merged cells', async () => {
-                selectionManager.replace([
+                selectionManager.setSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -337,7 +331,7 @@ describe('Test delete range commands', () => {
 
         describe('fault situations', () => {
             it('will not apply when there is no selected ranges', async () => {
-                selectionManager.clear();
+                selectionManager.clearCurrentSelections();
                 const result = await commandService.executeCommand(DeleteRangeMoveUpCommand.id);
                 expect(result).toBeFalsy();
             });

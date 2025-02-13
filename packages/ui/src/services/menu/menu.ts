@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,36 +14,10 @@
  * limitations under the License.
  */
 
-import type { IAccessor } from '@wendellhu/redi';
+import type { IAccessor } from '@univerjs/core';
 import type { Observable } from 'rxjs';
 
 export type OneOrMany<T> = T | T[];
-
-export enum MenuPosition {
-    VOID = 'void',
-    TOOLBAR_START = 'uiToolbar.start',
-    TOOLBAR_INSERT = 'uiToolbar.insert',
-    TOOLBAR_FORMULAS = 'uiToolbar.formulas',
-    TOOLBAR_DATA = 'uiToolbar.data',
-    TOOLBAR_VIEW = 'uiToolbar.view',
-    TOOLBAR_OTHERS = 'uiToolbar.others',
-    CONTEXT_MENU = 'contextMenu',
-}
-
-export enum MenuGroup {
-    TOOLBAR_HISTORY,
-    TOOLBAR_FORMAT,
-    TOOLBAR_LAYOUT,
-    TOOLBAR_FORMULAS_INSERT,
-    TOOLBAR_FORMULAS_VIEW,
-    TOOLBAR_FILE,
-    TOOLBAR_OTHERS,
-
-    CONTEXT_MENU_FORMAT,
-    CONTEXT_MENU_LAYOUT,
-    CONTEXT_MENU_DATA,
-    CONTEXT_MENU_OTHERS,
-}
 
 export enum MenuItemType {
     /** Button style menu item. */
@@ -59,17 +33,18 @@ export enum MenuItemType {
 interface IMenuItemBase<V> {
     /** ID of the menu item. Normally it should be the same as the ID of the command that it would invoke.  */
     id: string;
+
+    /**
+     * If two menus reuse the same command (e.g. copy & paste command). They should have the same command
+     * id and different ids.
+     */
+    commandId?: string;
+
     subId?: string;
     title?: string;
     description?: string;
     icon?: string | Observable<string>;
     tooltip?: string;
-
-    /** The group that the item belongs to. */
-    group?: MenuGroup;
-
-    /** In what menu should the item display. */
-    positions: OneOrMany<MenuPosition | string>;
 
     type: MenuItemType;
 
@@ -77,12 +52,12 @@ interface IMenuItemBase<V> {
      * Custom label component id.
      */
     label?:
-        | string
-        | {
-            name: string;
-            hoverable?: boolean;
-            props?: Record<string, any>;
-        }; // custom component, send to CustomLabel label property
+    | string
+    | {
+        name: string;
+        hoverable?: boolean;
+        props?: Record<string, any>;
+    }; // custom component, send to CustomLabel label property
 
     hidden$?: Observable<boolean>;
     disabled$?: Observable<boolean>;
@@ -97,20 +72,21 @@ export interface IMenuButtonItem<V = undefined> extends IMenuItemBase<V> {
 }
 
 export interface IValueOption<T = undefined> {
+    id?: string;
     value?: string | number;
     value$?: Observable<T>;
     label?:
-        | string
-        | {
-            name: string;
-            hoverable?: boolean;
-            props?: Record<string, string | number | Array<{ [x: string | number]: string }>>;
-        }; // custom component, send to CustomLabel label property
+    | string
+    | {
+        name: string;
+        hoverable?: boolean;
+        props?: Record<string, string | number | Array<{ [x: string | number]: string }>>;
+    }; // custom component, send to CustomLabel label property
     icon?: string;
     tooltip?: string;
     style?: object;
     disabled?: boolean;
-    id?: string; // command id
+    commandId?: string;
 }
 
 export interface ICustomComponentProps<T> {
@@ -120,6 +96,13 @@ export interface ICustomComponentProps<T> {
 
 export interface IMenuSelectorItem<V = MenuItemDefaultValueType, T = undefined> extends IMenuItemBase<V> {
     type: MenuItemType.SELECTOR | MenuItemType.BUTTON_SELECTOR | MenuItemType.SUBITEMS;
+
+    /**
+     * If this property is set, changing the value of the selection will trigger the command with this id,
+     * instead of {@link IMenuItemBase.id} or {@link IMenuItemBase.commandId}. At the same title,
+     * clicking the button will trigger IMenuItemBase.id or IMenuItemBase.commandId.
+     */
+    selectionsCommandId?: string;
 
     // selections 子菜单可以为三种类型
     // 一个是当前 menu 的 options，选中后直接使用其 value 触发 command
@@ -138,10 +121,16 @@ export function isMenuSelectorItem<T extends MenuItemDefaultValueType>(v: IMenuI
 
 export type MenuItemDefaultValueType = string | number | undefined;
 
-export type IMenuItem = IMenuButtonItem | IMenuSelectorItem<MenuItemDefaultValueType>;
+export type IMenuItem = IMenuButtonItem<MenuItemDefaultValueType> | IMenuSelectorItem<MenuItemDefaultValueType, any>;
 
 export type IDisplayMenuItem<T extends IMenuItem> = T & {
     shortcut?: string;
 };
 
-export type IMenuItemFactory = (accessor: IAccessor) => IMenuItem;
+export type MenuItemConfig<T extends MenuItemDefaultValueType = MenuItemDefaultValueType> = Partial<Omit<IMenuItem, 'id' | 'subId' | 'value$' | 'hidden$' | 'disabled$' | 'activated$' | 'icon$'> & {
+    hidden?: boolean;
+    disabled?: boolean;
+    activated?: boolean;
+}>;
+export type MenuConfig<T extends MenuItemDefaultValueType = MenuItemDefaultValueType> = Record<string, MenuItemConfig<T>>;
+export type IMenuItemFactory = (accessor: IAccessor, menuConfig?: MenuConfig<MenuItemDefaultValueType>) => IMenuItem;

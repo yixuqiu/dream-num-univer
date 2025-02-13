@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import type { IDocumentRenderConfig, IScale, Nullable } from '@univerjs/core';
-import { Registry } from '@univerjs/core';
-
+import type { IDocumentRenderConfig, IRange, IScale, Nullable } from '@univerjs/core';
 import type { BaseObject } from '../base-object';
-import { getScale } from '../basics/tools';
-import type { Vector2 } from '../basics/vector2';
+
+import type { IBoundRectNoAngle, Vector2 } from '../basics/vector2';
 import type { UniverRenderingContext } from '../context';
+import { Registry } from '@univerjs/core';
+import { getScale } from '../basics/tools';
 
 export interface IExtensionConfig {
     originTranslate?: Vector2; // docs
@@ -31,6 +31,12 @@ export interface IExtensionConfig {
     renderConfig?: IDocumentRenderConfig;
 }
 
+export interface IDrawInfo {
+    viewRanges: IRange[];
+    viewportKey: string;
+    checkOutOfViewBound?: boolean;
+    viewBound?: IBoundRectNoAngle;
+}
 export class ComponentExtension<T, U, V> {
     uKey: string = '';
 
@@ -50,7 +56,7 @@ export class ComponentExtension<T, U, V> {
         return this.Z_INDEX;
     }
 
-    draw(ctx: UniverRenderingContext, parentScale: IScale, skeleton: T, diffBounds?: V) {
+    draw(ctx: UniverRenderingContext, parentScale: IScale, skeleton: T, diffBounds?: V, more?: IDrawInfo) {
         /* abstract */
     }
 

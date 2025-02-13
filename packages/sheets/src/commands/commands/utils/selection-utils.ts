@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import type { IRange, ISelectionCell, Nullable, Workbook, Worksheet } from '@univerjs/core';
-import { RANGE_TYPE, Rectangle, selectionToArray } from '@univerjs/core';
-
-import { NORMAL_SELECTION_PLUGIN_NAME } from '../../../services/selection-manager.service';
-import type { ISetSelectionsOperationParams } from '../../operations/selection.operation';
-import { SetSelectionsOperation } from '../../operations/selection.operation';
+import type { ICellData, IInterceptor, IObjectMatrixPrimitiveType, IRange, ISelectionCell, Nullable, Workbook, Worksheet } from '@univerjs/core';
 import type { ISelectionWithStyle } from '../../../basics/selection';
+
+import type { ISetSelectionsOperationParams } from '../../operations/selection.operation';
+import { RANGE_TYPE, Rectangle, selectionToArray } from '@univerjs/core';
+import { IgnoreRangeThemeInterceptorKey, RangeThemeInterceptorId } from '../../../services/sheet-interceptor/interceptor-const';
+import { SetSelectionsOperation } from '../../operations/selection.operation';
 
 export interface IExpandParams {
     left?: boolean;
@@ -192,7 +192,7 @@ export const followSelectionOperation = (range: IRange, workbook: Workbook, work
     params: {
         unitId: workbook.getUnitId(),
         subUnitId: worksheet.getSheetId(),
-        pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+        reveal: true,
         selections: [{ range, primary: getPrimaryForRange(range, worksheet) }],
     } as ISetSelectionsOperationParams,
 });
@@ -209,4 +209,109 @@ export function isSingleCellSelection(selection: Nullable<ISelectionWithStyle & 
 
     const { range, primary } = selection;
     return Rectangle.equals(range, primary);
+}
+/**
+ * Create an iterator to iterate over cells in range.
+ * It will skip the row that has been filtered.
+ * @param sheet bind a sheet
+ * @returns iterator
+ */
+export function createRangeIteratorWithSkipFilteredRows(sheet: Worksheet) {
+    function forOperableEach(ranges: IRange, operator: (row: number, col: number, range: IRange) => void) {
+        function iterate(range: IRange) {
+            for (let r = range.startRow; r <= range.endRow; r++) {
+                if (sheet.getRowFiltered(r)) {
+                    continue;
+                }
+                for (let c = range.startColumn; c <= range.endColumn; c++) {
+                    operator(r, c, range);
+                }
+            }
+        };
+        iterate(ranges);
+    }
+    return {
+        forOperableEach,
+    };
+}
+
+const ignoreRangeThemeInterceptorFilter = (interceptor: IInterceptor<unknown, unknown>) => interceptor.id !== RangeThemeInterceptorId;
+
+/**
+ * Copy the styles of a range of cells to another range. Used for insert row and insert column.
+ * @param worksheet
+ * @param startRow
+ * @param endRow
+ * @param startColumn
+ * @param endColumn
+ * @param isRow
+ * @param styleRowOrColumn
+ */
+export function copyRangeStyles(
+    worksheet: Worksheet,
+    startRow: number,
+    endRow: number,
+    startColumn: number,
+    endColumn: number,
+    isRow: boolean,
+    styleRowOrColumn: number
+): IObjectMatrixPrimitiveType<ICellData> {
+    const cellValue: IObjectMatrixPrimitiveType<ICellData> = {};
+    for (let row = startRow; row <= endRow; row++) {
+        for (let column = startColumn; column <= endColumn; column++) {
+            const cell = isRow ?
+                worksheet.getCellWithFilteredInterceptors(styleRowOrColumn, column, IgnoreRangeThemeInterceptorKey, ignoreRangeThemeInterceptorFilter)
+                : worksheet.getCellWithFilteredInterceptors(row, styleRowOrColumn, IgnoreRangeThemeInterceptorKey, ignoreRangeThemeInterceptorFilter);
+
+            if (!cell || !cell.s) {
+                continue;
+            }
+            if (!cellValue[row]) {
+                cellValue[row] = {};
+            }
+            cellValue[row][column] = { s: cell.s };
+        }
+    }
+    return cellValue;
+}
+
+export function copyRangeStylesWithoutBorder(
+    worksheet: Worksheet,
+    startRow: number,
+    endRow: number,
+    startColumn: number,
+    endColumn: number,
+    isRow: boolean,
+    styleRowOrColumn: number
+): IObjectMatrixPrimitiveType<ICellData> {
+    const cellValue: IObjectMatrixPrimitiveType<ICellData> = {};
+    for (let row = startRow; row <= endRow; row++) {
+        for (let column = startColumn; column <= endColumn; column++) {
+            const cell = isRow
+                ? worksheet.getCellWithFilteredInterceptors(styleRowOrColumn, column, IgnoreRangeThemeInterceptorKey, ignoreRangeThemeInterceptorFilter)
+                : worksheet.getCellWithFilteredInterceptors(row, styleRowOrColumn, IgnoreRangeThemeInterceptorKey, ignoreRangeThemeInterceptorFilter);
+
+            if (!cell || !cell.s) {
+                continue;
+            }
+            if (!cellValue[row]) {
+                cellValue[row] = {};
+            }
+
+            // univer-pro/issues/3016  insert row/column should not reuse border style
+            if (typeof cell.s === 'string') {
+                const styleData = worksheet.getStyleDataByHash(cell.s);
+                if (styleData) {
+                    delete styleData.bd;
+                    cell.s = worksheet.setStyleData(styleData);
+                }
+            } else {
+                const styleData = { ...cell.s };
+                delete styleData.bd;
+                cell.s = worksheet.setStyleData(styleData);
+            }
+            cellValue[row][column] = { s: cell.s };
+        }
+    }
+    return cellValue;
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-import { LocaleService, toDisposable } from '@univerjs/core';
+import type { IDisposable } from '@univerjs/core';
 import type { IFunctionInfo, IFunctionNames } from '@univerjs/engine-formula';
+import type { IUniverSheetsFormulaBaseConfig } from '../controllers/config.schema';
+import { createIdentifier, IConfigService, Inject, LocaleService, toDisposable } from '@univerjs/core';
+
 import {
     functionArray,
     functionCompatibility,
@@ -37,9 +40,7 @@ import {
     IFunctionService,
     isReferenceStrings,
 } from '@univerjs/engine-formula';
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier, Inject } from '@wendellhu/redi';
-
+import { PLUGIN_CONFIG_KEY_BASE } from '../controllers/config.schema';
 import { FUNCTION_LIST } from './function-list/function-list';
 import { getFunctionName } from './utils';
 
@@ -114,15 +115,15 @@ export interface IDescriptionService {
     isFormulaDefinedName(name: string): boolean;
 }
 
-export const IDescriptionService = createIdentifier<IDescriptionService>('formula-ui.description-service');
+export const IDescriptionService = createIdentifier<IDescriptionService>('formula.description-service');
 
 export class DescriptionService implements IDescriptionService, IDisposable {
     private _descriptions: IFunctionInfo[] = [];
 
     constructor(
-        private _description: IFunctionInfo[] = [],
         @IFunctionService private readonly _functionService: IFunctionService,
-        @Inject(LocaleService) private readonly _localeService: LocaleService
+        @Inject(LocaleService) private readonly _localeService: LocaleService,
+        @IConfigService private readonly _configService: IConfigService
     ) {
         this._initialize();
     }
@@ -148,10 +149,11 @@ export class DescriptionService implements IDescriptionService, IDisposable {
     getSearchListByName(searchText: string) {
         const searchList: ISearchItem[] = [];
         const functionList = this._functionService.getDescriptions();
-        searchText = searchText.toLocaleUpperCase();
+        const _searchText = searchText.toLocaleUpperCase().trim();
         functionList.forEach((item) => {
-            const { functionName, abstract } = item;
-            if (functionName.toLocaleUpperCase().indexOf(searchText) > -1) {
+            const { functionName, abstract, functionType } = item;
+            // Exclude DefinedName
+            if ((functionName.toLocaleUpperCase().indexOf(_searchText) > -1) && functionType !== FunctionType.DefinedName) {
                 searchList.push({ name: functionName, desc: abstract });
             }
         });
@@ -162,10 +164,10 @@ export class DescriptionService implements IDescriptionService, IDisposable {
     getSearchListByNameFirstLetter(searchText: string) {
         const searchList: ISearchItem[] = [];
         const functionList = this._functionService.getDescriptions();
-        searchText = searchText.toLocaleUpperCase();
+        const _searchText = searchText.toLocaleUpperCase().trim();
         functionList.forEach((item) => {
             const { functionName, abstract } = item;
-            if (functionName.toLocaleUpperCase().indexOf(searchText) === 0) {
+            if (functionName.toLocaleUpperCase().indexOf(_searchText) === 0) {
                 searchList.push({ name: functionName, desc: abstract });
             }
         });
@@ -178,7 +180,8 @@ export class DescriptionService implements IDescriptionService, IDisposable {
         const functionList = this._functionService.getDescriptions();
         functionList.forEach((item) => {
             const { functionName, functionType, abstract } = item;
-            if (functionType === type || type === -1) {
+            // Exclude DefinedName
+            if ((functionType === type || type === -1) && functionType !== FunctionType.DefinedName) {
                 searchList.push({ name: functionName, desc: abstract });
             }
         });
@@ -254,7 +257,8 @@ export class DescriptionService implements IDescriptionService, IDisposable {
             return functions.includes(item.functionName as IFunctionNames);
         });
 
-        this._descriptions = filterFunctionList.concat(this._description);
+        const config = this._configService.getConfig<IUniverSheetsFormulaBaseConfig>(PLUGIN_CONFIG_KEY_BASE);
+        this._descriptions = filterFunctionList.concat(config?.description ?? []);
     }
 
     private _registerDescriptions() {
@@ -273,6 +277,7 @@ export class DescriptionService implements IDescriptionService, IDisposable {
                 repeat: item.repeat,
             })),
         }));
+
         this._functionService.registerDescriptions(...functionListLocale);
     }
 }

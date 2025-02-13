@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,19 +30,22 @@ export function getParagraphStyle(el: HTMLElement): Nullable<IParagraphStyle> {
         switch (cssRule) {
             case 'margin-top': {
                 const marginTopValue = Number.parseInt(cssValue);
-                paragraphStyle.spaceAbove = /pt/.test(cssValue) ? ptToPixel(marginTopValue) : marginTopValue;
+                paragraphStyle.spaceAbove = { v: /pt/.test(cssValue) ? ptToPixel(marginTopValue) : marginTopValue };
                 break;
             }
 
             case 'margin-bottom': {
                 const marginBottomValue = Number.parseInt(cssValue);
-                paragraphStyle.spaceBelow = /pt/.test(cssValue) ? ptToPixel(marginBottomValue) : marginBottomValue;
+                paragraphStyle.spaceBelow = { v: /pt/.test(cssValue) ? ptToPixel(marginBottomValue) : marginBottomValue };
 
                 break;
             }
 
             case 'line-height': {
-                const lineHeightValue = Number.parseFloat(cssValue);
+                let lineHeightValue = Number.parseFloat(cssValue);
+                if (cssValue.endsWith('%')) {
+                    lineHeightValue /= 100;
+                }
                 paragraphStyle.lineSpacing = lineHeightValue;
 
                 break;

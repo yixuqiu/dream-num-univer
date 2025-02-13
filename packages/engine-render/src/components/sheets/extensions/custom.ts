@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
  */
 
 import type { IRange, IScale } from '@univerjs/core';
-import { Range, sortRules } from '@univerjs/core';
 import type { UniverRenderingContext } from '../../../context';
-import type { SpreadsheetSkeleton } from '../sheet-skeleton';
+import type { SpreadsheetSkeleton } from '../sheet.render-skeleton';
+import { Range, sortRules } from '@univerjs/core';
 import { SpreadsheetExtensionRegistry } from '../../extension';
 import { SheetExtension } from './sheet-extension';
 
@@ -35,8 +35,8 @@ export class Custom extends SheetExtension {
 
     override uKey: string = UNIQUE_KEY;
 
-    override draw(ctx: UniverRenderingContext, parentScale: IScale, skeleton: SpreadsheetSkeleton, diffRanges?: IRange[] | undefined): void {
-        const { rowHeightAccumulation, columnWidthAccumulation, worksheet, dataMergeCache, rowColumnSegment } = skeleton;
+    override draw(ctx: UniverRenderingContext, _parentScale: IScale, skeleton: SpreadsheetSkeleton, diffRanges: IRange[] | undefined): void {
+        const { worksheet, rowColumnSegment } = skeleton;
         if (!worksheet) {
             return;
         }
@@ -44,12 +44,15 @@ export class Custom extends SheetExtension {
         const subUnitId = worksheet.getSheetId();
 
         Range.foreach(rowColumnSegment, (row, col) => {
+            if (!worksheet.getRowVisible(row) || !worksheet.getColVisible(col)) {
+                return;
+            }
             let cellData = worksheet.getCell(row, col);
             if (!cellData?.customRender) {
                 return;
             }
 
-            let primaryWithCoord = this.getCellIndex(row, col, rowHeightAccumulation, columnWidthAccumulation, dataMergeCache);
+            let primaryWithCoord = skeleton.getCellWithCoordByIndex(row, col, false);
 
             const { mergeInfo } = primaryWithCoord;
             if (!this.isRenderDiffRangesByRow(mergeInfo.startRow, mergeInfo.endRow, diffRanges)) {
@@ -75,22 +78,19 @@ export class Custom extends SheetExtension {
                     return;
                 }
 
-                primaryWithCoord = this.getCellIndex(mainCell.row, mainCell.col, rowHeightAccumulation, columnWidthAccumulation, dataMergeCache);
+                primaryWithCoord = skeleton.getCellWithCoordByIndex(mainCell.row, mainCell.col);
             }
 
             const renderInfo = {
                 data: cellData,
-                style: skeleton.getsStyles().getStyleByCell(cellData),
+                style: skeleton.getStyles().getStyleByCell(cellData),
                 primaryWithCoord,
                 subUnitId,
                 row,
                 col,
+                worksheet,
+                unitId: worksheet.unitId,
             };
-
-                // current cell is hidden
-            if (!worksheet.getColVisible(col) || !worksheet.getRowVisible(row)) {
-                return;
-            }
 
             const customRender = cellData.customRender.sort(sortRules);
 

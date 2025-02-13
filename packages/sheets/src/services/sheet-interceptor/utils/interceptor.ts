@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@
 
 import type { Workbook, Worksheet } from '@univerjs/core';
 
-export interface ISheetLocation {
-    workbook: Workbook;
-    worksheet: Worksheet;
+export interface ISheetLocationBase {
     unitId: string;
     subUnitId: string;
     row: number;
     col: number;
+}
+
+export interface ISheetLocation extends ISheetLocationBase {
+    workbook: Workbook;
+    worksheet: Worksheet;
 }
 
 export interface ISheetRowLocation {

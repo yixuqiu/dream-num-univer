@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,104 +14,153 @@
  * limitations under the License.
  */
 
-import type { IAccessor, IDisposable } from '@wendellhu/redi';
-import { createIdentifier, Inject, Injector } from '@wendellhu/redi';
+import type { IAccessor, IDisposable } from '../../common/di';
+import type { IKeyValue } from '../../shared/types';
 
 import { findLast, remove } from '../../common/array';
+import { createIdentifier, Inject, Injector } from '../../common/di';
+import { CustomCommandExecutionError } from '../../common/error';
 import { sequence, sequenceAsync } from '../../common/sequence';
-import { DisposableCollection, toDisposable } from '../../shared/lifecycle';
-import type { IKeyValue } from '../../shared/types';
+import { Disposable, DisposableCollection, toDisposable } from '../../shared/lifecycle';
 import { IContextService } from '../context/context.service';
 import { ILogService } from '../log/log.service';
 
+/**
+ * The type of a command.
+ */
 export enum CommandType {
-    /** Command could generate some operations or mutations. */
+    /**
+     * Responsible for creating, orchestrating, and executing MUTATION or OPERATION according to specific business
+     * logic. For example, a delete row COMMAND will generate a delete row MUTATION, an insert row MUTATION for undo,
+     * and a set cell content MUTATION.
+     */
     COMMAND = 0,
-    /** An operation that do not require conflict resolve.  */
+    /**
+     * OPERATION is the change made to data that is not saved to snapshot, without conflict resolution,
+     * such as modifying scroll position, modifying sidebar state, etc.
+     */
     OPERATION = 1,
-    /** An operation that need to be resolved before applied on peer client. */
+    /**
+     * MUTATION is the change made to the data saved to snapshot, such as inserting rows and columns,
+     * modifying cell content, modifying filter ranges, etc. If you want to add collaborative editing capabilities to
+     * Univer, it is the smallest unit of conflict resolution.
+     */
     MUTATION = 2,
 }
 
+/**
+ * In Univer, all data modifications need to be executed through commands. The command-based approach can better track
+ * changes in values, implement functions such as undo, redo, and collaborative editing, handle complex associated
+ * logic between functions, etc.
+ *
+ * All commands should implements this interface or related {@link IMutation} or {@link IOperation} interface, and
+ * should be registered in the {@link ICommandService}.
+ */
 export interface ICommand<P extends object = object, R = boolean> {
     /**
-     * ${businessName}.${type}.${name}
+     * Identifier of the command. It should be unique in the application unless it is a {@link IMultiCommand}.
+     * Its pattern should be like `<namespace>.<type>.<command-name>`.
+     *
+     * @example { id: 'sheet.command.set-selection-frozen' }
      */
     readonly id: string;
-    readonly type: CommandType;
-
-    handler(accessor: IAccessor, params?: P, options?: IExecutionOptions): Promise<R> | R;
-
     /**
-     * When this command is unregistered, this function would be called.
-     *
-     * @deprecated
+     * The type of the command.
      */
-    onDispose?: () => void;
+    readonly type: CommandType;
+    /**
+     * The handler of the command.
+     * @param accessor The accessor to the dependency injection container.
+     * @param params Params of the command. Params should be serializable.
+     * @param options Options of the command.
+     * @returns The result of the command. By default it should be a boolean value which indicates the command is
+     * executed successfully or not.
+     */
+    handler(accessor: IAccessor, params?: P, options?: IExecutionOptions): Promise<R> | R;
 }
 
+/**
+ * A command that may have multiple implementations. Each implementation should have different `priority`
+ * and `preconditions` callback to determine which implementation should be executed.
+ */
 export interface IMultiCommand<P extends object = object, R = boolean> extends ICommand<P, R> {
+    /** The name of the multi command. It should be unique in the application. */
     name: string;
+    /** @ignore */
     multi: true;
+    /** Priority of this implementation. Implementation with higher priority will be checked first. */
     priority: number;
-
+    /**
+     * A callback function that tells `ICommandService` if this implementation should be executed.
+     * @param contextService The context service.
+     * @returns If this implementation should be executed, return `true`, otherwise return `false`.
+     */
     preconditions?: (contextService: IContextService) => boolean;
 }
 
 export interface IMutationCommonParams {
+    /**
+     * It is used to indicate which {@link CommandType.COMMAND} triggers the mutation.
+     */
     trigger?: string;
 }
 
 /**
- * Mutation would change the model of Univer applications.
+ * {@link CommandType.MUTATION} should implement this interface.
  */
 export interface IMutation<P extends object, R = boolean> extends ICommand<P, R> {
     type: CommandType.MUTATION;
-
     /**
-     * Mutations must be a sync process.
-     * @param accessor
-     * @param params Params of the mutation. A mutation must has params.
+     * The handler of the mutation.
+     * @param accessor The accessor to the dependency injection container.
+     * @param params Params of the mutation. Params should be serializable.
+     * @returns The result of the mutation. By default it should be a boolean value which indicates the mutation is
+     * executed successfully or not.
      */
     handler(accessor: IAccessor, params: P): R;
 }
 
 /**
- * Operation would change the state of Univer applications. State should only be in memory and does not
- * require conflicting resolution.
+ * {@link CommandType.OPERATION} should implement this interface.
  */
 export interface IOperation<P extends object = object, R = boolean> extends ICommand<P, R> {
     type: CommandType.OPERATION;
-
     /**
-     * Operations must be a sync process.
-     * @param accessor
-     * @param params Params of the operation. A operation must has params.
+     * The handler of the operation.
+     * @param accessor The accessor to the dependency injection container.
+     * @param params Params of the operation. Params should be serializable.
+     * @returns The result of the operation. By default it should be a boolean value which indicates the operation is
+     * executed successfully or not.
      */
     handler(accessor: IAccessor, params: P): R;
 }
 
 /**
- * The command info, only a command id and responsible params
+ * This object represents an execution of a command.
  */
-// TODO: change object to serializable interface type
 export interface ICommandInfo<T extends object = object> {
-    id: string;
-
-    type?: CommandType;
-
     /**
-     * Args should be serializable.
+     * Id of the command being executed.
+     */
+    id: string;
+    /**
+     * Type of the command.
+     */
+    type?: CommandType;
+    /**
+     * Parameters of this execution.
      */
     params?: T;
 }
 
+/** This object represents an execution of a {@link CommandType.MUTATION} */
 export interface IMutationInfo<T extends object = object> {
     id: string;
     type?: CommandType.MUTATION;
     params: T;
 }
 
+/** This object represents an execution of a {@link CommandType.OPERATION} */
 export interface IOperationInfo<T extends object = object> {
     id: string;
     type?: CommandType.OPERATION;
@@ -119,44 +168,66 @@ export interface IOperationInfo<T extends object = object> {
 }
 
 export interface IExecutionOptions {
-    /** This mutation should only be executed on the local machine, and not synced to replicas. */
+    /** This mutation should only be executed on the local machine, and should not be synced to replicas. */
     onlyLocal?: boolean;
-
     /** This command is from collaboration peers. */
     fromCollab?: boolean;
-
+    /** @deprecated */
+    fromChangeset?: boolean;
     [key: PropertyKey]: string | number | boolean | undefined;
 }
 
 export type CommandListener = (commandInfo: Readonly<ICommandInfo>, options?: IExecutionOptions) => void;
 
+/**
+ * The identifier of the command service.
+ */
+export const ICommandService = createIdentifier<ICommandService>('anywhere.command-service');
+/**
+ * The service to register and execute commands.
+ */
 export interface ICommandService {
     /**
      * Check if a command is already registered at the current command service.
-     *
      * @param commandId The id of the command.
+     * @returns If the command is registered, return `true`, otherwise return `false`.
      */
     hasCommand(commandId: string): boolean;
-
+    /**
+     * Register a command to the command service.
+     * @param command The command to register.
+     */
     registerCommand(command: ICommand<object, unknown>): IDisposable;
-
+    /**
+     * Register a command as a multi command.
+     * @param command The command to register as a multi command.
+     */
     registerMultipleCommand(command: ICommand<object, unknown>): IDisposable;
-
+    /**
+     * Execute a command with the given id and parameters.
+     * @param id Identifier of the command.
+     * @param params Parameters of this execution.
+     * @param options Options of this execution.
+     * @returns The result of the execution. It is a boolean value by default which indicates the command is executed.
+     */
     executeCommand<P extends object = object, R = boolean>(
         id: string,
         params?: P,
         options?: IExecutionOptions
     ): Promise<R>;
-
-    hasCommand(id: string): boolean;
-
+    /**
+     * Execute a command with the given id and parameters synchronously.
+     * @param id Identifier of the command.
+     * @param params Parameters of this execution.
+     * @param options Options of this execution.
+     * @returns The result of the execution. It is a boolean value by default which indicates the command is executed.
+     */
     syncExecuteCommand<P extends object = object, R = boolean>(id: string, params?: P, options?: IExecutionOptions): R;
-
     /**
      * Register a callback function that will be executed after a command is executed.
+     * @param listener
      */
     onCommandExecuted(listener: CommandListener): IDisposable;
-
     /**
      * Register a callback function that will be executed before a command is executed.
      * @param listener
@@ -164,13 +235,9 @@ export interface ICommandService {
     beforeCommandExecuted(listener: CommandListener): IDisposable;
 }
 
-export const ICommandService = createIdentifier<ICommandService>('anywhere.command-service');
-
-/**
- * The registry of commands.
- */
-export class CommandRegistry {
+class CommandRegistry {
     private readonly _commands = new Map<string, ICommand>();
+    private readonly _commandTypes = new Map<string, CommandType>();
 
     registerCommand(command: ICommand): IDisposable {
         if (this._commands.has(command.id)) {
@@ -178,11 +245,11 @@ export class CommandRegistry {
         }
 
         this._commands.set(command.id, command);
+        this._commandTypes.set(command.id, command.type);
 
         return toDisposable(() => {
             this._commands.delete(command.id);
-
-            command.onDispose?.();
+            this._commandTypes.delete(command.id);
         });
     }
 
@@ -197,9 +264,13 @@ export class CommandRegistry {
 
         return [this._commands.get(id)!];
     }
+
+    getCommandType(id: string): CommandType | undefined {
+        return this._commandTypes.get(id);
+    }
 }
 
-interface ICommandExecutionStackItem extends ICommandInfo {}
+interface ICommandExecutionStackItem extends ICommandInfo { }
 
 export const NilCommand: ICommand = {
     id: 'nil',
@@ -207,8 +278,8 @@ export const NilCommand: ICommand = {
     handler: () => true,
 };
 
-export class CommandService implements ICommandService {
-    private readonly _commandRegistry: CommandRegistry;
+export class CommandService extends Disposable implements ICommandService {
+    protected readonly _commandRegistry: CommandRegistry;
 
     private readonly _beforeCommandExecutionListeners: CommandListener[] = [];
     private readonly _commandExecutedListeners: CommandListener[] = [];
@@ -223,8 +294,17 @@ export class CommandService implements ICommandService {
         @Inject(Injector) private readonly _injector: Injector,
         @ILogService private readonly _logService: ILogService
     ) {
+        super();
+
         this._commandRegistry = new CommandRegistry();
         this._registerCommand(NilCommand);
+    }
+
+    override dispose(): void {
+        super.dispose();
+
+        this._commandExecutedListeners.length = 0;
+        this._beforeCommandExecutionListeners.length = 0;
     }
 
     hasCommand(commandId: string): boolean {
@@ -270,27 +350,36 @@ export class CommandService implements ICommandService {
         params?: P,
         options?: IExecutionOptions
     ): Promise<R> {
-        const item = this._commandRegistry.getCommand(id);
-        if (item) {
-            const [command] = item;
-            const commandInfo: ICommandInfo = {
-                id: command.id,
-                type: command.type,
-                params,
-            };
+        try {
+            const item = this._commandRegistry.getCommand(id);
+            if (item) {
+                const [command] = item;
+                const commandInfo: ICommandInfo = {
+                    id: command.id,
+                    type: command.type,
+                    params,
+                };
 
-            const stackItemDisposable = this._pushCommandExecutionStack(commandInfo);
+                const stackItemDisposable = this._pushCommandExecutionStack(commandInfo);
 
-            this._beforeCommandExecutionListeners.forEach((listener) => listener(commandInfo, options));
-            const result = await this._execute<P, R>(command as ICommand<P, R>, params, options);
-            this._commandExecutedListeners.forEach((listener) => listener(commandInfo, options));
+                this._beforeCommandExecutionListeners.forEach((listener) => listener(commandInfo, options));
+                const result = await this._execute<P, R>(command as ICommand<P, R>, params, options);
+                this._commandExecutedListeners.forEach((listener) => listener(commandInfo, options));
 
-            stackItemDisposable.dispose();
+                stackItemDisposable.dispose();
 
-            return result;
+                return result;
+            }
+
+            throw new Error(`[CommandService]: command "${id}" is not registered.`);
+        } catch (error) {
+            if (error instanceof CustomCommandExecutionError) {
+                // If need custom logic, can add it here
+                return false as R;
+            } else {
+                throw error;
+            }
         }
-
-        throw new Error(`[CommandService]: command "${id}" is not registered.`);
     }
 
     syncExecuteCommand<P extends object = object, R = boolean>(
@@ -298,40 +387,48 @@ export class CommandService implements ICommandService {
         params?: P | undefined,
         options?: IExecutionOptions
     ): R {
-        const item = this._commandRegistry.getCommand(id);
-        if (item) {
-            const [command] = item;
-            const commandInfo: ICommandInfo = {
-                id: command.id,
-                type: command.type,
-                params,
-            };
+        try {
+            const item = this._commandRegistry.getCommand(id);
+            if (item) {
+                const [command] = item;
+                const commandInfo: ICommandInfo = {
+                    id: command.id,
+                    type: command.type,
+                    params,
+                };
 
-            // If the executed command is of type `Mutation`, we should add a trigger params,
-            // whose value is the command's ID that triggers the mutation.
-            if (command.type === CommandType.MUTATION) {
-                const triggerCommand = findLast(
-                    this._commandExecutionStack,
-                    (item) => item.type === CommandType.COMMAND
-                );
-                if (triggerCommand) {
-                    commandInfo.params = commandInfo.params ?? {};
-                    (commandInfo.params as IMutationCommonParams).trigger = triggerCommand.id;
+                // If the executed command is of type `Mutation`, we should add a trigger params,
+                // whose value is the command's ID that triggers the mutation.
+                if (command.type === CommandType.MUTATION) {
+                    const triggerCommand = findLast(
+                        this._commandExecutionStack,
+                        (item) => item.type === CommandType.COMMAND
+                    );
+                    if (triggerCommand) {
+                        commandInfo.params = commandInfo.params ?? {};
+                        (commandInfo.params as IMutationCommonParams).trigger = triggerCommand.id;
+                    }
                 }
+
+                const stackItemDisposable = this._pushCommandExecutionStack(commandInfo);
+
+                this._beforeCommandExecutionListeners.forEach((listener) => listener(commandInfo, options));
+                const result = this._syncExecute<P, R>(command as ICommand<P, R>, params, options);
+                this._commandExecutedListeners.forEach((listener) => listener(commandInfo, options));
+
+                stackItemDisposable.dispose();
+
+                return result;
             }
 
-            const stackItemDisposable = this._pushCommandExecutionStack(commandInfo);
-
-            this._beforeCommandExecutionListeners.forEach((listener) => listener(commandInfo, options));
-            const result = this._syncExecute<P, R>(command as ICommand<P, R>, params, options);
-            this._commandExecutedListeners.forEach((listener) => listener(commandInfo, options));
-
-            stackItemDisposable.dispose();
-
-            return result;
+            throw new Error(`[CommandService]: command "${id}" is not registered.`);
+        } catch (error) {
+            if (error instanceof CustomCommandExecutionError) {
+                return false as R;
+            } else {
+                throw error;
+            }
         }
-
-        throw new Error(`[CommandService]: command "${id}" is not registered.`);
     }
 
     private _pushCommandExecutionStack(stackItem: ICommandExecutionStackItem): IDisposable {
@@ -444,8 +541,6 @@ class MultiCommand implements IMultiCommand {
         return toDisposable(() => {
             const index = this._implementations.indexOf(registry);
             this._implementations.splice(index, 1);
-
-            implementation.onDispose?.();
         });
     }
 

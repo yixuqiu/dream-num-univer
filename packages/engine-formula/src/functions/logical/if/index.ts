@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,49 +14,45 @@
  * limitations under the License.
  */
 
+import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
 import { ErrorType } from '../../../basics/error-type';
 import { expandArrayValueObject } from '../../../engine/utils/array-object';
-import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
 import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BooleanValueObject, NullValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class If extends BaseFunction {
+    override minParams = 2;
+
+    override maxParams = 3;
+
     override calculate(logicalTest: BaseValueObject, valueIfTrue: BaseValueObject, valueIfFalse: BaseValueObject = BooleanValueObject.create(false)) {
-        if (logicalTest == null || valueIfTrue == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
-        if (logicalTest.isError()) {
-            return logicalTest;
-        }
-
-        if (valueIfTrue.isError()) {
-            return valueIfTrue;
-        }
-
         // get single value object
-        logicalTest = this._getSingleValueObject(logicalTest);
+        const _logicalTest = this._getSingleValueObject(logicalTest);
 
-        if (!logicalTest.isArray()) {
-            return logicalTest.getValue() ? valueIfTrue : valueIfFalse;
+        if (_logicalTest.isError()) {
+            return _logicalTest;
+        }
+
+        if (!_logicalTest.isArray()) {
+            return _logicalTest.getValue() ? valueIfTrue : valueIfFalse;
         }
 
         // get max row length
         const maxRowLength = Math.max(
-            logicalTest.isArray() ? (logicalTest as ArrayValueObject).getRowCount() : 1,
+            _logicalTest.isArray() ? (_logicalTest as ArrayValueObject).getRowCount() : 1,
             valueIfTrue.isArray() ? (valueIfTrue as ArrayValueObject).getRowCount() : 1,
             valueIfFalse.isArray() ? (valueIfFalse as ArrayValueObject).getRowCount() : 1
         );
 
         // get max column length
         const maxColumnLength = Math.max(
-            logicalTest.isArray() ? (logicalTest as ArrayValueObject).getColumnCount() : 1,
+            _logicalTest.isArray() ? (_logicalTest as ArrayValueObject).getColumnCount() : 1,
             valueIfTrue.isArray() ? (valueIfTrue as ArrayValueObject).getColumnCount() : 1,
             valueIfFalse.isArray() ? (valueIfFalse as ArrayValueObject).getColumnCount() : 1
         );
 
-        const logicalTestArray = expandArrayValueObject(maxRowLength, maxColumnLength, logicalTest);
+        const logicalTestArray = expandArrayValueObject(maxRowLength, maxColumnLength, _logicalTest);
         const valueIfTrueArray = expandArrayValueObject(maxRowLength, maxColumnLength, valueIfTrue, ErrorValueObject.create(ErrorType.NA));
         const valueIfFalseArray = expandArrayValueObject(maxRowLength, maxColumnLength, valueIfFalse, ErrorValueObject.create(ErrorType.NA));
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +21,16 @@ import { ErrorValueObject } from '../../../engine/value-object/base-value-object
 import { BaseFunction } from '../../base-function';
 
 export class Hlookup extends BaseFunction {
+    override minParams = 3;
+
+    override maxParams = 4;
+
     override calculate(
         lookupValue: BaseValueObject,
         tableArray: BaseValueObject,
         rowIndexNum: BaseValueObject,
         rangeLookup?: BaseValueObject
     ) {
-        if (lookupValue == null || tableArray == null || rowIndexNum == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
         if (lookupValue.isError()) {
             return lookupValue;
         }

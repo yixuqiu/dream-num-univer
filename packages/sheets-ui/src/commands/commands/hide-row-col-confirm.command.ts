@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
+import type { IAccessor, ICommand } from '@univerjs/core';
 import { CommandType, ICommandService, IUniverInstanceService, LocaleService } from '@univerjs/core';
-import { getSheetCommandTarget, SelectionManagerService, SetColHiddenCommand, SetRowHiddenCommand } from '@univerjs/sheets';
+import { getSheetCommandTarget, SetColHiddenCommand, SetRowHiddenCommand, SheetsSelectionsService } from '@univerjs/sheets';
 import { IConfirmService } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
 
 import { isAllColumnsCovered, isAllRowsCovered } from './utils/selection-utils';
 
@@ -26,9 +25,9 @@ export const HideRowConfirmCommand: ICommand = {
     id: 'sheet.command.hide-row-confirm',
     type: CommandType.COMMAND,
     handler: async (accessor: IAccessor) => {
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
 
-        const ranges = selectionManagerService.getSelections()?.map((s) => s.range);
+        const ranges = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!ranges?.length) return false;
 
         const commandService = accessor.get(ICommandService);
@@ -66,9 +65,9 @@ export const HideColConfirmCommand: ICommand = {
     id: 'sheet.command.hide-col-confirm',
     type: CommandType.COMMAND,
     handler: async (accessor: IAccessor) => {
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
 
-        const ranges = selectionManagerService.getSelections()?.map((s) => s.range);
+        const ranges = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!ranges?.length) {
             return false;
         }

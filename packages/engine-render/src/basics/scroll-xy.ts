@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-export function getCurrentScrollXY(scrollTimer: any) {
+import type { ScrollTimer } from '../scroll-timer';
+import { Vector2 } from './vector2';
+
+export function getCurrentScrollXY(scrollTimer: ScrollTimer) {
     const scene = scrollTimer.getScene();
-    const viewport = scrollTimer.getViewportByCoord(scene);
+    const viewport = scene.findViewportByPosToScene(Vector2.FromArray([scrollTimer.offsetX, scrollTimer.offsetY]));
     const scrollX = 0;
     const scrollY = 0;
     if (!viewport) {
@@ -25,7 +28,7 @@ export function getCurrentScrollXY(scrollTimer: any) {
             scrollY,
         };
     }
-    const actualScroll = viewport.getActualScroll(viewport.scrollX, viewport.scrollY);
+    const actualScroll = viewport.transScroll2ViewportScrollValue(viewport.scrollX, viewport.scrollY);
     return {
         scrollX: actualScroll.x,
         scrollY: actualScroll.y,

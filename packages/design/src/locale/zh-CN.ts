@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import PickerZhCN from 'rc-picker/lib/locale/zh_CN';
-import dajsZhCN from 'dayjs/locale/zh';
 import type { ILocale } from './interface';
+import dajsZhCN from 'dayjs/locale/zh';
+import PickerZhCN from 'rc-picker/lib/locale/zh_CN';
 
 const locale: ILocale = {
     design: {
@@ -30,6 +30,12 @@ const locale: ILocale = {
         Picker: {
             ...dajsZhCN,
             ...PickerZhCN,
+        },
+        CascaderList: {
+            empty: '无',
+        },
+        Select: {
+            empty: '无',
         },
     },
 };

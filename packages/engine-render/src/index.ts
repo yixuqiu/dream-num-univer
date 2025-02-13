@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,36 +16,36 @@
 
 export * from './base-object';
 export * from './basics';
+export { getOffsetRectForDom } from './basics/position';
 export * from './canvas';
 export * from './components';
+export { UniverRenderConfigService } from './services/render-config.service';
+export { DocBackground } from './components/docs/doc-background';
+export { Documents } from './components/docs/document';
+export type { IPageRenderConfig } from './components/docs/document';
+export type { IDocumentOffsetConfig } from './components/docs/document';
+export { getTableIdAndSliceIndex } from './components/docs/layout/block/table';
+export { DocumentSkeleton } from './components/docs/layout/doc-skeleton';
+export type { IFindNodeRestrictions } from './components/docs/layout/doc-skeleton';
+export { getCharSpaceApply, getLastLine, getNumberUnitValue, getPageFromPath, glyphIterator, lineIterator } from './components/docs/layout/tools';
+export { Liquid } from './components/docs/liquid';
+export { DataStreamTreeNode } from './components/docs/view-model/data-stream-tree-node';
+export { DocumentViewModel } from './components/docs/view-model/document-view-model';
+export { DocumentEditArea } from './components/docs/view-model/document-view-model';
+export { parseDataStreamToTree } from './components/docs/view-model/document-view-model';
+export { getLastColumn } from './components/docs/layout/tools';
+export { DEFAULT_PADDING_DATA } from './components/sheets/sheet.render-skeleton';
 export * from './context';
 export * from './custom';
 export * from './engine';
 export * from './group';
 export * from './layer';
-export { IRenderingEngine, UniverRenderEnginePlugin } from './render-engine';
-export { type RenderComponentType, IRenderManagerService, RenderManagerService } from './render-manager/render-manager.service';
-export { RenderUnit, type IRender, type IRenderControllerCtor, type IRenderController, type IRenderContext } from './render-manager/render-unit';
+export { IRenderingEngine, UniverRenderEnginePlugin } from './plugin';
+export { IRenderManagerService, type RenderComponentType, RenderManagerService } from './render-manager/render-manager.service';
+export { type IRender, type IRenderContext, type IRenderModule, RenderUnit } from './render-manager/render-unit';
 export * from './scene';
+export { type IChangeObserverConfig } from './scene.transformer';
 export * from './scene-viewer';
 export * from './scroll-timer';
 export * from './shape';
 export * from './viewport';
-
-// doc
-export { DocumentViewModel } from './components/docs/view-model/document-view-model';
-export { getAnchorBounding, TEXT_RANGE_LAYER_INDEX, TextRange } from './components/docs/text-selection/text-range';
-export { NodePositionConvertToCursor } from './components/docs/text-selection/convert-cursor';
-export { Liquid } from './components/docs/liquid';
-export {
-    ITextSelectionRenderManager,
-    TextSelectionRenderManager,
-    getCanvasOffsetByEngine,
-} from './components/docs/text-selection/text-selection-render-manager';
-export type { IActiveTextRange, IEditorInputConfig, ITextSelectionInnerParam } from './components/docs/text-selection/text-selection-render-manager';
-export { Documents } from './components/docs/document';
-export { DocBackground } from './components/docs/doc-background';
-export type { IPageRenderConfig } from './components/docs/document';
-export { DocumentSkeleton } from './components/docs/layout/doc-skeleton';
-export { ThinEngine } from './thin-engine';
-export { getCharSpaceApply, getNumberUnitValue } from './components/docs/layout/tools';

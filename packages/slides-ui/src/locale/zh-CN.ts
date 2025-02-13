@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,45 @@
  */
 
 const locale = {
-    toolbar: {
-        undo: '撤销',
-        redo: '重做',
+    slide: {
+        append: '新增幻灯片',
+
+        text: {
+            insert: {
+                title: '插入文本',
+            },
+        },
+
+        shape: {
+            insert: {
+                title: '插入图形',
+                rectangle: '插入矩形',
+            },
+        },
+
+        image: {
+            insert: {
+                title: '插入图片',
+                float: '插入浮动图片',
+            },
+        },
+
+        popup: {
+            edit: '编辑',
+            delete: '删除',
+        },
+
+        sidebar: {
+            text: '编辑文本',
+            shape: '编辑图形',
+            image: '编辑图片',
+        },
+
+        panel: {
+            fill: {
+                title: '填充',
+            },
+        },
     },
 };
 

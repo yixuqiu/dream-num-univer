@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,57 @@
  * limitations under the License.
  */
 
-
-import type { Nullable } from '../shared';
-import { ObjectMatrix, Rectangle, Tools } from '../shared';
+import type { IInterceptor } from '../common/interceptor';
+import type { IObjectMatrixPrimitiveType, Nullable } from '../shared';
+import type { IDocumentData, IDocumentRenderConfig, IPaddingData, IStyleData, ITextRotation } from '../types/interfaces';
+import type { Styles } from './styles';
+import type { CustomData, ICellData, ICellDataForSheetInterceptor, ICellDataWithSpanAndDisplay, IFreeze, IRange, ISelectionCell, IWorksheetData } from './typedef';
+import { BuildTextUtils, DocumentDataModel } from '../docs';
+import { convertTextRotation, getFontStyleString } from '../docs/data-model/utils';
+import { composeStyles, ObjectMatrix, Tools } from '../shared';
 import { createRowColIter } from '../shared/row-col-iter';
-import { type BooleanNumber, CellValueType } from '../types/enum';
-import type { ICellData, ICellDataForSheetInterceptor, IFreeze, IRange, IWorksheetData } from '../types/interfaces';
+import { DEFAULT_STYLES } from '../types/const';
+import { type BooleanNumber, CellValueType, type HorizontalAlign, type TextDirection, type VerticalAlign, type WrapStrategy } from '../types/enum';
 import { ColumnManager } from './column-manager';
 import { Range } from './range';
 import { RowManager } from './row-manager';
 import { mergeWorksheetSnapshotWithDefault } from './sheet-snapshot-utils';
-import type { Styles } from './styles';
+import { SpanModel } from './span-model';
+import { CellModeEnum } from './typedef';
+import { addLinkToDocumentModel, createDocumentModelWithStyle, DEFAULT_PADDING_DATA, extractOtherStyle, getFontFormat, isNotNullOrUndefined } from './util';
 import { SheetViewModel } from './view-model';
 
+export interface IDocumentLayoutObject {
+    documentModel: Nullable<DocumentDataModel>;
+    fontString: string;
+    textRotation: ITextRotation;
+    wrapStrategy: WrapStrategy;
+    verticalAlign: VerticalAlign;
+    horizontalAlign: HorizontalAlign;
+    paddingData: IPaddingData;
+    fill?: Nullable<string>;
+}
+export interface ICellOtherConfig {
+    textRotation?: ITextRotation;
+    textDirection?: Nullable<TextDirection>;
+    horizontalAlign?: HorizontalAlign;
+    verticalAlign?: VerticalAlign;
+    wrapStrategy?: WrapStrategy;
+    paddingData?: IPaddingData;
+    cellValueType?: CellValueType;
+}
+
+export interface ICellDocumentModelOption {
+    isDeepClone?: boolean;
+    displayRawFormula?: boolean;
+    ignoreTextRotation?: boolean;
+}
+
+const DEFAULT_CELL_DOCUMENT_MODEL_OPTION = {
+    isDeepClone: false,
+    displayRawFormula: false,
+    ignoreTextRotation: false,
+};
 /**
  * The model of a Worksheet.
  */
@@ -40,6 +78,8 @@ export class Worksheet {
 
     protected readonly _viewModel: SheetViewModel;
 
+    protected _spanModel: SpanModel;
+
     constructor(
         public readonly unitId: string,
         snapshot: Partial<IWorksheetData>,
@@ -49,19 +89,20 @@ export class Worksheet {
 
         const { columnData, rowData, cellData } = this._snapshot;
         this._sheetId = this._snapshot.id ?? Tools.generateRandomId(6);
-        this._cellData = new ObjectMatrix<ICellData>(cellData);
+        this._cellData = new ObjectMatrix<ICellData>(cellData as IObjectMatrixPrimitiveType<ICellData>);
 
         // This view model will immediately injected with hooks from SheetViewModel service as Worksheet is constructed.
         this._viewModel = new SheetViewModel((row, col) => this.getCellRaw(row, col));
         this._rowManager = new RowManager(this._snapshot, this._viewModel, rowData);
         this._columnManager = new ColumnManager(this._snapshot, columnData);
+        this._spanModel = new SpanModel(this._snapshot.mergeData);
     }
 
     /**
      * @internal
      * @param callback
      */
-    __interceptViewModel(callback: (viewModel: SheetViewModel) => void) {
+    __interceptViewModel(callback: (viewModel: SheetViewModel) => void): void {
         callback(this._viewModel);
     }
 
@@ -70,8 +111,120 @@ export class Worksheet {
     }
 
     /**
+     * Set the merge data of the sheet, all the merged cells will be rebuilt.
+     * @param mergeData
+     */
+    setMergeData(mergeData: IRange[]): void {
+        this._snapshot.mergeData = mergeData;
+        this.getSpanModel().rebuild(mergeData);
+    }
+
+    getSpanModel(): SpanModel {
+        return this._spanModel;
+    }
+
+    getStyleDataByHash(hash: string): Nullable<IStyleData> {
+        const data = this._styles.get(hash);
+        return { ...data };
+    }
+
+    setStyleData(style: IStyleData): Nullable<string> {
+        return this._styles.setValue(style);
+    }
+
+    /**
+     * Get the style of the column.
+     * @param {number} column The column index
+     * @param {boolean} [keepRaw] If true, return the raw style data, otherwise return the style data object
+     * @returns {Nullable<IStyleData>|string} The style of the column
+     */
+    getColumnStyle(column: number, keepRaw = false): string | Nullable<IStyleData> {
+        if (keepRaw) {
+            return this._columnManager.getColumnStyle(column);
+        }
+        return this._styles.get(this._columnManager.getColumnStyle(column));
+    }
+
+    /**
+     * Set the style of the column.
+     * @param {number} column The column index
+     * @param {string|Nullable<IStyleData>} style The style to be set
+     */
+    setColumnStyle(column: number, style: string | Nullable<IStyleData>): void {
+        this._columnManager.setColumnStyle(column, style);
+    }
+
+    /**
+     * Get the style of the row.
+     * @param {number} row The row index
+     * @param {boolean} [keepRaw] If true, return the raw style data, otherwise return the style data object
+     * @returns {Nullable<IStyleData>} The style of the row
+     */
+    getRowStyle(row: number, keepRaw = false): string | Nullable<IStyleData> {
+        if (keepRaw) {
+            return this._rowManager.getRowStyle(row);
+        }
+        return this._styles.get(this._rowManager.getRowStyle(row));
+    }
+
+    /**
+     * Set the style of the row.
+     * @param {number} row
+     * @param {string|Nullable<IStyleData>} style The style to be set
+     */
+    setRowStyle(row: number, style: string | Nullable<IStyleData>): void {
+        this._rowManager.setRowStyle(row, style);
+    }
+
+    /**
+     * this function is used to mixin default style to cell raw{number}
+     * @param {number} row The row index
+     * @param {number} col The column index
+     * @param cellRaw The cell raw data
+     * @param {boolean} isRowStylePrecedeColumnStyle The priority of row style and column style
+     */
+    mixinDefaultStyleToCellRaw(row: number, col: number, cellRaw: Nullable<ICellData>, isRowStylePrecedeColumnStyle: boolean) {
+        const columnStyle = this.getColumnStyle(col) as Nullable<IStyleData>;
+        const rowStyle = this.getRowStyle(row) as Nullable<IStyleData>;
+        const defaultStyle = this.getDefaultCellStyleInternal();
+        if (defaultStyle || columnStyle || rowStyle) {
+            let cellStyle = cellRaw?.s;
+            if (typeof cellStyle === 'string') {
+                cellStyle = this._styles.get(cellStyle);
+            }
+            const s = isRowStylePrecedeColumnStyle ? composeStyles(defaultStyle, columnStyle, rowStyle, cellStyle) : composeStyles(defaultStyle, rowStyle, columnStyle, cellStyle);
+            if (!cellRaw) {
+                // eslint-disable-next-line no-param-reassign
+                cellRaw = {};
+            }
+            cellRaw.s = s;
+        }
+    }
+
+    /**
+     * Get the default style of the worksheet.
+     * @returns {Nullable<IStyleData>} Default Style
+     */
+    getDefaultCellStyle(): Nullable<IStyleData> | string {
+        return this._snapshot.defaultStyle;
+    }
+
+    getDefaultCellStyleInternal(): Nullable<IStyleData> {
+        const style = this._snapshot.defaultStyle;
+        return this._styles.get(style);
+    }
+
+    /**
+     * Set Default Style, if the style has been set, all cells style will be base on this style.
+     * @param {Nullable<IStyleData>} style The style to be set as default style
+     */
+    setDefaultCellStyle(style: Nullable<IStyleData> | string): void {
+        this._snapshot.defaultStyle = style;
+    }
+
+    /**
      * Returns WorkSheet Cell Data Matrix
-     * @returns
+     * @returns WorkSheet Cell Data Matrix
      */
     getCellMatrix(): ObjectMatrix<Nullable<ICellData>> {
         return this._cellData;
@@ -81,6 +234,7 @@ export class Worksheet {
      * Get worksheet printable cell range.
      * @returns
      */
+    // eslint-disable-next-line max-lines-per-function
     getCellMatrixPrintRange() {
         const matrix = this.getCellMatrix();
         const mergedCells = this.getMergeData();
@@ -93,6 +247,7 @@ export class Worksheet {
         let rowInitd = false;
         let columnInitd = false;
         matrix.forEach((rowIndex, row) => {
+            // eslint-disable-next-line complexity
             Object.keys(row).forEach((colIndexStr) => {
                 const colIndex = +colIndexStr;
                 const cellValue = matrix.getValue(rowIndex, colIndex);
@@ -213,32 +368,125 @@ export class Worksheet {
         return new Worksheet(this.unitId, copy, this._styles);
     }
 
+    /**
+     * Get the merged cell list of the sheet.
+     * @returns {IRange[]} merged cell list
+     */
     getMergeData(): IRange[] {
-        return this._snapshot.mergeData;
+        return this._spanModel.getMergeDataSnapshot();
     }
 
+    /**
+     * Get the merged cell Range of the sheet cell.
+     * If (row, col) is not in a merged cell, return null
+     *
+     * @param {number} row The row index of test cell
+     * @param {number} col The column index of test cell
+     * @returns {Nullable<IRange>} The merged cell range of the cell, if the cell is not in a merged cell, return null
+     */
     getMergedCell(row: number, col: number): Nullable<IRange> {
-        const rectangleList = this._snapshot.mergeData;
-        for (let i = 0; i < rectangleList.length; i++) {
-            const range = rectangleList[i];
-            if (
-                Rectangle.intersects(
-                    {
-                        startRow: row,
-                        startColumn: col,
-                        endRow: row,
-                        endColumn: col,
-                    },
-                    range
-                )
-            ) {
-                return range;
+        return this._spanModel.getMergedCell(row, col);
+    }
+
+    /**
+     * Get the merged cell info list which has intersection with the given range.
+     * @param {number} startRow The start row index of the range
+     * @param {number} startColumn The start column index of the range
+     * @param {number} endRow The end row index of the range
+     * @param {number} endColumn The end column index of the range
+     * @returns {IRange} The merged cell info list which has intersection with the given range or empty array if no merged cell in the range
+     */
+    getMergedCellRange(startRow: number, startColumn: number, endRow: number, endColumn: number): IRange[] {
+        return this._spanModel.getMergedCellRange(startRow, startColumn, endRow, endColumn);
+    }
+
+    /**
+     * Get if the row contains merged cell
+     * @param {number} row The row index
+     * @returns {boolean} Is merge cell across row
+     */
+    isRowContainsMergedCell(row: number): boolean {
+        return this._spanModel.isRowContainsMergedCell(row);
+    }
+
+    /**
+     * Get if the column contains merged cell
+     * @param {number} column The column index
+     * @returns {boolean} Is merge cell across column
+     */
+    isColumnContainsMergedCell(column: number): boolean {
+        return this._spanModel.isColumnContainsMergedCell(column);
+    }
+
+    /**
+     * Get cell info with merge data
+     * @param {number} row - The row index of the cell.
+     * @param {number} column - The column index of the cell.
+     * @type {selectionCell}
+     * @property {number} actualRow - The actual row index of the cell
+     * @property {number} actualColumn - The actual column index of the cell
+     * @property {boolean} isMergedMainCell - Whether the cell is the main cell of the merged cell, only the upper left cell in the merged cell returns true here
+     * @property {boolean} isMerged - Whether the cell is in a merged cell, the upper left cell in the merged cell returns false here
+     * @property {number} endRow - The end row index of the merged cell
+     * @property {number} endColumn - The end column index of the merged cell
+     * @property {number} startRow - The start row index of the merged cell
+     * @property {number} startColumn - The start column index of the merged cell
+     * @returns  {selectionCell} - The cell info with merge data
+     */
+    getCellInfoInMergeData(row: number, column: number): ISelectionCell {
+        const mergeRange = this.getMergedCell(row, column);
+        let isMerged = false; // The upper left cell only renders the content
+        let isMergedMainCell = false;
+        let mergeEndRow = row;
+        let mergeEndColumn = column;
+        let mergeStartRow = row;
+        let mergeStartColumn = column;
+        if (mergeRange) {
+            const {
+                startRow: startRowMerge,
+                endRow: endRowMerge,
+                startColumn: startColumnMerge,
+                endColumn: endColumnMerge,
+            } = mergeRange;
+            if (row === startRowMerge && column === startColumnMerge) {
+                mergeEndRow = endRowMerge;
+                mergeEndColumn = endColumnMerge;
+                mergeStartRow = startRowMerge;
+                mergeStartColumn = startColumnMerge;
+
+                isMergedMainCell = true;
+            } else if (row >= startRowMerge && row <= endRowMerge && column >= startColumnMerge && column <= endColumnMerge) {
+                mergeEndRow = endRowMerge;
+                mergeEndColumn = endColumnMerge;
+                mergeStartRow = startRowMerge;
+                mergeStartColumn = startColumnMerge;
+
+                isMerged = true;
             }
         }
 
-        return null;
+        return {
+            actualRow: row,
+            actualColumn: column,
+            isMergedMainCell,
+            isMerged,
+            endRow: mergeEndRow,
+            endColumn: mergeEndColumn,
+            startRow: mergeStartRow,
+            startColumn: mergeStartColumn,
+        };
     }
 
+    /**
+     * Get cellData, includes cellData, customRender, markers, dataValidate, etc.
+     *
+     * WARNING: All sheet CELL_CONTENT interceptors will be called in this method, cause performance issue.
+     * example: this._sheetInterceptorService.intercept(INTERCEPTOR_POINT.CELL_CONTENT);
+     *
+     * @param row
+     * @param col
+     * @returns ICellDataForSheetInterceptor
+     */
     getCell(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
         if (row < 0 || col < 0) {
             return null;
@@ -247,8 +495,41 @@ export class Worksheet {
         return this._viewModel.getCell(row, col);
     }
 
+    /**
+     * Get cellData only use effect on value interceptor
+     * @param {number} number row The row index of the cell.
+     * @param {number} number col The column index of the cell.
+     * @returns {Nullable<ICellDataForSheetInterceptor>} The cell data only use effect on value interceptor
+     */
+    getCellValueOnly(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
+        if (row < 0 || col < 0) {
+            return null;
+        }
+
+        return this._viewModel.getCellValueOnly(row, col);
+    }
+
+    /**
+     * Get cellData only use effect on style interceptor
+     * @param {number} row The row index of the cell.
+     * @param {number} col The column index of the cell.
+     * @returns {Nullable<ICellDataForSheetInterceptor>} The cell data only use effect on style interceptor
+     */
+    getCellStyleOnly(row: number, col: number): Nullable<ICellDataForSheetInterceptor> {
+        if (row < 0 || col < 0) {
+            return null;
+        }
+
+        return this._viewModel.getCellStyleOnly(row, col);
+    }
+
     getCellRaw(row: number, col: number): Nullable<ICellData> {
         return this.getCellMatrix().getValue(row, col);
+    }
+
+    // eslint-disable-next-line ts/no-explicit-any
+    getCellWithFilteredInterceptors(row: number, col: number, key: string, filter: (interceptor: IInterceptor<any, any>) => boolean): Nullable<ICellDataForSheetInterceptor> {
+        return this._viewModel.getCell(row, col, key, filter);
     }
 
     getRowFiltered(row: number): boolean {
@@ -260,27 +541,58 @@ export class Worksheet {
      *
      * Notice that `ICellData` here is not after copying. In another word, the object matrix here should be
      * considered as a slice of the original worksheet data matrix.
+     *
+     * Control the v attribute in the return cellData.v through dataMode
      */
+
+    getMatrixWithMergedCells(
+        row: number,
+        col: number,
+        endRow: number,
+        endCol: number
+    ): ObjectMatrix<ICellDataWithSpanAndDisplay>;
+
     getMatrixWithMergedCells(
         row: number,
         col: number,
         endRow: number,
         endCol: number,
-        isRaw = false
-    ): ObjectMatrix<ICellData & { rowSpan?: number; colSpan?: number }> {
+        dataMode: CellModeEnum
+    ): ObjectMatrix<ICellDataWithSpanAndDisplay>;
+
+    getMatrixWithMergedCells(
+        row: number,
+        col: number,
+        endRow: number,
+        endCol: number,
+        dataMode: CellModeEnum = CellModeEnum.Raw
+    ): ObjectMatrix<ICellDataWithSpanAndDisplay> {
         const matrix = this.getCellMatrix();
 
         // get all merged cells
-        const mergedCellsInRange = this._snapshot.mergeData.filter((rect) =>
-            Rectangle.intersects({ startRow: row, startColumn: col, endRow, endColumn: endCol }, rect)
-        );
+        const mergedCellsInRange = this._spanModel.getMergedCellRange(row, col, endRow, endCol);
 
         // iterate all cells in the range
-        const returnCellMatrix = new ObjectMatrix<ICellData & { rowSpan?: number; colSpan?: number }>();
+        const returnCellMatrix = new ObjectMatrix<ICellDataWithSpanAndDisplay>();
         createRowColIter(row, endRow, col, endCol).forEach((row, col) => {
-            const v = isRaw ? this.getCellRaw(row, col) : this.getCell(row, col);
-            if (v) {
-                returnCellMatrix.setValue(row, col, v);
+            let cellData: Nullable<ICellDataWithSpanAndDisplay>;
+            if (dataMode === CellModeEnum.Raw) {
+                cellData = this.getCellRaw(row, col);
+            } else if (dataMode === CellModeEnum.Intercepted) {
+                cellData = this.getCell(row, col);
+            } else if (dataMode === CellModeEnum.Both) {
+                const cellDataRaw = this.getCellRaw(row, col);
+                if (cellDataRaw) {
+                    cellData = { ...cellDataRaw };
+                    const displayV = this.getCell(row, col)?.v;
+                    if (isNotNullOrUndefined(displayV) && cellData) {
+                        cellData.displayV = String(displayV);
+                    }
+                }
+            }
+
+            if (cellData) {
+                returnCellMatrix.setValue(row, col, cellData);
             }
         });
 
@@ -328,6 +640,13 @@ export class Worksheet {
                 getStyles: () => this._styles,
             }
         );
+    }
+
+    getScrollLeftTopFromSnapshot() {
+        return {
+            scrollLeft: this._snapshot.scrollLeft,
+            scrollTop: this._snapshot.scrollTop,
+        };
     }
 
     /**
@@ -402,7 +721,7 @@ export class Worksheet {
 
     /**
      * Returns true if the sheet's gridlines are hidden; otherwise returns false. Gridlines are visible by default.
-     * @returns Gridlines Hidden Status
+     * @returns {boolean} Gridlines Hidden Status.
      */
     hasHiddenGridlines(): boolean {
         const { _snapshot: _config } = this;
@@ -412,6 +731,14 @@ export class Worksheet {
         }
 
         return false;
+    }
+
+    /**
+     * Returns the color of the gridlines, or undefined if the gridlines are not colored.
+     * @returns {string | undefined} returns the color of the gridlines, or undefined if the gridlines are default.
+     */
+    getGridlinesColor(): string | undefined {
+        return this.getConfig().gridlinesColor;
     }
 
     /**
@@ -447,19 +774,25 @@ export class Worksheet {
     }
 
     /**
-     * Get if the row in visible. It may be affected by features like filter and view.
-     * @param row the row index
-     * @returns if the row in visible to the user
+     * Row is filtered out, that means this row is invisible.
+     * @param row
+     * @returns {boolean} is row hidden by filter
      */
-    getRowVisible(row: number): boolean {
-        const filtered = this._viewModel.getRowFiltered(row);
-        if (filtered) return false;
-
-        return this.getRowRawVisible(row);
+    isRowFiltered(row: number): boolean {
+        return this._viewModel.getRowFiltered(row);
     }
 
     /**
-     * Get if the row does not have `hidden` property.
+     * Get if the row is visible. It may be affected by features like filter and view.
+     * @param row the row index
+     * @returns {boolean} if the row in visible to the user
+     */
+    getRowVisible(row: number): boolean {
+        return !this.isRowFiltered(row) && this.getRowRawVisible(row);
+    }
+
+    /**
+     * Get if the row does not have `hidden` property. This value won't affected by features like filter and view.
      * @param row the row index
      * @returns if the row does not have `hidden` property
      */
@@ -488,7 +821,7 @@ export class Worksheet {
     }
 
     /**
-     * Get all visible rows in the sheet.
+     * Get all visible rows in the sheet.(not include filter & view, like getRawVisibleRows)
      * @returns Visible rows range list
      */
     getVisibleRows(): IRange[] {
@@ -497,7 +830,7 @@ export class Worksheet {
     }
 
     /**
-     * Get all visible columns in the sheet.
+     * Get all visible columns in the sheet.(not include filter & view)
      * @returns Visible columns range list
      */
     getVisibleCols(): IRange[] {
@@ -530,6 +863,10 @@ export class Worksheet {
      */
     getLastColumnWithContent(): number {
         return this._cellData.getRange().endColumn;
+    }
+
+    getDataRangeScope(): IRange {
+        return this._cellData.getStartEndScope();
     }
 
     cellHasValue(value: ICellData) {
@@ -684,6 +1021,222 @@ export class Worksheet {
 
         // #endregion
     }
+
+    /**
+     * This method generates a document model based on the cell's properties and handles the associated styles and configurations.
+     * If the cell does not exist, it will return null.
+     * PS: This method has significant impact on performance.
+     * @param cell
+     * @param options
+     */
+    // eslint-disable-next-line complexity, max-lines-per-function
+    private _getCellDocumentModel(
+        cell: Nullable<ICellDataForSheetInterceptor>,
+        options: ICellDocumentModelOption = DEFAULT_CELL_DOCUMENT_MODEL_OPTION
+    ): Nullable<IDocumentLayoutObject> {
+        const { isDeepClone, displayRawFormula, ignoreTextRotation } = {
+            ...DEFAULT_CELL_DOCUMENT_MODEL_OPTION,
+            ...options,
+        };
+
+        const style = this._styles.getStyleByCell(cell);
+
+        if (!cell) {
+            return;
+        }
+
+        let documentModel: Nullable<DocumentDataModel>;
+        let fontString = 'document';
+        const cellOtherConfig = extractOtherStyle(style);
+
+        const textRotation: ITextRotation = ignoreTextRotation
+            ? DEFAULT_STYLES.tr
+            : cellOtherConfig.textRotation || DEFAULT_STYLES.tr;
+        let horizontalAlign: HorizontalAlign = cellOtherConfig.horizontalAlign || DEFAULT_STYLES.ht;
+        const verticalAlign: VerticalAlign = cellOtherConfig.verticalAlign || DEFAULT_STYLES.vt;
+        const wrapStrategy: WrapStrategy = cellOtherConfig.wrapStrategy || DEFAULT_STYLES.tb;
+        const paddingData: IPaddingData = cellOtherConfig.paddingData || DEFAULT_PADDING_DATA;
+
+        if (cell.f && displayRawFormula) {
+            // The formula does not detect horizontal alignment and rotation.
+            documentModel = createDocumentModelWithStyle(cell.f.toString(), {}, { verticalAlign });
+            horizontalAlign = DEFAULT_STYLES.ht;
+        } else if (cell.p) {
+            const { centerAngle, vertexAngle } = convertTextRotation(textRotation);
+            documentModel = this._updateConfigAndGetDocumentModel(
+                isDeepClone ? Tools.deepClone(cell.p) : cell.p,
+                horizontalAlign,
+                paddingData,
+                {
+                    horizontalAlign,
+                    verticalAlign,
+                    centerAngle,
+                    vertexAngle,
+                    wrapStrategy,
+                    zeroWidthParagraphBreak: 1,
+                }
+            );
+        } else if (cell.v != null) {
+            const textStyle = getFontFormat(style);
+            fontString = getFontStyleString(textStyle).fontCache;
+
+            let cellText = extractPureTextFromCell(cell);
+
+            // Add a single quotation mark to the force string type. Don't add single quotation mark in extractPureTextFromCell, because copy and paste will be affected.
+            // edit mode when displayRawFormula is true
+            if (cell.t === CellValueType.FORCE_STRING && displayRawFormula) {
+                cellText = `'${cellText}`;
+            }
+
+            documentModel = createDocumentModelWithStyle(cellText, textStyle, {
+                ...cellOtherConfig,
+                textRotation,
+                cellValueType: cell.t!,
+            });
+        }
+
+        // This is a compatible code. cc @weird94
+        if (documentModel && cell.linkUrl && cell.linkId) {
+            addLinkToDocumentModel(documentModel, cell.linkUrl, cell.linkId);
+        }
+
+        /**
+         * the alignment mode is returned with respect to the offset of the sheet cell,
+         * because the document needs to render the layout for cells and
+         * support alignment across multiple cells (e.g., horizontal alignment of long text in overflow mode).
+         * The alignment mode of the document itself cannot meet this requirement,
+         * so an additional renderConfig needs to be added during the rendering of the document component.
+         * This means that there are two coexisting alignment modes.
+         * In certain cases, such as in an editor, conflicts may arise,
+         * requiring only one alignment mode to be retained.
+         * By removing the relevant configurations in renderConfig,
+         * the alignment mode of the sheet cell can be modified.
+         * The alternative alignment mode is applied to paragraphs within the document.
+         */
+        return {
+            documentModel,
+            fontString,
+            textRotation,
+            wrapStrategy,
+            verticalAlign,
+            horizontalAlign,
+            paddingData,
+            fill: style?.bg?.rgb,
+        };
+    }
+
+    private _updateConfigAndGetDocumentModel(
+        documentData: IDocumentData,
+        horizontalAlign: HorizontalAlign,
+        paddingData: IPaddingData,
+        renderConfig?: IDocumentRenderConfig
+    ): Nullable<DocumentDataModel> {
+        if (!renderConfig) {
+            return;
+        }
+
+        if (!documentData.body?.dataStream) {
+            return;
+        }
+
+        if (!documentData.documentStyle) {
+            documentData.documentStyle = {};
+        }
+
+        documentData.documentStyle.marginTop = paddingData.t ?? 0;
+        documentData.documentStyle.marginBottom = paddingData.b ?? 2;
+        documentData.documentStyle.marginLeft = paddingData.l ?? 2;
+        documentData.documentStyle.marginRight = paddingData.r ?? 2;
+
+        // Fix https://github.com/dream-num/univer/issues/1586
+        documentData.documentStyle.pageSize = {
+            width: Number.POSITIVE_INFINITY,
+            height: Number.POSITIVE_INFINITY,
+        };
+
+        documentData.documentStyle.renderConfig = {
+            ...documentData.documentStyle.renderConfig,
+            ...renderConfig,
+        };
+
+        const paragraphs = documentData.body.paragraphs || [];
+
+        for (const paragraph of paragraphs) {
+            if (!paragraph.paragraphStyle) {
+                paragraph.paragraphStyle = {};
+            }
+
+            paragraph.paragraphStyle.horizontalAlign = horizontalAlign;
+        }
+
+        return new DocumentDataModel(documentData);
+    }
+
+    /**
+     * Only used for cell edit, and no need to rotate text when edit cell content!
+     */
+    getBlankCellDocumentModel(cell: Nullable<ICellData>): IDocumentLayoutObject {
+        const documentModelObject = this._getCellDocumentModel(cell, { ignoreTextRotation: true });
+
+        const style = this._styles.getStyleByCell(cell);
+        const textStyle = getFontFormat(style);
+
+        if (documentModelObject != null) {
+            if (documentModelObject.documentModel == null) {
+                documentModelObject.documentModel = createDocumentModelWithStyle('', textStyle);
+            }
+            return documentModelObject;
+        }
+
+        const content = '';
+
+        let fontString = 'document';
+
+        const textRotation: ITextRotation = DEFAULT_STYLES.tr;
+        const horizontalAlign: HorizontalAlign = DEFAULT_STYLES.ht;
+        const verticalAlign: VerticalAlign = DEFAULT_STYLES.vt;
+        const wrapStrategy: WrapStrategy = DEFAULT_STYLES.tb;
+        const paddingData: IPaddingData = DEFAULT_PADDING_DATA;
+
+        fontString = getFontStyleString({}).fontCache;
+
+        const documentModel = createDocumentModelWithStyle(content, textStyle);
+
+        return {
+            documentModel,
+            fontString,
+            textRotation,
+            wrapStrategy,
+            verticalAlign,
+            horizontalAlign,
+            paddingData,
+        };
+    }
+
+    // Only used for cell edit, and no need to rotate text when edit cell content!
+    getCellDocumentModelWithFormula(cell: ICellData): Nullable<IDocumentLayoutObject> {
+        return this._getCellDocumentModel(cell, {
+            isDeepClone: true,
+            displayRawFormula: true,
+            ignoreTextRotation: true,
+        });
+    }
+
+    /**
+     * Get custom metadata of worksheet
+     * @returns {CustomData | undefined} custom metadata
+     */
+    getCustomMetadata(): CustomData | undefined {
+        return this._snapshot.custom;
+    }
+
+    /**
+     * Set custom metadata of workbook
+     * @param {CustomData | undefined} custom custom metadata
+     */
+    setCustomMetadata(custom: CustomData | undefined) {
+        this._snapshot.custom = custom;
+    }
 }
 
 /**
@@ -703,16 +1256,22 @@ export interface ICell {
  * @returns pure text in this cell
  */
 export function extractPureTextFromCell(cell: Nullable<ICellData>): string {
-    if (!cell) return '';
+    if (!cell) {
+        return '';
+    }
 
     const richTextValue = cell.p?.body?.dataStream;
-    if (richTextValue) return richTextValue;
+    if (richTextValue) {
+        return BuildTextUtils.transform.getPlainText(richTextValue);
+    }
 
     const rawValue = cell.v;
 
     if (typeof rawValue === 'string') {
-        if (cell.t === CellValueType.BOOLEAN) return rawValue.toUpperCase();
-        return rawValue;
+        if (cell.t === CellValueType.BOOLEAN) {
+            return rawValue.toUpperCase();
+        }
+        return rawValue.replace(/[\r\n]/g, '');
     };
 
     if (typeof rawValue === 'number') {
@@ -723,4 +1282,24 @@ export function extractPureTextFromCell(cell: Nullable<ICellData>): string {
     if (typeof rawValue === 'boolean') return rawValue ? 'TRUE' : 'FALSE';
 
     return '';
+}
+
+export function getOriginCellValue(cell: Nullable<ICellData>) {
+    if (cell === null) {
+        return '';
+    }
+
+    if (cell?.p) {
+        const body = cell?.p.body;
+
+        if (body == null) {
+            return '';
+        }
+
+        const data = body.dataStream;
+        const newDataStream = BuildTextUtils.transform.getPlainText(data);
+        return newDataStream;
+    }
+
+    return cell?.v;
 }

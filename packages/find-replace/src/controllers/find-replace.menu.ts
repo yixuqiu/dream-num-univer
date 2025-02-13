@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 import { EDITOR_ACTIVATED, FOCUSING_SHEET, IContextService, UniverInstanceType } from '@univerjs/core';
 import type { IMenuButtonItem } from '@univerjs/ui';
-import { getMenuHiddenObservable, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
+import { getMenuHiddenObservable, MenuItemType } from '@univerjs/ui';
+import type { IAccessor } from '@univerjs/core';
 import { combineLatest, map } from 'rxjs';
 
 import { OpenFindDialogOperation } from '../commands/operations/find-replace.operation';
@@ -29,9 +29,7 @@ export function FindReplaceMenuItemFactory(accessor: IAccessor): IMenuButtonItem
         id: OpenFindDialogOperation.id,
         icon: 'SearchIcon',
         tooltip: 'find-replace.toolbar',
-        group: MenuGroup.TOOLBAR_OTHERS,
         type: MenuItemType.BUTTON,
-        positions: [MenuPosition.TOOLBAR_START],
         hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
         disabled$: combineLatest([
             contextService.subscribeContextValue$(EDITOR_ACTIVATED),

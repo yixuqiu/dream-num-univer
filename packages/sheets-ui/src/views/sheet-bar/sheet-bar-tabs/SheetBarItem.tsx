@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 import type { BooleanNumber } from '@univerjs/core';
 import { ColorKit, ThemeService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { useDependency } from '@univerjs/ui';
 import React, { useEffect, useState } from 'react';
 
 import styles from './index.module.less';
 
 export interface IBaseSheetBarProps {
-    label?: string;
+    label?: React.ReactNode;
     children?: any[];
     index?: number;
     color?: string;
@@ -55,7 +55,12 @@ export function SheetBarItem(props: IBaseSheetBarProps) {
         <div
             key={sheetId}
             data-id={sheetId}
-            className={currentSelected ? `${styles.slideTabActive} ${styles.slideTabItem}` : styles.slideTabItem}
+            className={currentSelected
+                ? `
+                  ${styles.slideTabActive}
+                  ${styles.slideTabItem}
+                `
+                : styles.slideTabItem}
             style={{
                 backgroundColor: !currentSelected && color ? color : '',
                 color: !currentSelected && color ? getTextColor(color) : '',
@@ -63,7 +68,7 @@ export function SheetBarItem(props: IBaseSheetBarProps) {
                     currentSelected && color ? `0px 0px 8px rgba(0, 0, 0, 0.08), inset 0px -2px 0px 0px ${color}` : '',
             }}
         >
-            <span className={styles.slideTabSpan}>{label}</span>
+            <div className={styles.slideTabDiv}>{label}</div>
         </div>
     );
 }

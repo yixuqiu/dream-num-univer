@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,19 +53,15 @@ enum FunctionNumIgnoreHidden {
 }
 
 export class Subtotal extends BaseFunction {
+    override minParams = 2;
+
+    override maxParams = 255;
+
     override needsReferenceObject = true;
 
     override calculate(functionNum: FunctionVariantType, ...refs: FunctionVariantType[]) {
-        if (functionNum == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
         if (functionNum.isError()) {
             return functionNum;
-        }
-
-        if (refs.length === 0) {
-            return ErrorValueObject.create(ErrorType.NA);
         }
 
         if (functionNum.isReferenceObject()) {
@@ -88,6 +84,7 @@ export class Subtotal extends BaseFunction {
         return this._handleSingleObject(functionNum as BaseValueObject, ...refs);
     }
 
+    // eslint-disable-next-line max-lines-per-function, complexity
     private _handleSingleObject(functionNum: Nullable<BaseValueObject>, ...refs: FunctionVariantType[]) {
         const indexNum = this._getIndexNumValue(functionNum);
         let result;
@@ -199,13 +196,28 @@ export class Subtotal extends BaseFunction {
     }
 
     private _count(ignoreHidden: boolean, ...refs: FunctionVariantType[]) {
-        const flattenArray = this._flattenRefArray(ignoreHidden, ...refs);
+        let accumulatorAll: BaseValueObject = NumberValueObject.create(0);
+        for (let i = 0; i < refs.length; i++) {
+            const variant = refs[i];
 
-        if (flattenArray.isError()) {
-            return flattenArray;
+            if (!variant.isReferenceObject()) {
+                return ErrorValueObject.create(ErrorType.VALUE);
+            }
+
+            const rowData = (variant as BaseReferenceObject).getRowData();
+
+            (variant as BaseReferenceObject).iterator((valueObject, rowIndex) => {
+                if (ignoreHidden && this._isRowHidden(rowData, rowIndex)) {
+                    return true;
+                }
+
+                if (valueObject?.isNumber()) {
+                    accumulatorAll = accumulatorAll.plusBy(1);
+                }
+            });
         }
 
-        return flattenArray.count();
+        return accumulatorAll;
     }
 
     private _counta(ignoreHidden: boolean, ...refs: FunctionVariantType[]) {

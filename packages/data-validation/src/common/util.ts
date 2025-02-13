@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-import { DataValidationOperator, DataValidationType, type IDataValidationRuleBase, type IDataValidationRuleOptions, Tools } from '@univerjs/core';
-import { SelectionManagerService } from '@univerjs/sheets';
-import type { IAccessor } from '@wendellhu/redi';
+import type { IDataValidationRuleBase, IDataValidationRuleOptions } from '@univerjs/core';
 
 export function getRuleSetting(rule: IDataValidationRuleBase): IDataValidationRuleBase {
     return {
@@ -40,20 +38,6 @@ export function getRuleOptions(rule: IDataValidationRuleOptions): IDataValidatio
         showErrorMessage: rule.showErrorMessage,
         showInputMessage: rule.showInputMessage,
         renderMode: rule.renderMode,
+        bizInfo: rule.bizInfo,
     };
-}
-
-export function createDefaultNewRule(accessor: IAccessor) {
-    const selectionManagerService = accessor.get(SelectionManagerService);
-    const currentRanges = selectionManagerService.getSelectionRanges();
-    const uid = Tools.generateRandomId(6);
-    const rule = {
-        uid,
-        type: DataValidationType.DECIMAL,
-        operator: DataValidationOperator.EQUAL,
-        formula1: '100',
-        ranges: currentRanges ?? [{ startColumn: 0, endColumn: 0, startRow: 0, endRow: 0 }],
-    };
-
-    return rule;
 }

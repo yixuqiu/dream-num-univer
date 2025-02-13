@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import { Disposable, ErrorService, LifecycleStages, OnLifecycle, toDisposable } from '@univerjs/core';
+import { Disposable, ErrorService, Inject } from '@univerjs/core';
 import { MessageType } from '@univerjs/design';
-import { Inject } from '@wendellhu/redi';
 
 import { IMessageService } from '../../services/message/message.service';
 
-@OnLifecycle(LifecycleStages.Starting, ErrorController)
 export class ErrorController extends Disposable {
     constructor(
         @Inject(ErrorService) private readonly _errorService: ErrorService,
@@ -28,15 +26,11 @@ export class ErrorController extends Disposable {
     ) {
         super();
 
-        this.disposeWithMe(
-            toDisposable(
-                this._errorService.error$.subscribe((error) => {
-                    this._messageService.show({
-                        content: error.errorKey,
-                        type: MessageType.Error,
-                    });
-                })
-            )
-        );
+        this.disposeWithMe(this._errorService.error$.subscribe((error) => {
+            this._messageService.show({
+                content: error.errorKey,
+                type: MessageType.Error,
+            });
+        }));
     }
 }

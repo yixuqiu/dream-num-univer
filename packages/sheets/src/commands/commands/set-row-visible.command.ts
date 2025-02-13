@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import type { ICommand, IRange, Nullable, Workbook } from '@univerjs/core';
+import type { IAccessor, ICommand, IRange, Nullable, Worksheet } from '@univerjs/core';
+import type { ISetRowHiddenMutationParams, ISetRowVisibleMutationParams } from '../mutations/set-row-visible.mutation';
+
+import type { ISetSelectionsOperationParams } from '../operations/selection.operation';
 import {
     CommandType,
     ICommandService,
@@ -22,19 +25,15 @@ import {
     IUniverInstanceService,
     RANGE_TYPE,
     sequenceExecute,
-    UniverInstanceType,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../services/selection-manager.service';
-import type { ISetRowHiddenMutationParams, ISetRowVisibleMutationParams } from '../mutations/set-row-visible.mutation';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
+import { SheetInterceptorService } from '../../services/sheet-interceptor/sheet-interceptor.service';
 import {
     SetRowHiddenMutation,
     SetRowHiddenUndoMutationFactory,
     SetRowVisibleMutation,
     SetRowVisibleUndoMutationFactory,
 } from '../mutations/set-row-visible.mutation';
-import type { ISetSelectionsOperationParams } from '../operations/selection.operation';
 import { SetSelectionsOperation } from '../operations/selection.operation';
 import { getPrimaryForRange } from './utils/selection-utils';
 import { getSheetCommandTarget } from './utils/target-util';
@@ -48,36 +47,32 @@ export interface ISetSpecificRowsVisibleCommandParams {
 export const SetSpecificRowsVisibleCommand: ICommand<ISetSpecificRowsVisibleCommandParams> = {
     type: CommandType.COMMAND,
     id: 'sheet.command.set-specific-rows-visible',
-    handler: async (accessor: IAccessor, params: ISetSpecificRowsVisibleCommandParams) => {
+    handler: (accessor: IAccessor, params: ISetSpecificRowsVisibleCommandParams) => {
         const { unitId, subUnitId, ranges } = params;
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
+        const sheetInterceptorService = accessor.get(SheetInterceptorService);
 
-        const worksheet = accessor
-            .get(IUniverInstanceService)
-            .getUniverSheetInstance(unitId)!
-            .getSheetBySheetId(subUnitId)!;
+        const target = getSheetCommandTarget(accessor.get(IUniverInstanceService), { unitId, subUnitId });
+        if (!target) return false;
 
-        const redoMutationParams: ISetRowVisibleMutationParams = {
-            unitId,
-            subUnitId,
-            ranges,
-        };
-        const undoMutationParams = SetRowVisibleUndoMutationFactory(accessor, redoMutationParams);
+        const { worksheet } = target;
+        const redoMutationParams: ISetRowVisibleMutationParams = { unitId, subUnitId, ranges };
         const setSelectionOperationParams: ISetSelectionsOperationParams = {
             unitId,
             subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+            reveal: true,
             selections: ranges.map((range) => ({
                 range,
                 primary: getPrimaryForRange(range, worksheet),
                 style: null,
             })),
         };
+
+        const undoMutationParams = SetRowVisibleUndoMutationFactory(accessor, redoMutationParams);
         const undoSetSelectionsOperationParams: ISetSelectionsOperationParams = {
             unitId,
             subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
             selections: getSelectionsAfterHiding(ranges).map((range) => ({
                 range,
                 primary: getPrimaryForRange(range, worksheet),
@@ -89,20 +84,29 @@ export const SetSpecificRowsVisibleCommand: ICommand<ISetSpecificRowsVisibleComm
             [
                 { id: SetRowVisibleMutation.id, params: redoMutationParams },
                 { id: SetSelectionsOperation.id, params: setSelectionOperationParams },
-            ],
-            commandService
-        );
+            ], commandService);
 
-        if (result.result) {
+        const intercepted = sheetInterceptorService.onCommandExecute({
+            id: SetSpecificRowsVisibleCommand.id,
+            params,
+        });
+
+        const interceptedResult = sequenceExecute([...intercepted.redos], commandService);
+
+        if (result.result && interceptedResult.result) {
             undoRedoService.pushUndoRedo({
                 unitID: unitId,
                 undoMutations: [
+                    ...(intercepted.preUndos ?? []),
                     { id: SetRowHiddenMutation.id, params: undoMutationParams },
                     { id: SetSelectionsOperation.id, params: undoSetSelectionsOperationParams },
+                    ...(intercepted.undos ?? []),
                 ],
                 redoMutations: [
+                    ...(intercepted.preRedos ?? []),
                     { id: SetRowVisibleMutation.id, params: redoMutationParams },
                     { id: SetSelectionsOperation.id, params: setSelectionOperationParams },
+                    ...intercepted.redos,
                 ],
             });
 
@@ -116,28 +120,19 @@ export const SetSelectedRowsVisibleCommand: ICommand = {
     type: CommandType.COMMAND,
     id: 'sheet.command.set-selected-rows-visible',
     handler: async (accessor: IAccessor) => {
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
+        const commandService = accessor.get(ICommandService);
 
-        const ranges = selectionManagerService
-            .getSelections()
-            ?.map((s) => s.range)
-            .filter((r) => r.rangeType === RANGE_TYPE.ROW);
-        if (!ranges?.length) {
-            return false;
-        }
+        const ranges = selectionManagerService.getCurrentSelections()?.map((s) => s.range).filter((r) => r.rangeType === RANGE_TYPE.ROW);
+        if (!ranges?.length) return false;
 
-        const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
-        if (!workbook) return false;
-        const worksheet = workbook.getActiveSheet();
-        if (!worksheet) return false;
+        const target = getSheetCommandTarget(univerInstanceService);
+        if (!target) return false;
 
-        const unitId = workbook.getUnitId();
-        const subUnitId = worksheet.getSheetId();
+        const { worksheet, unitId, subUnitId } = target;
         const hiddenRanges = ranges.map((r) => worksheet.getHiddenRows(r.startRow, r.endRow)).flat();
-        return accessor
-            .get(ICommandService)
-            .executeCommand<ISetSpecificRowsVisibleCommandParams>(SetSpecificRowsVisibleCommand.id, {
+        return commandService.executeCommand<ISetSpecificRowsVisibleCommandParams>(SetSpecificRowsVisibleCommand.id, {
             unitId,
             subUnitId,
             ranges: hiddenRanges,
@@ -145,48 +140,37 @@ export const SetSelectedRowsVisibleCommand: ICommand = {
     },
 };
 
-export const SetRowHiddenCommand: ICommand = {
+export interface ISetRowHiddenCommandParams {
+    unitId?: string;
+    subUnitId?: string;
+    ranges?: IRange[];
+}
+
+export const SetRowHiddenCommand: ICommand<ISetRowHiddenCommandParams> = {
     type: CommandType.COMMAND,
     id: 'sheet.command.set-rows-hidden',
-    handler: async (accessor: IAccessor) => {
-        const selectionManagerService = accessor.get(SelectionManagerService);
+    handler: (accessor: IAccessor, params?: ISetRowHiddenCommandParams) => {
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
+        const sheetInterceptorService = accessor.get(SheetInterceptorService);
 
-        const ranges = selectionManagerService
-            .getSelections()
-            ?.map((s) => s.range)
-            .filter((r) => r.rangeType === RANGE_TYPE.ROW);
-        if (!ranges?.length) {
-            return false;
-        }
+        // Ranges should be divided by already hidden rows.
+        let ranges = params?.ranges?.length ? params.ranges : selectionManagerService.getCurrentSelections()?.map((s) => s.range).filter((r) => r.rangeType === RANGE_TYPE.ROW);
+        if (!ranges?.length) return false;
 
-        const target = getSheetCommandTarget(univerInstanceService);
+        const target = getSheetCommandTarget(univerInstanceService, params);
         if (!target) return false;
 
-        const { unitId, subUnitId, worksheet } = target;
+        ranges = divideRangesByHiddenRows(target.worksheet, ranges);
 
-        const redoMutationParams: ISetRowHiddenMutationParams = {
-            unitId,
-            subUnitId,
-            ranges,
-        };
+        const { unitId, subUnitId, worksheet } = target;
+        const redoMutationParams: ISetRowHiddenMutationParams = { unitId, subUnitId, ranges };
         const setSelectionOperationParams: ISetSelectionsOperationParams = {
             unitId,
             subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
             selections: getSelectionsAfterHiding(ranges).map((range) => ({
-                range,
-                primary: getPrimaryForRange(range, worksheet),
-                style: null,
-            })),
-        };
-        const undoSetSelectionsOperationParams: ISetSelectionsOperationParams = {
-            unitId,
-            subUnitId,
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            selections: ranges.map((range) => ({
                 range,
                 primary: getPrimaryForRange(range, worksheet),
                 style: null,
@@ -194,23 +178,39 @@ export const SetRowHiddenCommand: ICommand = {
         };
 
         const undoMutationParams = SetRowHiddenUndoMutationFactory(accessor, redoMutationParams);
-        const result = sequenceExecute(
-            [
-                { id: SetRowHiddenMutation.id, params: redoMutationParams },
-                { id: SetSelectionsOperation.id, params: setSelectionOperationParams },
-            ],
-            commandService
-        );
-        if (result.result) {
+        const undoSetSelectionsOperationParams: ISetSelectionsOperationParams = {
+            unitId,
+            subUnitId,
+            reveal: true,
+            selections: ranges.map((range) => ({
+                range,
+                primary: getPrimaryForRange(range, worksheet),
+                style: null,
+            })),
+        };
+
+        const intercepted = sheetInterceptorService.onCommandExecute({ id: SetRowHiddenCommand.id, params: redoMutationParams });
+        const execution = sequenceExecute([
+            ...(intercepted.preRedos ?? []),
+            { id: SetRowHiddenMutation.id, params: redoMutationParams },
+            { id: SetSelectionsOperation.id, params: setSelectionOperationParams },
+            ...intercepted.redos,
+        ], commandService);
+
+        if (execution.result) {
             undoRedoService.pushUndoRedo({
                 unitID: unitId,
                 undoMutations: [
+                    ...(intercepted.preUndos ?? []),
                     { id: SetRowVisibleMutation.id, params: undoMutationParams },
                     { id: SetSelectionsOperation.id, params: undoSetSelectionsOperationParams },
+                    ...(intercepted.undos ?? []),
                 ],
                 redoMutations: [
+                    ...(intercepted.preRedos ?? []),
                     { id: SetRowHiddenMutation.id, params: redoMutationParams },
                     { id: SetSelectionsOperation.id, params: setSelectionOperationParams },
+                    ...intercepted.redos,
                 ],
             });
             return true;
@@ -218,6 +218,34 @@ export const SetRowHiddenCommand: ICommand = {
         return true;
     },
 };
+
+// TODO@wzhudev: this should be unit tested
+export function divideRangesByHiddenRows(worksheet: Worksheet, ranges: IRange[]): IRange[] {
+    const endCol = worksheet.getMaxColumns() - 1;
+    const hiddenRows = worksheet.getHiddenRows();
+    const divided: IRange[] = [];
+
+    ranges.forEach((range) => {
+        const hiddenRowsInThisRange = hiddenRows.filter((r) => r.startRow >= range.startRow && r.endRow <= range.endRow);
+        if (hiddenRowsInThisRange.length) {
+            let startRow = range.startRow;
+            hiddenRowsInThisRange.forEach((hiddenRange) => {
+                if (hiddenRange.startRow > startRow) {
+                    divided.push({ startRow, endRow: hiddenRange.startRow - 1, startColumn: 0, endColumn: endCol });
+                    startRow = hiddenRange.endRow + 1;
+                }
+            });
+
+            if (startRow <= range.endRow) {
+                divided.push({ startRow, endRow: range.endRow, startColumn: 0, endColumn: endCol });
+            }
+        } else {
+            divided.push(range);
+        }
+    });
+
+    return divided;
+}
 
 function getSelectionsAfterHiding(ranges: IRange[]): IRange[] {
     const merged = mergeSelections(ranges);
@@ -233,6 +261,7 @@ function getSelectionsAfterHiding(ranges: IRange[]): IRange[] {
 
 function mergeSelections(ranges: IRange[]): IRange[] {
     const merged: IRange[] = [];
+
     let current: Nullable<IRange>;
     ranges
         .sort((a, b) => a.startRow - b.startRow)
@@ -249,6 +278,7 @@ function mergeSelections(ranges: IRange[]): IRange[] {
                 current = range;
             }
         });
+
     merged.push(current!);
     return merged;
 }

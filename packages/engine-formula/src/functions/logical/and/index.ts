@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,11 @@ import { BooleanValueObject } from '../../../engine/value-object/primitive-objec
 import { BaseFunction } from '../../base-function';
 
 export class And extends BaseFunction {
-    override calculate(...logicalValues: BaseValueObject[]) {
-        if (logicalValues.length === 0) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 1;
 
+    override maxParams = 255;
+
+    override calculate(...logicalValues: BaseValueObject[]) {
         let result = true;
         let noBoolean = true;
         let errorValue = null;

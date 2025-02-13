@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 const locale = {
     shortcut: {
         sheet: {
-            'zen-edit-cancel': '取消编辑(禅模式状态)',
-            'zen-edit-confirm': '放弃编辑(禅模式状态)',
+            'zen-edit-cancel': '取消编辑（禅模式状态）',
+            'zen-edit-confirm': '放弃编辑（禅模式状态）',
         },
     },
 };

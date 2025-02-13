@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,27 @@
  * limitations under the License.
  */
 
-import type { IViewportBound, Vector2 } from '../../basics/vector2';
+import type { Nullable } from '@univerjs/core';
+import type { IViewportInfo, Vector2 } from '../../basics/vector2';
 import type { UniverRenderingContext } from '../../context';
+import type { IRowsHeaderCfgParam, RowHeaderLayout } from './extensions/row-header-layout';
+import type { SpreadsheetSkeleton } from './sheet.render-skeleton';
 import { SheetRowHeaderExtensionRegistry } from '../extension';
-import type { RowHeaderLayout } from './extensions/row-header-layout';
 import { SpreadsheetHeader } from './sheet-component';
-import type { SpreadsheetSkeleton } from './sheet-skeleton';
 
 export class SpreadsheetRowHeader extends SpreadsheetHeader {
+    override getDocuments() {
+        throw new Error('Method not implemented.');
+    }
+
+    override getNoMergeCellPositionByIndex(rowIndex: number, columnIndex: number): Nullable<{ startY: number; startX: number; endX: number; endY: number }> {
+        throw new Error('Method not implemented.');
+    }
+
+    override getSelectionBounding(startRow: number, startColumn: number, endRow: number, endColumn: number): Nullable<{ startRow: number; startColumn: number; endRow: number; endColumn: number }> {
+        throw new Error('Method not implemented.');
+    }
+
     private _rowHeaderLayoutExtension!: RowHeaderLayout;
 
     constructor(oKey: string, spreadsheetSkeleton?: SpreadsheetSkeleton) {
@@ -37,7 +50,7 @@ export class SpreadsheetRowHeader extends SpreadsheetHeader {
         return this._rowHeaderLayoutExtension;
     }
 
-    override draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    override draw(ctx: UniverRenderingContext, bounds?: IViewportInfo) {
         const spreadsheetSkeleton = this.getSkeleton();
         if (!spreadsheetSkeleton) {
             return;
@@ -45,9 +58,13 @@ export class SpreadsheetRowHeader extends SpreadsheetHeader {
 
         const parentScale = this.getParentScale();
 
-        spreadsheetSkeleton.calculateSegment(bounds);
+        spreadsheetSkeleton.updateVisibleRange(bounds);
 
         const segment = spreadsheetSkeleton.rowColumnSegment;
+
+        if (!segment) {
+            return;
+        }
 
         if (segment.startRow === -1 && segment.endRow === -1) {
             return;
@@ -66,7 +83,7 @@ export class SpreadsheetRowHeader extends SpreadsheetHeader {
     }
 
     override isHit(coord: Vector2) {
-        const oCoord = this._getInverseCoord(coord);
+        const oCoord = this.getInverseCoord(coord);
         const skeleton = this.getSkeleton();
         if (!skeleton) {
             return false;
@@ -83,5 +100,10 @@ export class SpreadsheetRowHeader extends SpreadsheetHeader {
             this.register(extension);
         });
         this._rowHeaderLayoutExtension = this.getExtensionByKey('DefaultRowHeaderLayoutExtension') as RowHeaderLayout;
+    }
+
+    setCustomHeader(cfg: IRowsHeaderCfgParam) {
+        this.makeDirty(true);
+        this._rowHeaderLayoutExtension.configHeaderRow(cfg);
     }
 }

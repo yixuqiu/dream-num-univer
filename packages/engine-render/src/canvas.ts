@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ interface ICanvasProps {
     height?: number;
     pixelRatio?: number;
     mode?: CanvasRenderMode;
+    id?: string;
 }
 
 /**
@@ -56,13 +57,9 @@ export class Canvas {
     isCache = false;
 
     private _pixelRatio = 1;
-
     private _canvasEle: Nullable<HTMLCanvasElement>;
-
     private _context: Nullable<UniverRenderingContext>;
-
     private _width = 0;
-
     private _height = 0;
 
     constructor(props?: ICanvasProps) {
@@ -126,28 +123,35 @@ export class Canvas {
         return this._height;
     }
 
-    setSize(width?: number, height?: number, pixelRatioParam?: number) {
-        // this.setWidth(width || 0);
-        // this.setHeight(height || 0);
-        this._pixelRatio = pixelRatioParam || getDevicePixelRatio();
+    setId(id: string) {
+        this._canvasEle!.id = id;
+    }
 
-        if (width) {
-            this.getCanvasEle().width = width * this._pixelRatio;
+    /**
+     * Resize canvas when width or height or devicePixelRatio changed.
+     * @param width
+     * @param height
+     * @param devicePixelRatio
+     */
+    setSize(width?: number, height?: number, devicePixelRatio?: number) {
+        this._pixelRatio = devicePixelRatio || getDevicePixelRatio();
+        const canvasElement = this.getCanvasEle();
 
-            this._width = this.getCanvasEle().width / this._pixelRatio;
-
-            this.getCanvasEle().style.width = `${this._width}px`;
+        if (canvasElement && width !== undefined) {
+            // canvasElement.width & height requires integer value.
+            // canvasElement.width would return a integer even you set a decimal number.
+            canvasElement.width = width * this._pixelRatio;
+            this._width = canvasElement.width / this._pixelRatio;
+            canvasElement.style.width = `${this._width}px`;
         }
 
-        if (height) {
-            this.getCanvasEle().height = height * this._pixelRatio;
-
-            this._height = this.getCanvasEle().height / this._pixelRatio;
-
-            this.getCanvasEle().style.height = `${this._height}px`;
+        if (canvasElement && height !== undefined) {
+            canvasElement.height = height * this._pixelRatio;
+            this._height = canvasElement.height / this._pixelRatio;
+            canvasElement.style.height = `${this._height}px`;
         }
 
-        this.getContext().setTransform(this._pixelRatio, 0, 0, this._pixelRatio, 0, 0);
+        this.getContext()?.setTransform(this._pixelRatio, 0, 0, this._pixelRatio, 0, 0);
     }
 
     setPixelRatio(pixelRatio: number) {

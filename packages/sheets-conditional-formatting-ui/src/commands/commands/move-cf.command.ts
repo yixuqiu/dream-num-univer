@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ export interface IMoveCfCommand {
     start: IAnchor;
     end: IAnchor;
 };
-export const moveCfCommand: ICommand<IMoveCfCommand> = {
+export const MoveCfCommand: ICommand<IMoveCfCommand> = {
     type: CommandType.COMMAND,
     id: 'sheet.command.move-conditional-rule',
     handler(accessor, params) {

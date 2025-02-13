@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,23 @@ export const Playground = {
 
         return (
             <RadioGroup value={value} onChange={handleChange}>
+                <Radio value="test">test</Radio>
+                <Radio value="test1">test1</Radio>
+            </RadioGroup>
+        );
+    },
+};
+
+export const RadioGroupVertical = {
+    render() {
+        const [value, setValue] = useState('');
+
+        function handleChange(value: string | number | boolean) {
+            setValue(value as string);
+        }
+
+        return (
+            <RadioGroup value={value} onChange={handleChange} direction="vertical">
                 <Radio value="test">test</Radio>
                 <Radio value="test1">test1</Radio>
             </RadioGroup>

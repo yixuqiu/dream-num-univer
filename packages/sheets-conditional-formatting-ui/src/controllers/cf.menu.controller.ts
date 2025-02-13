@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,45 +14,20 @@
  * limitations under the License.
  */
 
-import { Inject, Injector } from '@wendellhu/redi';
-import { Disposable, LifecycleStages, LocaleService, OnLifecycle } from '@univerjs/core';
-import { ComponentManager, IMenuService, ISidebarService } from '@univerjs/ui';
-import type { IConditionFormattingRule } from '@univerjs/sheets-conditional-formatting';
-import { FactoryManageConditionalFormattingRule } from '../menu/manage-rule';
-import { ConditionFormattingPanel } from '../components/panel';
+import type { IDisposable } from '@univerjs/core';
+import { Disposable, Inject, Injector } from '@univerjs/core';
+import { IMenuManagerService } from '@univerjs/ui';
+import { menuSchema } from './menu.schema';
 
-const CF_PANEL_KEY = 'sheet.conditional.formatting.panel';
-@OnLifecycle(LifecycleStages.Ready, ConditionalFormattingMenuController)
 export class ConditionalFormattingMenuController extends Disposable {
+    private _sidebarDisposable: IDisposable | null = null;
+
     constructor(
         @Inject(Injector) private _injector: Injector,
-        @Inject(ComponentManager) private _componentManager: ComponentManager,
-        @Inject(IMenuService) private _menuService: IMenuService,
-        @Inject(ISidebarService) private _sidebarService: ISidebarService,
-        @Inject(LocaleService) private _localeService: LocaleService
-
+        @IMenuManagerService private readonly _menuManagerService: IMenuManagerService
     ) {
         super();
-        this._initMenu();
-        this._initPanel();
-    }
 
-    openPanel(rule?: IConditionFormattingRule) {
-        const props = {
-            header: { title: this._localeService.t('sheet.cf.title') },
-            children: {
-                label: CF_PANEL_KEY,
-                rule,
-            },
-        };
-        this._sidebarService.open(props);
-    }
-
-    private _initMenu() {
-        this._menuService.addMenuItem(FactoryManageConditionalFormattingRule(this._componentManager)(this._injector));
-    }
-
-    private _initPanel() {
-        this._componentManager.register(CF_PANEL_KEY, ConditionFormattingPanel);
+        this._menuManagerService.mergeMenu(menuSchema);
     }
 }

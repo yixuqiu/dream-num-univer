@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,14 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+import type { Dependency, IWorkbookData, Workbook } from '@univerjs/core';
+import type { ISheetData } from '../../../basics/common';
+
 import {
     CellValueType,
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
     LocaleType,
     LogLevel,
@@ -25,16 +29,13 @@ import {
     Plugin,
     Univer,
     UniverInstanceType,
-
 } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import type { ISheetData } from '../../../basics/common';
-import type { FormulaDataModel } from '../../../models/formula-data.model';
-import { CalculateFormulaService } from '../../../services/calculate-formula.service';
+import { FormulaDataModel } from '../../../models/formula-data.model';
+import { CalculateFormulaService, ICalculateFormulaService } from '../../../services/calculate-formula.service';
 import { FormulaCurrentConfigService, IFormulaCurrentConfigService } from '../../../services/current-data.service';
 import { DefinedNamesService, IDefinedNamesService } from '../../../services/defined-names.service';
+import { DependencyManagerService, IDependencyManagerService } from '../../../services/dependency-manager.service';
+import { FeatureCalculationManagerService, IFeatureCalculationManagerService } from '../../../services/feature-calculation-manager.service';
 import { FunctionService, IFunctionService } from '../../../services/function.service';
 import {
     IOtherFormulaManagerService,
@@ -52,7 +53,7 @@ import { ReferenceNodeFactory } from '../../ast-node/reference-node';
 import { SuffixNodeFactory } from '../../ast-node/suffix-node';
 import { UnionNodeFactory } from '../../ast-node/union-node';
 import { ValueNodeFactory } from '../../ast-node/value-node';
-import { FormulaDependencyGenerator } from '../../dependency/formula-dependency';
+import { FormulaDependencyGenerator, IFormulaDependencyGenerator } from '../../dependency/formula-dependency';
 import { Interpreter } from '../../interpreter/interpreter';
 import { Lexer } from '../lexer';
 import { LexerTreeBuilder } from '../lexer-tree-builder';
@@ -245,13 +246,9 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
             super();
         }
 
-        override onStarting(injector: Injector): void {
-            registerFormulaDependencies(injector);
-            dependencies?.forEach((d) => injector.add(d));
-        }
-
-        override onReady(): void {
-            this._formulaDataModel?.initFormulaData();
+        override onStarting(): void {
+            registerFormulaDependencies(this._injector);
+            dependencies?.forEach((d) => this._injector.add(d));
         }
     }
 
@@ -267,7 +264,7 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
     const sheetData: ISheetData = {};
     const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
     const unitId = workbook.getUnitId();
-    const sheetId = workbook.getActiveSheet().getSheetId();
+    const sheetId = workbook.getActiveSheet()!.getSheetId();
     workbook.getSheets().forEach((sheet) => {
         const sheetConfig = sheet.getConfig();
         sheetData[sheet.getSheetId()] = {
@@ -290,7 +287,7 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
 }
 
 function registerFormulaDependencies(injector: Injector) {
-    injector.add([CalculateFormulaService]);
+    injector.add([ICalculateFormulaService, { useClass: CalculateFormulaService }]);
     injector.add([Lexer]);
     injector.add([LexerTreeBuilder]);
 
@@ -300,8 +297,10 @@ function registerFormulaDependencies(injector: Injector) {
     injector.add([IOtherFormulaManagerService, { useClass: OtherFormulaManagerService }]);
     injector.add([IDefinedNamesService, { useClass: DefinedNamesService }]);
     injector.add([ISuperTableService, { useClass: SuperTableService }]);
+    injector.add([IFeatureCalculationManagerService, { useClass: FeatureCalculationManagerService }]);
+    injector.add([IDependencyManagerService, { useClass: DependencyManagerService }]);
 
-    injector.add([FormulaDependencyGenerator]);
+    injector.add([IFormulaDependencyGenerator, { useClass: FormulaDependencyGenerator }]);
     injector.add([Interpreter]);
     injector.add([AstTreeBuilder]);
 
@@ -315,4 +314,5 @@ function registerFormulaDependencies(injector: Injector) {
     injector.add([SuffixNodeFactory]);
     injector.add([UnionNodeFactory]);
     injector.add([ValueNodeFactory]);
+    injector.add([FormulaDataModel]);
 }

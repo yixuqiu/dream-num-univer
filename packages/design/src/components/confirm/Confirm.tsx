@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import React, { useContext } from 'react';
 import { Button } from '../button/Button';
 import { ConfigContext } from '../config-provider/ConfigProvider';
 import { Dialog } from '../dialog/Dialog';
+import type { ILocale } from '../../locale/interface';
 import styles from './index.module.less';
 
 export interface IConfirmProps {
@@ -54,26 +55,48 @@ export interface IConfirmProps {
      * Callback when the Confirm is confirmed.
      */
     onConfirm?: () => void;
+
+    /**
+     * The width of the Confirm.
+     */
+    width?: number | string;
+
+}
+
+function Footer(props: { locale: ILocale['design']; cancelText?: string; confirmText?: string; onClose: (() => void) | undefined; onConfirm: (() => void) | undefined }) {
+    const { locale, cancelText, confirmText, onClose, onConfirm } = props;
+
+    return (
+        <footer className={styles.confirmFooter}>
+            <Button onClick={onClose}>{cancelText ?? locale?.Confirm.cancel}</Button>
+            <Button type="primary" onClick={onConfirm}>
+                {confirmText ?? locale?.Confirm.confirm}
+            </Button>
+        </footer>
+    );
 }
 
 export function Confirm(props: IConfirmProps) {
-    const { children, visible = false, title, cancelText, confirmText, onClose, onConfirm } = props;
+    const { children, visible = false, title, cancelText, confirmText, width, onClose, onConfirm } = props;
 
     const { locale } = useContext(ConfigContext);
 
-    function Footer() {
-        return (
-            <footer className={styles.confirmFooter}>
-                <Button onClick={onClose}>{cancelText ?? locale.design.Confirm.cancel}</Button>
-                <Button type="primary" onClick={onConfirm}>
-                    {confirmText ?? locale.design.Confirm.confirm}
-                </Button>
-            </footer>
-        );
-    }
-
     return (
-        <Dialog visible={visible} title={title} footer={<Footer />} onClose={onClose}>
+        <Dialog
+            visible={visible}
+            title={title}
+            footer={(
+                <Footer
+                    locale={locale!}
+                    cancelText={cancelText}
+                    confirmText={confirmText}
+                    onClose={onClose}
+                    onConfirm={onConfirm}
+                />
+            )}
+            onClose={onClose}
+            width={width}
+        >
             {children}
         </Dialog>
     );

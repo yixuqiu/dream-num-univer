@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,42 +24,42 @@ import { ErrorType } from '../../../../basics/error-type';
 import { Isblank } from '../index';
 
 describe('Test isblank function', () => {
-    const textFunction = new Isblank(FUNCTION_NAMES_INFORMATION.ISBLANK);
+    const testFunction = new Isblank(FUNCTION_NAMES_INFORMATION.ISBLANK);
 
     describe('Isblank', () => {
         it('value null', () => {
             const value = NullValueObject.create();
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(true);
         });
 
         it('value error', () => {
             const value = ErrorValueObject.create(ErrorType.NA);
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(false);
         });
 
         it('value boolean', () => {
             const value = BooleanValueObject.create(true);
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(false);
         });
 
         it('value string', () => {
             const value = StringValueObject.create('a1');
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(false);
         });
 
         it('value number 1', () => {
             const value = NumberValueObject.create(1);
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(false);
         });
 
         it('value number 0', () => {
             const value = NumberValueObject.create(0);
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(false);
         });
 
@@ -76,7 +76,7 @@ describe('Test isblank function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(transformToValue(result.getArrayValue())).toStrictEqual([
                 [false],
                 [true],

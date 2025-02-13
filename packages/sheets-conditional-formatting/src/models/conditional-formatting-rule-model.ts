@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,21 @@
  * limitations under the License.
  */
 
-import { Inject, Injector } from '@wendellhu/redi';
-import { Range } from '@univerjs/core';
-import { Subject } from 'rxjs';
-import { createCfId } from '../utils/create-cf-id';
-import { ConditionalFormattingService } from '../services/conditional-formatting.service';
 import type { IAnchor } from '../utils/anchor';
+import type { IConditionFormattingRule, IRuleModel } from './type';
+import { Tools } from '@univerjs/core';
+import { Subject } from 'rxjs';
 import { findIndexByAnchor, moveByAnchor } from '../utils/anchor';
 
-import type { IConditionFormattingRule, IRuleModel } from './type';
-import { ConditionalFormattingViewModel } from './conditional-formatting-view-model';
+import { createCfId } from '../utils/create-cf-id';
 
 type RuleOperatorType = 'delete' | 'set' | 'add' | 'sort';
+
 export class ConditionalFormattingRuleModel {
     //  Map<unitID ,<sheetId ,IConditionFormattingRule[]>>
     private _model: IRuleModel = new Map();
-    private _ruleChange$ = new Subject<{ rule: IConditionFormattingRule; unitId: string; subUnitId: string; type: RuleOperatorType }>();
-    $ruleChange = this._ruleChange$.asObservable();
-
-    constructor(@Inject(ConditionalFormattingViewModel) private _conditionalFormattingViewModel: ConditionalFormattingViewModel,
-        @Inject(Injector) private _injector: Injector
-
-    ) {
-
-    }
+    private _ruleChange$ = new Subject<{ rule: IConditionFormattingRule; oldRule?: IConditionFormattingRule; unitId: string; subUnitId: string; type: RuleOperatorType }>();
+    public $ruleChange = this._ruleChange$.asObservable();
 
     private _ensureList(unitId: string, subUnitId: string) {
         let list = this.getSubunitRules(unitId, subUnitId);
@@ -78,11 +69,6 @@ export class ConditionalFormattingRuleModel {
             const rule = list[index];
             if (rule) {
                 list.splice(index, 1);
-                rule.ranges.forEach((range) => {
-                    Range.foreach(range, (row, col) => {
-                        this._conditionalFormattingViewModel.deleteCellCf(unitId, subUnitId, row, col, rule.cfId);
-                    });
-                });
                 this._ruleChange$.next({ rule, subUnitId, unitId, type: 'delete' });
             }
         }
@@ -92,45 +78,9 @@ export class ConditionalFormattingRuleModel {
         const list = this._ensureList(unitId, subUnitId);
         const oldRule = list.find((item) => item.cfId === oldCfId);
         if (oldRule) {
-            const cfPriorityMap = list.map((item) => item.cfId).reduce((map, cur, index) => {
-                map.set(cur, index);
-                return map;
-            }, new Map<string, number>());
-            // After each setting, the cache needs to be cleared,
-            // and this cleanup is deferred until the end of the calculation.
-            // Otherwise the render will flash once
-            const cloneRange = [...oldRule.ranges];
-            const conditionalFormattingService = this._injector.get(ConditionalFormattingService);
-
+            const cloneRule = Tools.deepClone(oldRule);
             Object.assign(oldRule, rule);
-
-            const dispose = conditionalFormattingService.interceptorManager.intercept(conditionalFormattingService.interceptorManager.getInterceptPoints().beforeUpdateRuleResult, {
-                handler: (config) => {
-                    if (unitId === config?.unitId && subUnitId === config.subUnitId && oldRule.cfId === config.cfId) {
-                        cloneRange.forEach((range) => {
-                            Range.foreach(range, (row, col) => {
-                                this._conditionalFormattingViewModel.deleteCellCf(unitId, subUnitId, row, col, oldRule.cfId);
-                            });
-                        });
-                        oldRule.ranges.forEach((range) => {
-                            Range.foreach(range, (row, col) => {
-                                this._conditionalFormattingViewModel.pushCellCf(unitId, subUnitId, row, col, oldRule.cfId);
-                                this._conditionalFormattingViewModel.sortCellCf(unitId, subUnitId, row, col, cfPriorityMap);
-                            });
-                        });
-                        dispose();
-                    }
-                },
-            });
-
-            oldRule.ranges.forEach((range) => {
-                Range.foreach(range, (row, col) => {
-                    this._conditionalFormattingViewModel.pushCellCf(unitId, subUnitId, row, col, oldRule.cfId);
-                });
-            });
-
-            this._conditionalFormattingViewModel.markRuleDirty(unitId, subUnitId, oldRule);
-            this._ruleChange$.next({ rule: oldRule, subUnitId, unitId, type: 'set' });
+            this._ruleChange$.next({ rule: oldRule, subUnitId, unitId, type: 'set', oldRule: cloneRule });
         }
     }
 
@@ -141,17 +91,6 @@ export class ConditionalFormattingRuleModel {
             // The new conditional formatting has a higher priority
             list.unshift(rule);
         }
-        const cfPriorityMap = list.map((item) => item.cfId).reduce((map, cur, index) => {
-            map.set(cur, index);
-            return map;
-        }, new Map<string, number>());
-        rule.ranges.forEach((range) => {
-            Range.foreach(range, (row, col) => {
-                this._conditionalFormattingViewModel.pushCellCf(unitId, subUnitId, row, col, rule.cfId);
-                this._conditionalFormattingViewModel.sortCellCf(unitId, subUnitId, row, col, cfPriorityMap);
-            });
-        });
-        this._conditionalFormattingViewModel.markRuleDirty(unitId, subUnitId, rule);
         this._ruleChange$.next({ rule, subUnitId, unitId, type: 'add' });
     }
 
@@ -169,15 +108,6 @@ export class ConditionalFormattingRuleModel {
         const rule = list[curIndex];
         if (rule) {
             moveByAnchor(start, end, list, (rule) => rule.cfId);
-            const cfPriorityMap = list.map((item) => item.cfId).reduce((map, cur, index) => {
-                map.set(cur, index);
-                return map;
-            }, new Map<string, number>());
-            rule.ranges.forEach((range) => {
-                Range.foreach(range, (row, col) => {
-                    this._conditionalFormattingViewModel.sortCellCf(unitId, subUnitId, row, col, cfPriorityMap);
-                });
-            });
             this._ruleChange$.next({ rule, subUnitId, unitId, type: 'sort' });
         }
     }

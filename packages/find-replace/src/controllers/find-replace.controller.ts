@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,28 @@
  * limitations under the License.
  */
 
+import type {
+    IDisposable,
+    Nullable } from '@univerjs/core';
 import {
     ICommandService,
-    IContextService,
-    ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
-    LifecycleStages,
     LocaleService,
-    OnLifecycle,
     RxDisposable,
+    toDisposable,
 } from '@univerjs/core';
 import { SearchSingle16 } from '@univerjs/icons';
-import {
-    ComponentManager,
+import { ComponentManager,
     IDialogService,
     ILayoutService,
-    IMenuService,
+    IMenuManagerService,
     IShortcutService,
 } from '@univerjs/ui';
-import { Inject, Injector } from '@wendellhu/redi';
 import { takeUntil } from 'rxjs';
 
+import { ReplaceAllMatchesCommand, ReplaceCurrentMatchCommand } from '../commands/commands/replace.command';
 import {
     GoToNextMatchOperation,
     GoToPreviousMatchOperation,
@@ -43,7 +44,6 @@ import {
 } from '../commands/operations/find-replace.operation';
 import { IFindReplaceService } from '../services/find-replace.service';
 import { FindReplaceDialog } from '../views/dialog/FindReplaceDialog';
-import { ReplaceAllMatchesCommand, ReplaceCurrentMatchCommand } from '../commands/command/replace.command';
 import {
     GoToNextFindMatchShortcutItem,
     GoToPreviousFindMatchShortcutItem,
@@ -51,7 +51,7 @@ import {
     OpenFindDialogShortcutItem,
     OpenReplaceDialogShortcutItem,
 } from './find-replace.shortcut';
-import { FindReplaceMenuItemFactory } from './find-replace.menu';
+import { menuSchema } from './menu.schema';
 
 const FIND_REPLACE_DIALOG_ID = 'DESKTOP_FIND_REPLACE_DIALOG';
 
@@ -59,17 +59,14 @@ const FIND_REPLACE_PANEL_WIDTH = 350;
 const FIND_REPLACE_PANEL_RIGHT_PADDING = 20;
 const FIND_REPLACE_PANEL_TOP_PADDING = -90;
 
-@OnLifecycle(LifecycleStages.Rendered, FindReplaceController)
 export class FindReplaceController extends RxDisposable {
     constructor(
         @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
-        @IMenuService private readonly _menuService: IMenuService,
+        @IMenuManagerService private readonly _menuManagerService: IMenuManagerService,
         @IShortcutService private readonly _shortcutService: IShortcutService,
         @ICommandService private readonly _commandService: ICommandService,
         @IFindReplaceService private readonly _findReplaceService: IFindReplaceService,
-        @ILogService private readonly _logService: ILogService,
         @IDialogService private readonly _dialogService: IDialogService,
-        @IContextService private readonly _contextService: IContextService,
         @ILayoutService private readonly _layoutService: ILayoutService,
         @Inject(LocaleService) private readonly _localeService: LocaleService,
         @Inject(ComponentManager) private readonly _componentManager: ComponentManager,
@@ -80,6 +77,13 @@ export class FindReplaceController extends RxDisposable {
         this._initCommands();
         this._initUI();
         this._initShortcuts();
+    }
+
+    override dispose(): void {
+        super.dispose();
+
+        this._closingListenerDisposable?.dispose();
+        this._closingListenerDisposable = null;
     }
 
     private _initCommands(): void {
@@ -106,9 +110,10 @@ export class FindReplaceController extends RxDisposable {
     }
 
     private _initUI(): void {
-        this.disposeWithMe(this._menuService.addMenuItem(this._injector.invoke(FindReplaceMenuItemFactory)));
         this.disposeWithMe(this._componentManager.register('FindReplaceDialog', FindReplaceDialog));
         this.disposeWithMe(this._componentManager.register('SearchIcon', SearchSingle16));
+
+        this._menuManagerService.mergeMenu(menuSchema);
 
         // this controller is also responsible for toggling the FindReplaceDialog
         this._findReplaceService.stateUpdates$.pipe(takeUntil(this.dispose$)).subscribe((newState) => {
@@ -116,15 +121,6 @@ export class FindReplaceController extends RxDisposable {
                 this._openPanel();
             }
         });
-
-        // If focusing on a non-sheet Univer document, close the find replace dialog.
-        this.disposeWithMe(
-            this._univerInstanceService.focused$.pipe(takeUntil(this.dispose$)).subscribe((focused) => {
-                if (!focused || !this._univerInstanceService.getUniverSheetInstance(focused)) {
-                    this.closePanel();
-                }
-            })
-        );
     }
 
     private _openPanel(): void {
@@ -139,9 +135,23 @@ export class FindReplaceController extends RxDisposable {
             preservePositionOnDestroy: true,
             onClose: () => this.closePanel(),
         });
+
+        this._closingListenerDisposable = toDisposable(this._univerInstanceService.focused$.pipe(takeUntil(this.dispose$)).subscribe((focused) => {
+            if (!focused || !this._univerInstanceService.getUniverSheetInstance(focused)) {
+                this.closePanel();
+            }
+        }));
     }
 
+    private _closingListenerDisposable: Nullable<IDisposable>;
     closePanel(): void {
+        if (!this._closingListenerDisposable) {
+            return;
+        }
+
+        this._closingListenerDisposable.dispose();
+        this._closingListenerDisposable = null;
+
         this._dialogService.close(FIND_REPLACE_DIALOG_ID);
         this._findReplaceService.terminate();
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,35 +15,34 @@
  */
 
 import type { ICellData, IRange, Nullable } from '@univerjs/core';
-import { Disposable, isNullCell, ObjectMatrix } from '@univerjs/core';
-import { createIdentifier } from '@wendellhu/redi';
-
 import type {
     IArrayFormulaRangeType,
     IFeatureDirtyRangeType,
     IRuntimeOtherUnitDataType,
     IRuntimeUnitDataType,
 } from '../basics/common';
-import { isInDirtyRange } from '../basics/dirty';
-import { ErrorType } from '../basics/error-type';
 import type { BaseAstNode } from '../engine/ast-node/base-ast-node';
 import type { BaseReferenceObject, FunctionVariantType } from '../engine/reference-object/base-reference-object';
 import type { ArrayValueObject } from '../engine/value-object/array-value-object';
-import { type BaseValueObject, ErrorValueObject } from '../engine/value-object/base-value-object';
+import type { BaseValueObject } from '../engine/value-object/base-value-object';
+import { createIdentifier, Disposable, ObjectMatrix } from '@univerjs/core';
+import { isInDirtyRange } from '../basics/dirty';
+import { ErrorType } from '../basics/error-type';
+import { isNullCellForFormula } from '../basics/is-null-cell';
+import { getRuntimeFeatureCell } from '../engine/utils/get-runtime-feature-cell';
+import { clearNumberFormatTypeCache, clearStringToNumberPatternCache } from '../engine/utils/numfmt-kit';
+import { clearReferenceToRangeCache } from '../engine/utils/reference-cache';
 import { objectValueToCellValue } from '../engine/utils/value-object';
+import { ErrorValueObject } from '../engine/value-object/base-value-object';
 import { IFormulaCurrentConfigService } from './current-data.service';
 
 /**
- * IDLE: Idle phase of the formula engine.
- *
- * DEPENDENCY: Dependency calculation phase, where the formulas that need to be calculated are determined by the modified area,
- * as well as their dependencies. This outputs an array of formulas to execute.
- *
- * INTERPRETER：Formula execution phase, where the calculation of formulas begins.
- *
+ * The formula engine has a lot of stages. IDLE and CALCULATION_COMPLETED can be considered as
+ * the computing has completed.
  */
 export enum FormulaExecuteStageType {
     IDLE,
+    START,
     START_DEPENDENCY,
     START_CALCULATION,
     CURRENTLY_CALCULATING,
@@ -78,6 +77,8 @@ export interface IExecutionInProgressParams {
 
     totalArrayFormulasToCalculate: number;
     completedArrayFormulasCount: number;
+
+    formulaCycleIndex: number;
 
     stage: FormulaExecuteStageType;
 }
@@ -118,11 +119,13 @@ export interface IFormulaRuntimeService {
 
     setFormulaExecuteStage(type: FormulaExecuteStageType): void;
 
+    setFormulaCycleIndex(index: number): void;
+
     isStopExecution(): boolean;
 
     getFormulaExecuteStage(): FormulaExecuteStageType;
 
-    setRuntimeOtherData(formulaId: string, functionVariant: FunctionVariantType): void;
+    setRuntimeOtherData(formulaId: string, x: number, y: number, functionVariant: FunctionVariantType): void;
 
     getRuntimeOtherData(): IRuntimeOtherUnitDataType;
 
@@ -169,6 +172,8 @@ export interface IFormulaRuntimeService {
     setRuntimeFeatureCellData(featureId: string, featureData: IRuntimeUnitDataType): void;
 
     setRuntimeFeatureRange(featureId: string, featureRange: IFeatureDirtyRangeType): void;
+
+    clearReferenceAndNumberformatCache(): void;
 }
 
 export class FormulaRuntimeService extends Disposable implements IFormulaRuntimeService {
@@ -212,9 +217,13 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
     private _completedArrayFormulasCount: number = 0;
 
+    private _formulaCycleIndex: number = 0;
+
     private _isCycleDependency: boolean = false;
 
-    constructor(@IFormulaCurrentConfigService private readonly _currentConfigService: IFormulaCurrentConfigService) {
+    constructor(
+        @IFormulaCurrentConfigService private readonly _currentConfigService: IFormulaCurrentConfigService
+    ) {
         super();
     }
 
@@ -243,9 +252,12 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
     }
 
     override dispose(): void {
+        super.dispose();
+
         this.reset();
         this._runtimeFeatureCellData = {};
         this._runtimeFeatureRange = {};
+        this.clearReferenceAndNumberformatCache();
     }
 
     enableCycleDependency() {
@@ -258,6 +270,14 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
     isCycleDependency() {
         return this._isCycleDependency;
+    }
+
+    setFormulaCycleIndex(index: number) {
+        this._formulaCycleIndex = index;
+    }
+
+    getFormulaCycleIndex() {
+        return this._formulaCycleIndex;
     }
 
     setTotalArrayFormulasToCalculate(value: number) {
@@ -340,10 +360,18 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
         this._functionDefinitionPrivacyVar.clear();
         this.markedAsInitialFunctionsExecuted();
 
+        this._stopState = false;
         this._isCycleDependency = false;
-
         this._totalFormulasToCalculate = 0;
         this._completedFormulasCount = 0;
+
+        this.clearReferenceAndNumberformatCache();
+    }
+
+    clearReferenceAndNumberformatCache() {
+        clearNumberFormatTypeCache();
+        clearStringToNumberPatternCache();
+        clearReferenceToRangeCache();
     }
 
     setCurrent(row: number, column: number, rowCount: number, columnCount: number, sheetId: string, unitId: string) {
@@ -367,7 +395,7 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
         return this._functionDefinitionPrivacyVar.get(lambdaId);
     }
 
-    setRuntimeOtherData(formulaId: string, functionVariant: FunctionVariantType) {
+    setRuntimeOtherData(formulaId: string, x: number, y: number, functionVariant: FunctionVariantType) {
         const subUnitId = this._currentSubUnitId;
         const unitId = this._currentUnitId;
 
@@ -377,7 +405,7 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
         const unitData = this._runtimeOtherData[unitId]!;
 
-        if (unitData[subUnitId] === undefined) {
+        if (unitData[subUnitId] === undefined || unitData[subUnitId] === null) {
             unitData[subUnitId] = {};
         }
 
@@ -406,9 +434,19 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
             cellDatas = [[objectValueToCellValue(functionVariant as BaseValueObject)!]];
         }
 
-        subComponentData![formulaId] = cellDatas;
+        if (subComponentData[formulaId] === undefined || subComponentData[formulaId] === null) {
+            subComponentData[formulaId] = {};
+        }
+
+        if (subComponentData[formulaId][y] === undefined || subComponentData[formulaId][y] === null) {
+            subComponentData[formulaId][y] = {};
+        }
+
+        // x represents the column offset, y represents the row offset
+        subComponentData[formulaId][y][x] = cellDatas;
     }
 
+    // eslint-disable-next-line max-lines-per-function
     setRuntimeData(functionVariant: FunctionVariantType) {
         const row = this._currentRow;
         const column = this._currentColumn;
@@ -433,20 +471,20 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
         const arrayFormulaRange = this._unitArrayFormulaRange[unitId]!;
 
-        let arrayData = new ObjectMatrix<IRange>();
-
-        if (arrayFormulaRange[sheetId]) {
-            arrayData = new ObjectMatrix(arrayFormulaRange[sheetId]);
+        if (arrayFormulaRange[sheetId] === null || arrayFormulaRange[sheetId] === undefined) {
+            arrayFormulaRange[sheetId] = {};
         }
+
+        const arrayData = new ObjectMatrix<IRange>(arrayFormulaRange[sheetId]);
 
         if (this._runtimeArrayFormulaCellData[unitId] === undefined) {
             this._runtimeArrayFormulaCellData[unitId] = {};
         }
 
-        const arrayFormulaCellData = this._runtimeArrayFormulaCellData[unitId]!;
+        const runtimeArrayFormulaCellData = this._runtimeArrayFormulaCellData[unitId]!;
 
-        if (arrayFormulaCellData[sheetId] == null) {
-            arrayFormulaCellData[sheetId] = new ObjectMatrix<Nullable<ICellData>>();
+        if (runtimeArrayFormulaCellData[sheetId] == null) {
+            runtimeArrayFormulaCellData[sheetId] = new ObjectMatrix<Nullable<ICellData>>();
         }
 
         if (this._runtimeClearArrayFormulaCellData[unitId] === undefined) {
@@ -461,7 +499,7 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
         const sheetData = unitData[sheetId];
 
-        const arrayUnitData = arrayFormulaCellData[sheetId];
+        const runtimeArrayUnitData = runtimeArrayFormulaCellData[sheetId];
 
         const clearArrayUnitData = clearArrayFormulaCellData[sheetId];
 
@@ -494,9 +532,8 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
                 endColumn: endColumn - startColumn + column,
             };
 
+            // Do not use getData to synchronize arrayData to arrayFormulaRange[sheetId] anymore, they are already linked, otherwise it will cause performance issues
             arrayData.setValue(row, column, arrayRange);
-
-            arrayFormulaRange[sheetId] = arrayData.getData();
 
             if (
                 this._checkIfArrayFormulaRangeHasData(unitId, sheetId, row, column, arrayRange) ||
@@ -505,6 +542,31 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
                 const errorObject = objectValueToCellValue(ErrorValueObject.create(ErrorType.SPILL));
                 sheetData.setValue(row, column, errorObject);
                 clearArrayUnitData.setValue(row, column, errorObject);
+
+                /**
+                 * When there are values within the array formula range, the entire formula will result in an error.
+                 * In this case, you need to clear the previous range data to prevent other formulas from referencing the old values.
+                 */
+                const unitData = this._currentConfigService.getUnitData();
+                objectValueRefOrArray.iterator((_, rowIndex, columnIndex) => {
+                    const currentRow = rowIndex - startRow + row;
+                    const currentColumn = columnIndex - startColumn + column;
+                    const cell = unitData[unitId]?.[sheetId]?.cellData.getValue(currentRow, currentColumn);
+
+                    if (rowIndex === startRow && columnIndex === startColumn) {
+                        runtimeArrayUnitData.setValue(row, column, errorObject);
+                    } else if (cell != null) {
+                        if (cell.v == null) {
+                            cell.v = '';
+                        }
+                        runtimeArrayUnitData.setValue(currentRow, currentColumn, cell);
+                    } // To determine whether a cell has a value, in addition to cell != null, other array formulas may get undefined (displayed as 0). In this case, the value of the existing array formula cannot be modified.
+                    else if (this._isInOtherArrayFormulaRange(unitId, sheetId, row, column, currentRow, currentColumn)) {
+                        return true;
+                    } else {
+                        runtimeArrayUnitData.setValue(currentRow, currentColumn, { v: '' });
+                    }
+                });
             } else {
                 const spillError = ErrorValueObject.create(ErrorType.SPILL);
                 objectValueRefOrArray.iterator((valueObject, rowIndex, columnIndex) => {
@@ -525,13 +587,12 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
                     const currentRow = rowIndex - startRow + row;
                     const currentColumn = columnIndex - startColumn + column;
 
-                    arrayUnitData.setValue(currentRow, currentColumn, value);
+                    runtimeArrayUnitData.setValue(currentRow, currentColumn, value);
                 });
             }
         } else {
             const valueObject = objectValueToCellValue(functionVariant as BaseValueObject);
             sheetData.setValue(row, column, valueObject);
-
             clearArrayUnitData.setValue(row, column, valueObject);
         }
     }
@@ -597,9 +658,12 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
             completedArrayFormulasCount: this.getCompletedArrayFormulasCount(),
 
             stage: this.getFormulaExecuteStage(),
+
+            formulaCycleIndex: this.getFormulaCycleIndex(),
         };
     }
 
+    // eslint-disable-next-line complexity
     private _checkIfArrayFormulaRangeHasData(
         formulaUnitId: string,
         formulaSheetId: string,
@@ -610,6 +674,8 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
         const { startRow, startColumn, endRow, endColumn } = arrayRange;
 
         const unitData = this._currentConfigService.getUnitData();
+        // this._runtimeArrayFormulaCellData data is incomplete, use the data on configService
+        const arrayData = this._currentConfigService.getArrayFormulaCellData();
 
         const unitArrayFormulaRange =
             this._unitArrayFormulaRange[formulaUnitId]?.[formulaSheetId]?.[formulaRow]?.[formulaColumn];
@@ -622,16 +688,20 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
 
                 const cell = this._runtimeData?.[formulaUnitId]?.[formulaSheetId]?.getValue(r, c);
 
-                const arrayDataCell = this._runtimeArrayFormulaCellData?.[formulaUnitId]?.[formulaSheetId]?.getValue(
+                const arrayDataCell = arrayData?.[formulaUnitId]?.[formulaSheetId]?.getValue(
                     r,
                     c
                 );
                 const currentCell = unitData?.[formulaUnitId]?.[formulaSheetId]?.cellData?.getValue(r, c);
 
+                const featureCell = this._getRuntimeFeatureCellValue(r, c, formulaSheetId, formulaUnitId);
+
+                // arrayDataCell may display 0 as {v: null}. Although it is an empty cell, it is considered to have a value.
                 if (
-                    !isNullCell(cell) ||
-                    (!isNullCell(arrayDataCell) && !this._isInArrayFormulaRange(unitArrayFormulaRange, r, c)) ||
-                    !isNullCell(currentCell)
+                    !isNullCellForFormula(cell) ||
+                    this._isInOtherArrayFormulaRange(formulaUnitId, formulaSheetId, formulaRow, formulaColumn, r, c) ||
+                    !isNullCellForFormula(currentCell) ||
+                    !isNullCellForFormula(featureCell)
                 ) {
                     return true;
                 }
@@ -639,6 +709,59 @@ export class FormulaRuntimeService extends Disposable implements IFormulaRuntime
         }
 
         return false;
+    }
+
+    private _getRuntimeFeatureCellValue(row: number, column: number, sheetId: string, unitId: string) {
+        return getRuntimeFeatureCell(row, column, sheetId, unitId, this._runtimeFeatureCellData);
+    }
+
+    private _arrayCellHasData(cell: Nullable<ICellData>) {
+        if (cell === null || cell === undefined) {
+            return false;
+        }
+
+        if (cell.v !== undefined) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * If the current array formula in the extended area intersects with the existing array formula, a #SPILL! error will be reported. Note that if other array formulas are already #SPILL!, they will not conflict with the current array formula
+     * @param formulaUnitId
+     * @param formulaSheetId
+     * @param formulaRow
+     * @param formulaColumn
+     * @param r
+     * @param c
+     * @returns
+     */
+    private _isInOtherArrayFormulaRange(formulaUnitId: string, formulaSheetId: string, formulaRow: number, formulaColumn: number, r: number, c: number) {
+        const arrayFormulaRange = this._currentConfigService.getArrayFormulaRange()[formulaUnitId]?.[formulaSheetId];
+
+        if (arrayFormulaRange == null) {
+            return false;
+        }
+
+        let isCellOverlapping = false;
+
+        const arrayFormulaRangeMatrix = new ObjectMatrix(arrayFormulaRange);
+        arrayFormulaRangeMatrix.forValue((rangeRow, rangeCol, range) => {
+            // skip the current range
+            if (rangeRow === formulaRow && rangeCol === formulaColumn) {
+                return;
+            }
+
+            // Check if the cell is part of any other range in arrayFormulaRangeMatrix, and value is not #SPILL!
+            const isOverlapping = this._isInArrayFormulaRange(range, r, c);
+            const cell = this._runtimeData[formulaUnitId]?.[formulaSheetId]?.getValue(rangeRow, rangeCol);
+            if (isOverlapping && cell?.v !== ErrorType.SPILL) {
+                isCellOverlapping = true;
+            }
+        });
+
+        return isCellOverlapping;
     }
 
     private _isInArrayFormulaRange(range: Nullable<IRange>, r: number, c: number) {

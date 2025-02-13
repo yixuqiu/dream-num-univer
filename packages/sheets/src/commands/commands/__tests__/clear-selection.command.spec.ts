@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { ICellData, IRange, IStyleData, Nullable, Univer } from '@univerjs/core';
+import type { ICellData, Injector, IRange, IStyleData, Nullable, Univer } from '@univerjs/core';
+import type { ISetRangeValuesCommandParams } from '../set-range-values.command';
 import {
     CellValueType,
     ICommandService,
@@ -23,12 +24,11 @@ import {
     RedoCommand,
     UndoCommand,
 } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MergeCellController } from '../../../controllers/merge-cell.controller';
 import { RefRangeService } from '../../../services/ref-range/ref-range.service';
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
 import { AddWorksheetMergeMutation } from '../../mutations/add-worksheet-merge.mutation';
 import { RemoveWorksheetMergeMutation } from '../../mutations/remove-worksheet-merge.mutation';
 import { SetRangeValuesMutation } from '../../mutations/set-range-values.mutation';
@@ -36,7 +36,6 @@ import { AddWorksheetMergeAllCommand, AddWorksheetMergeCommand } from '../add-wo
 import { ClearSelectionAllCommand } from '../clear-selection-all.command';
 import { ClearSelectionContentCommand } from '../clear-selection-content.command';
 import { ClearSelectionFormatCommand } from '../clear-selection-format.command';
-import type { ISetRangeValuesCommandParams } from '../set-range-values.command';
 import { SetRangeValuesCommand } from '../set-range-values.command';
 import { createCommandTestBed } from './create-command-test-bed';
 
@@ -69,13 +68,8 @@ describe('Test clear selection content commands', () => {
     describe('clear selection contents', () => {
         describe('correct situations', () => {
             it('will clear selection content when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -118,13 +112,9 @@ describe('Test clear selection content commands', () => {
     describe('clear selection formats', () => {
         describe('correct situations', () => {
             it('will clear selection format when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -182,13 +172,8 @@ describe('Test clear selection content commands', () => {
                 });
             });
             it('clear formats with merged cells', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 1, endRow: 1, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -216,7 +201,8 @@ describe('Test clear selection content commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 // set formats
@@ -278,13 +264,8 @@ describe('Test clear selection content commands', () => {
     describe('clear selection all', () => {
         describe('correct situations', () => {
             it('will clear selection all when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 0, endRow: 0, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -334,13 +315,8 @@ describe('Test clear selection content commands', () => {
                 expect(getValue()).toStrictEqual({});
             });
             it('clear all with merged cells', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 1, endRow: 1, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -368,7 +344,8 @@ describe('Test clear selection content commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 // set formats

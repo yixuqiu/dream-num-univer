@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,29 +14,30 @@
  * limitations under the License.
  */
 
-import type { IMutationInfo, IRange, Nullable, Workbook } from '@univerjs/core';
+import type { IDisposable, IMutationInfo, IRange, Nullable, Workbook } from '@univerjs/core';
+import type { IMoveRangeMutationParams } from '../../commands/mutations/move-range.mutation';
+
+import type { ISheetCommandSharedParams } from '../../commands/utils/interface';
+import type { EffectRefRangeParams } from './type';
 import {
     CommandType,
     createInterceptorKey,
     Disposable,
     ICommandService,
+    Inject,
     InterceptorManager,
     IUniverInstanceService,
-    LifecycleStages,
-    OnLifecycle,
+    RANGE_TYPE,
     Rectangle,
     toDisposable,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-import { Inject } from '@wendellhu/redi';
-
-import { SelectionManagerService } from '../selection-manager.service';
+import { MoveRangeMutation } from '../../commands/mutations/move-range.mutation';
+import { RemoveSheetMutation } from '../../commands/mutations/remove-sheet.mutation';
+import { SheetsSelectionsService } from '../selections/selection.service';
 import { SheetInterceptorService } from '../sheet-interceptor/sheet-interceptor.service';
-import type { ISheetCommandSharedParams } from '../../commands/utils/interface';
-import type { EffectRefRangeParams } from './type';
 import { EffectRefRangId } from './type';
-import { adjustRangeOnMutation } from './util';
+import { adjustRangeOnMutation, getEffectedRangesOnMutation } from './util';
 
 type RefRangCallback = (params: EffectRefRangeParams) => {
     redos: IMutationInfo[];
@@ -50,24 +51,47 @@ export type WatchRangeCallback = (before: IRange, after: Nullable<IRange>) => vo
 const MERGE_REDO = createInterceptorKey<IMutationInfo[], null>('MERGE_REDO');
 const MERGE_UNDO = createInterceptorKey<IMutationInfo[], null>('MERGE_UNDO');
 
+const MAX_ROW_COL = Math.floor(Number.MAX_SAFE_INTEGER / 10);
+
 class WatchRange extends Disposable {
     constructor(
         private readonly _unitId: string,
         private readonly _subUnitId: string,
         private _range: Nullable<IRange>,
-        private readonly _callback: WatchRangeCallback
+        private readonly _callback: WatchRangeCallback,
+        private readonly _skipIntersects: boolean = false
     ) {
         super();
     }
 
     onMutation(mutation: IMutationInfo<ISheetCommandSharedParams>) {
-        if (mutation.params.unitId !== this._unitId || mutation.params.subUnitId !== this._subUnitId) {
+        if (mutation.params?.unitId !== this._unitId) {
+            return;
+        }
+        // move range don't have subUnitId on params
+        if (mutation.id === MoveRangeMutation.id) {
+            const params = mutation.params as unknown as IMoveRangeMutationParams;
+            if (params.from.subUnitId !== this._subUnitId || params.to.subUnitId !== this._subUnitId) {
+                return;
+            }
+        } else if (mutation.params?.subUnitId !== this._subUnitId) {
             return;
         }
 
         if (!this._range) {
             return;
         }
+
+        if (this._skipIntersects) {
+            if (mutation.id === RemoveSheetMutation.id) {
+                return;
+            }
+            const effectRanges = getEffectedRangesOnMutation(mutation);
+            if (effectRanges?.some((effectRange) => Rectangle.intersects(effectRange, this._range!))) {
+                return;
+            }
+        }
+
         const afterRange: Nullable<IRange> = adjustRangeOnMutation(this._range, mutation);
         if (afterRange && Rectangle.equals(afterRange, this._range)) {
             return false;
@@ -82,7 +106,6 @@ class WatchRange extends Disposable {
 /**
  * Collect side effects caused by ref range change
  */
-@OnLifecycle(LifecycleStages.Ready, RefRangeService)
 export class RefRangeService extends Disposable {
     interceptor = new InterceptorManager({ MERGE_REDO, MERGE_UNDO });
 
@@ -92,7 +115,7 @@ export class RefRangeService extends Disposable {
         @ICommandService private readonly _commandService: ICommandService,
         @Inject(SheetInterceptorService) private _sheetInterceptorService: SheetInterceptorService,
         @Inject(IUniverInstanceService) private _univerInstanceService: IUniverInstanceService,
-        @Inject(SelectionManagerService) private _selectionManagerService: SelectionManagerService
+        @Inject(SheetsSelectionsService) private _selectionManagerService: SheetsSelectionsService
     ) {
         super();
         this._onRefRangeChange();
@@ -106,19 +129,18 @@ export class RefRangeService extends Disposable {
         });
     }
 
-    watchRange(unitId: string, subUnitId: string, range: IRange, callback: WatchRangeCallback): IDisposable {
+    watchRange(unitId: string, subUnitId: string, range: IRange, callback: WatchRangeCallback, skipIntersects?: boolean): IDisposable {
         let watchRangesListener: Nullable<IDisposable>;
         if (this._watchRanges.size === 0) {
             watchRangesListener = this._commandService.onCommandExecuted((command) => {
                 if (command.type !== CommandType.MUTATION) return false;
-
                 for (const watchRange of this._watchRanges) {
                     watchRange.onMutation(command as IMutationInfo<ISheetCommandSharedParams>);
                 }
             });
         }
 
-        const watchRange = new WatchRange(unitId, subUnitId, range, callback);
+        const watchRange = new WatchRange(unitId, subUnitId, range, callback, skipIntersects);
         this._watchRanges.add(watchRange);
 
         const teardownWatching = toDisposable(() => {
@@ -142,12 +164,18 @@ export class RefRangeService extends Disposable {
 
     private _serializer = createRangeSerializer();
 
+    // eslint-disable-next-line max-lines-per-function
     private _onRefRangeChange = () => {
         this._sheetInterceptorService.interceptCommand({
+            // eslint-disable-next-line max-lines-per-function
             getMutations: (command: EffectRefRangeParams) => {
                 const worksheet = this._univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet();
                 const unitId = getUnitId(this._univerInstanceService);
                 const subUnitId = getSubUnitId(this._univerInstanceService);
+                if (!worksheet || !unitId || !subUnitId) {
+                    return { redos: [], undos: [], preRedos: [], preUndos: [] };
+                }
+                // eslint-disable-next-line max-lines-per-function
                 const getEffectsCbList = () => {
                     switch (command.id) {
                         case EffectRefRangId.MoveColsCommandId: {
@@ -185,6 +213,7 @@ export class RefRangeService extends Disposable {
                                 endRow: worksheet.getRowCount() - 1,
                                 startColumn: 0,
                                 endColumn: worksheet.getColumnCount() - 1,
+                                rangeType: RANGE_TYPE.ROW,
                             };
                             return this._checkRange([range], unitId, subUnitId);
                         }
@@ -196,6 +225,7 @@ export class RefRangeService extends Disposable {
                                 endRow: worksheet.getRowCount() - 1,
                                 startColumn: colStart,
                                 endColumn: worksheet.getColumnCount() - 1,
+                                rangeType: RANGE_TYPE.COLUMN,
                             };
                             return this._checkRange([range], unitId, subUnitId);
                         }
@@ -208,6 +238,7 @@ export class RefRangeService extends Disposable {
                                 endRow: worksheet.getRowCount() - 1,
                                 startColumn: 0,
                                 endColumn: worksheet.getColumnCount() - 1,
+                                rangeType: RANGE_TYPE.ROW,
                             };
                             return this._checkRange([range], unitId, subUnitId);
                         }
@@ -219,6 +250,7 @@ export class RefRangeService extends Disposable {
                                 endRow: worksheet.getRowCount() - 1,
                                 startColumn: colStart,
                                 endColumn: worksheet.getColumnCount() - 1,
+                                rangeType: RANGE_TYPE.COLUMN,
                             };
                             return this._checkRange([range], unitId, subUnitId);
                         }
@@ -230,7 +262,7 @@ export class RefRangeService extends Disposable {
                                 startRow: range.startRow,
                                 startColumn: range.startColumn,
                                 endColumn: range.endColumn,
-                                endRow: worksheet.getRowCount() - 1,
+                                endRow: MAX_ROW_COL,
                             };
                             return this._checkRange([effectRange], unitId, subUnitId);
                         }
@@ -241,10 +273,26 @@ export class RefRangeService extends Disposable {
                             const effectRange = {
                                 startRow: range.startRow,
                                 startColumn: range.startColumn,
-                                endColumn: worksheet.getColumnCount() - 1,
+                                endColumn: MAX_ROW_COL,
                                 endRow: range.endRow,
                             };
                             return this._checkRange([effectRange], unitId, subUnitId);
+                        }
+                        case EffectRefRangId.ReorderRangeCommandId: {
+                            const params = command;
+                            const { range, order } = params.params!;
+                            const effectRanges = [];
+                            for (let row = range.startRow; row <= range.endRow; row++) {
+                                if (row in order) {
+                                    effectRanges.push({
+                                        startRow: row,
+                                        endRow: row,
+                                        startColumn: range.startColumn,
+                                        endColumn: range.endColumn,
+                                    });
+                                }
+                            }
+                            return this._checkRange(effectRanges, unitId, subUnitId);
                         }
                     }
                 };
@@ -306,9 +354,20 @@ export class RefRangeService extends Disposable {
 
             keyList.forEach((key) => {
                 const cbList = manager.get(key);
+
                 const range = this._serializer.deserialize(key);
+                const realRange: IRange = {
+                    ...range,
+                    startRow: +range.startRow,
+                    endRow: +range.endRow,
+                    startColumn: +range.startColumn,
+                    endColumn: +range.endColumn,
+                    rangeType: range.rangeType && +range.rangeType,
+                };
                 // Todo@Gggpound : How to reduce this calculation
-                if (effectRanges.some((item) => Rectangle.intersects(item, range))) {
+                if (
+                    effectRanges.some((item) => Rectangle.intersects(item, realRange))
+                ) {
                     cbList &&
                         cbList.forEach((callback) => {
                             callbackSet.add(callback);
@@ -336,6 +395,10 @@ export class RefRangeService extends Disposable {
     ): IDisposable => {
         const unitId = _unitId || getUnitId(this._univerInstanceService);
         const subUnitId = _subUnitId || getSubUnitId(this._univerInstanceService);
+        if (!unitId || !subUnitId) {
+            return toDisposable(() => {});
+        }
+
         const refRangeManagerId = getRefRangId(unitId, subUnitId);
         const rangeString = this._serializer.serialize(range);
 
@@ -371,11 +434,11 @@ function getUnitId(univerInstanceService: IUniverInstanceService) {
 }
 
 function getSubUnitId(univerInstanceService: IUniverInstanceService) {
-    return univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet().getSheetId();
+    return univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()?.getSheetId();
 }
 
-function getSelectionRanges(selectionManagerService: SelectionManagerService) {
-    return selectionManagerService.getSelectionRanges() || [];
+function getSelectionRanges(selectionManagerService: SheetsSelectionsService) {
+    return selectionManagerService.getCurrentSelections()?.map((s) => s.range) || [];
 }
 
 function getRefRangId(unitId: string, subUnitId: string) {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-export default {
+import type zhCN from './zh-CN';
+
+const locale: typeof zhCN = {
     'sheets-filter': {
         toolbar: {
             'smart-toggle-filter-tooltip': 'Toggle Filter',
@@ -62,5 +64,24 @@ export default {
             'not-between': 'Not Between',
             custom: 'Custom',
         },
+        msg: {
+            'filter-header-forbidden': 'You can\'t move the header row of a filter.',
+        },
+        date: {
+            1: 'January',
+            2: 'February',
+            3: 'March',
+            4: 'April',
+            5: 'May',
+            6: 'June',
+            7: 'July',
+            8: 'August',
+            9: 'September',
+            10: 'October',
+            11: 'November',
+            12: 'December',
+        },
     },
 };
+
+export default locale;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,31 +15,37 @@
  */
 
 import type { IOperation } from '@univerjs/core';
-import { CommandType, IUniverInstanceService } from '@univerjs/core';
+import type { IScrollStateWithSearchParam } from '../../services/scroll-manager.service';
 
-import type { IScrollManagerInsertParam } from '../../services/scroll-manager.service';
-import { ScrollManagerService } from '../../services/scroll-manager.service';
+import { CommandType } from '@univerjs/core';
+import { IRenderManagerService } from '@univerjs/engine-render';
+import { SheetScrollManagerService } from '../../services/scroll-manager.service';
 
-export const SetScrollOperation: IOperation<IScrollManagerInsertParam> = {
+export const SetScrollOperation: IOperation<IScrollStateWithSearchParam> = {
     id: 'sheet.operation.set-scroll',
-
     type: CommandType.OPERATION,
 
-    handler: (accessor, params) => {
-        if (params == null) {
+    handler: (accessor, params: IScrollStateWithSearchParam) => {
+        if (!params) {
             return false;
         }
 
-        const scrollManagerService = accessor.get(ScrollManagerService);
-        const currentService = accessor.get(IUniverInstanceService);
-        const workbook = currentService.getUniverSheetInstance(params!.unitId);
-        const worksheet = workbook!.getSheetBySheetId(params!.sheetId);
-        const { xSplit, ySplit } = worksheet!.getConfig().freeze;
+        // freeze is handled by set-scroll.command.ts
+        const { unitId, sheetId, offsetX, offsetY, sheetViewStartColumn, sheetViewStartRow } = params;
+        const renderManagerService = accessor.get(IRenderManagerService);
+        const scrollManagerService = renderManagerService.getRenderById(unitId)!.with(SheetScrollManagerService);
+        // const currentService = accessor.get(IUniverInstanceService);
+        // const workbook = currentService.getUniverSheetInstance(unitId);
+        // const worksheet = workbook!.getSheetBySheetId(sheetId);
+        // const { xSplit, ySplit } = worksheet!.getConfig().freeze;
 
-        scrollManagerService.addOrReplaceByParam({
-            ...params,
-            sheetViewStartRow: params.sheetViewStartRow - ySplit,
-            sheetViewStartColumn: params.sheetViewStartColumn - xSplit,
+        scrollManagerService.emitRawScrollParam({
+            unitId,
+            sheetId,
+            offsetX,
+            offsetY,
+            sheetViewStartRow,
+            sheetViewStartColumn,
         });
 
         return true;

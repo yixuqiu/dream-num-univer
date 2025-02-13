@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,6 @@ export interface IShapeProperties {
     shapeBackgroundFill: IColorStyle;
     radius?: number;
     outline?: IOutline;
-    // shadow: IShadow;
-    // link: ILink;
-    // contentAlignment: ContentAlignment;
-    // autoFit: IAutoFit;
 }
 
 export interface IOutline {

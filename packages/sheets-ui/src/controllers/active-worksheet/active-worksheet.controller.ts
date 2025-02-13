@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-import type { IMutationInfo, Workbook } from '@univerjs/core';
-import { Disposable, ICommandService, IUniverInstanceService, LifecycleStages, OnLifecycle } from '@univerjs/core';
+import type { IMutationInfo, IOperationInfo, Workbook } from '@univerjs/core';
 import type {
     IInsertSheetMutationParams,
     IRemoveSheetMutationParams,
+    ISetSelectionsOperationParams,
     ISetWorksheetActiveOperationParams,
     ISetWorksheetHideMutationParams,
 } from '@univerjs/sheets';
+import { Disposable, ICommandService, IUniverInstanceService } from '@univerjs/core';
 import {
     InsertSheetMutation,
     RemoveSheetMutation,
+    SetSelectionsOperation,
     SetWorksheetActiveOperation,
     SetWorksheetHideMutation,
 } from '@univerjs/sheets';
@@ -34,7 +36,6 @@ import {
  * worksheet tab related mutations executes. We cannot write this logic in
  * commands because it does not take collaborative editing into consideration.
  */
-@OnLifecycle(LifecycleStages.Ready, ActiveWorksheetController)
 export class ActiveWorksheetController extends Disposable {
     private _previousSheetIndex = -1;
 
@@ -44,49 +45,41 @@ export class ActiveWorksheetController extends Disposable {
     ) {
         super();
 
-        this.disposeWithMe(
-            this._commandService.beforeCommandExecuted((command) => {
-                if (command.id === RemoveSheetMutation.id) {
-                    return this._beforeAdjustActiveSheetOnRemoveSheet(
-                        command as IMutationInfo<IRemoveSheetMutationParams>
-                    );
-                }
-            })
-        );
+        this.disposeWithMe(this._commandService.beforeCommandExecuted((command) => {
+            if (command.id === RemoveSheetMutation.id) {
+                return this._beforeAdjustActiveSheetOnRemoveSheet(
+                    command as IMutationInfo<IRemoveSheetMutationParams>
+                );
+            }
+        }));
 
-        this.disposeWithMe(
-            this._commandService.onCommandExecuted((command, options) => {
-                if (command.id === RemoveSheetMutation.id) {
-                    return this._adjustActiveSheetOnRemoveSheet(command as IMutationInfo<IRemoveSheetMutationParams>);
-                }
+        this.disposeWithMe(this._commandService.onCommandExecuted((command, options) => {
+            if (command.id === RemoveSheetMutation.id) {
+                return this._adjustActiveSheetOnRemoveSheet(command as IMutationInfo<IRemoveSheetMutationParams>);
+            }
 
-                if (
-                    command.id === SetWorksheetHideMutation.id &&
-                    (command.params as ISetWorksheetHideMutationParams).hidden
-                ) {
-                    return this._adjustActiveSheetOnHideSheet(command as IMutationInfo<ISetWorksheetHideMutationParams>);
-                }
+            if (command.id === SetWorksheetHideMutation.id && (command.params as ISetWorksheetHideMutationParams).hidden) {
+                return this._adjustActiveSheetOnHideSheet(command as IMutationInfo<ISetWorksheetHideMutationParams>);
+            }
 
-                // It is a mutation that we comes from the collaboration peer so we should not handle them.
-                if (options?.fromCollab) {
-                    return;
-                }
+            // It is a mutation that we comes from the collaboration peer so we should not handle them.
+            if (options?.fromCollab) return false;
 
-                // We only handle the local mutations, for
-                // * add / copy sheet
-                // * set sheet visible
-                if (command.id === InsertSheetMutation.id) {
-                    return this._adjustActiveSheetOnInsertSheet(command as IMutationInfo<IInsertSheetMutationParams>);
-                }
+            // We only handle the local mutations, for
+            // * add / copy sheet
+            // * set sheet visible
+            if (command.id === InsertSheetMutation.id) {
+                return this._adjustActiveSheetOnInsertSheet(command as IMutationInfo<IInsertSheetMutationParams>);
+            }
 
-                if (
-                    command.id === SetWorksheetHideMutation.id &&
-                    !(command.params as ISetWorksheetHideMutationParams).hidden
-                ) {
-                    return this._adjustActiveSheetOnShowSheet(command as IMutationInfo<ISetWorksheetHideMutationParams>);
-                }
-            })
-        );
+            if (command.id === SetWorksheetHideMutation.id && !(command.params as ISetWorksheetHideMutationParams).hidden) {
+                return this._adjustActiveSheetOnShowSheet(command as IMutationInfo<ISetWorksheetHideMutationParams>);
+            }
+
+            if (command.id === SetSelectionsOperation.id) {
+                return this._adjustActiveSheetOnSelection(command as IOperationInfo<ISetSelectionsOperationParams>);
+            }
+        }));
     }
 
     private _adjustActiveSheetOnHideSheet(mutation: IMutationInfo<ISetWorksheetHideMutationParams>) {
@@ -97,7 +90,7 @@ export class ActiveWorksheetController extends Disposable {
             return;
         }
 
-        const activeSheet = workbook.getActiveSheet().getSheetId();
+        const activeSheet = workbook.getActiveSheet()?.getSheetId();
         if (activeSheet !== subUnitId) {
             return;
         }
@@ -132,24 +125,22 @@ export class ActiveWorksheetController extends Disposable {
         // But how to decide which one is the previous sheet? We store the deleted sheet' index
         // in the `IRemoteSheetMutationParams` and use it to decide the previous sheet.
 
-        // If the selected sheet is not the deleted one, we don't have to do things.
+        // If the current sheet is not the deleted one, we don't have to call _switchToNextSheet.
         const { unitId } = mutation.params;
         const workbook = this._univerInstanceService.getUniverSheetInstance(unitId);
         if (!workbook) {
             return;
         }
 
-        // The deleted sheet is not the currently active sheet, we don't have to do things.
-        const activeSheet = workbook.getRawActiveSheet();
-        if (activeSheet) {
-            return;
+        // _switchToNextSheet is executed only when the current sheet is deleted.
+        const activeSheet = workbook.getActiveSheet();
+        if (activeSheet.getSheetId() === mutation.params.subUnitId) {
+            const previousIndex = this._previousSheetIndex;
+            const nextIndex = previousIndex >= 1 ? previousIndex - 1 : 0;
+            const nextId = findTheNextUnhiddenSheet(workbook, nextIndex);
+
+            this._switchToNextSheet(unitId, nextId);
         }
-
-        const previousIndex = this._previousSheetIndex;
-        const nextIndex = previousIndex >= 1 ? previousIndex - 1 : 0;
-        const nextId = findTheNextUnhiddenSheet(workbook, nextIndex);
-
-        this._switchToNextSheet(unitId, nextId);
     }
 
     private _adjustActiveSheetOnInsertSheet(mutation: IMutationInfo<IInsertSheetMutationParams>) {
@@ -162,6 +153,13 @@ export class ActiveWorksheetController extends Disposable {
         // This is simple, just change the active sheet to the unhidden sheet.
         const { unitId, subUnitId } = mutation.params;
         this._switchToNextSheet(unitId, subUnitId);
+    }
+
+    private _adjustActiveSheetOnSelection(operation: IOperationInfo<ISetSelectionsOperationParams>) {
+        const { unitId, subUnitId } = operation.params;
+        if (subUnitId !== this._univerInstanceService.getUnit<Workbook>(unitId)?.getActiveSheet().getSheetId()) {
+            this._switchToNextSheet(unitId, subUnitId);
+        }
     }
 
     private _switchToNextSheet(unitId: string, subUnitId: string): void {

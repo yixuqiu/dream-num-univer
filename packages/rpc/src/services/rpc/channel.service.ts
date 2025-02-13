@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { createIdentifier } from '@wendellhu/redi';
-
+import type { IDisposable } from '@univerjs/core';
 import type { IChannel, IMessageProtocol } from './rpc.service';
+import { createIdentifier } from '@univerjs/core';
 import { ChannelClient, ChannelServer } from './rpc.service';
 
 export interface IRPCChannelService {
@@ -29,13 +29,18 @@ export const IRPCChannelService = createIdentifier<IRPCChannelService>('IRPCChan
 /**
  * This service is responsible for managing the RPC channels.
  */
-export class ChannelService {
+export class ChannelService implements IDisposable {
     private readonly _client: ChannelClient;
     private readonly _server: ChannelServer;
 
     constructor(_messageProtocol: IMessageProtocol) {
         this._client = new ChannelClient(_messageProtocol);
         this._server = new ChannelServer(_messageProtocol);
+    }
+
+    dispose(): void {
+        this._client.dispose();
+        this._server.dispose();
     }
 
     requestChannel(name: string): IChannel {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,13 @@
  */
 
 export interface IClipboardItem {
+    presentationStyle: PresentationStyle;
     readonly types: readonly string[];
     getType(type: string): Promise<Blob>;
 }
 
 export class MockClipboardItem implements IClipboardItem {
+    presentationStyle: PresentationStyle;
     private readonly itemTypes: readonly string[];
     constructor(private props: IMockClipboardProps) {
         this.itemTypes = Object.keys(props);
@@ -49,7 +51,10 @@ interface IMockClipboardProps {
 }
 
 export class MockClipboard {
-    constructor(private props: IMockClipboardProps) {}
+    constructor(private props: IMockClipboardProps) {
+        // empty
+    }
+
     read(): Promise<IClipboardItem[]> {
         // Here you can return the simulated IClipboardItem array
         const clipboardItems: IClipboardItem[] = [new MockClipboardItem(this.props)];

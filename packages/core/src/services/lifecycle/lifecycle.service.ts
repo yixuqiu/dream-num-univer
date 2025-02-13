@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import type { DependencyIdentifier } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-import { BehaviorSubject, Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { BehaviorSubject, merge, of, skip } from 'rxjs';
 
 import { Disposable } from '../../shared/lifecycle';
+import { takeAfter } from '../../shared/rxjs';
 import { ILogService } from '../log/log.service';
-import { LifecycleNameMap, LifecycleStages, LifecycleToModules } from './lifecycle';
+import { LifecycleNameMap, LifecycleStages } from './lifecycle';
 
 /**
  * This service controls the lifecycle of a Univer instance. Other modules can
@@ -44,28 +44,18 @@ export class LifecycleService extends Disposable {
     }
 
     set stage(stage: LifecycleStages) {
-        if (stage < this.stage) {
-            throw new Error('[LifecycleService]: lifecycle stage cannot go backward!');
-        }
+        if (this._lock) throw new Error('[LifecycleService]: cannot set new stage when related logic is all handled!');
+        if (stage < this.stage) throw new Error('[LifecycleService]: lifecycle stage cannot go backward!');
+        if (stage === this.stage) return;
 
-        if (stage === this.stage) {
-            return;
-        }
-
-        if (this._lock) {
-            throw new Error('[LifecycleService]: cannot set new stage when related logic is all handled!');
-        }
         this._lock = true;
-
         this._reportProgress(stage);
         this._lifecycle$.next(stage);
-
         this._lock = false;
     }
 
     override dispose(): void {
         this._lifecycle$.complete();
-
         super.dispose();
     }
 
@@ -75,25 +65,8 @@ export class LifecycleService extends Disposable {
      * @returns
      */
     subscribeWithPrevious(): Observable<LifecycleStages> {
-        return new Observable<LifecycleStages>((subscriber) => {
-            // Before subscribe, emit the current stage and all previous stages.
-            // Since `this._lifecycle$` is a BehaviorSubject, it will emit the current stage immediately.
-            // So we just need to manually next all previous stages.
-            if (this.stage === LifecycleStages.Starting) {
-                // do nothing
-            } else if (this.stage === LifecycleStages.Ready) {
-                subscriber.next(LifecycleStages.Starting);
-            } else if (this.stage === LifecycleStages.Rendered) {
-                subscriber.next(LifecycleStages.Starting);
-                subscriber.next(LifecycleStages.Ready);
-            } else {
-                subscriber.next(LifecycleStages.Starting);
-                subscriber.next(LifecycleStages.Ready);
-                subscriber.next(LifecycleStages.Rendered);
-            }
-
-            return this._lifecycle$.subscribe(subscriber);
-        });
+        return merge(getLifecycleStagesAndBefore(this.stage), this._lifecycle$.pipe(skip(1)))
+            .pipe(takeAfter((s) => s === LifecycleStages.Steady));
     }
 
     private _reportProgress(stage: LifecycleStages): void {
@@ -101,30 +74,20 @@ export class LifecycleService extends Disposable {
     }
 }
 
-/**
- * This service is used to initialize modules on a certain lifecycle stage.
- * Refer to `runOnLifecycle` and `OnLifecycle` for more details.
- *
- * @internal
- */
-export class LifecycleInitializerService extends Disposable {
-    private _seenTokens = new Set<DependencyIdentifier<unknown>>();
-
-    constructor(
-        @Inject(LifecycleService) private _lifecycleService: LifecycleService,
-        @Inject(Injector) private readonly _injector: Injector
-    ) {
-        super();
-    }
-
-    initModulesOnStage(stage: LifecycleStages): void {
-        LifecycleToModules.get(stage)?.forEach((m) => {
-            if (this._injector.has(m) && !this._seenTokens.has(m)) {
-                this._injector.get(m);
-
-                // swap these two lines and they will be fixed
-                this._seenTokens.add(m);
-            }
-        });
+export function getLifecycleStagesAndBefore(lifecycleStage: LifecycleStages): Observable<LifecycleStages> {
+    switch (lifecycleStage) {
+        case LifecycleStages.Starting:
+            return of(LifecycleStages.Starting);
+        case LifecycleStages.Ready:
+            return of(LifecycleStages.Starting, LifecycleStages.Ready);
+        case LifecycleStages.Rendered:
+            return of(LifecycleStages.Starting, LifecycleStages.Ready, LifecycleStages.Rendered);
+        default:
+            return of(
+                LifecycleStages.Starting,
+                LifecycleStages.Ready,
+                LifecycleStages.Rendered,
+                LifecycleStages.Steady
+            );
     }
 }

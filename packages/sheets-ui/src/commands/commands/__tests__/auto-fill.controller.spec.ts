@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { ICellData, IStyleData, Nullable, Univer, Workbook } from '@univerjs/core';
+import type { ICellData, Injector, IStyleData, Nullable, Univer, Workbook } from '@univerjs/core';
 import {
     CellValueType,
     ICommandService,
@@ -25,31 +25,39 @@ import {
     UndoCommand,
     UniverInstanceType,
 } from '@univerjs/core';
+import { DocSelectionManagerService } from '@univerjs/docs';
+import { EditorService, IEditorService } from '@univerjs/docs-ui';
+import { IRenderManagerService, RenderManagerService } from '@univerjs/engine-render';
+
 import {
     AddWorksheetMergeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RemoveWorksheetMergeMutation,
-    SelectionManagerService,
     SetRangeValuesMutation,
     SetSelectionsOperation,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
-import { DesktopPlatformService, DesktopShortcutService, EditorService, IEditorService, IPlatformService, IShortcutService } from '@univerjs/ui';
-import type { Injector } from '@wendellhu/redi';
+import { IPlatformService, IShortcutService, PlatformService, ShortcutService } from '@univerjs/ui';
 import { beforeEach, describe, expect, it } from 'vitest';
-
-import { IRenderManagerService, RenderManagerService } from '@univerjs/engine-render';
 import { AutoFillController } from '../../../controllers/auto-fill.controller';
 import { AutoFillService, IAutoFillService } from '../../../services/auto-fill/auto-fill.service';
 import { APPLY_TYPE } from '../../../services/auto-fill/type';
 import { EditorBridgeService, IEditorBridgeService } from '../../../services/editor-bridge.service';
-import { ISelectionRenderService, SelectionRenderService } from '../../../services/selection/selection-render.service';
+import { ISheetSelectionRenderService } from '../../../services/selection/base-selection-render.service';
+import { SheetSelectionRenderService } from '../../../services/selection/selection-render.service';
 import { SheetSkeletonManagerService } from '../../../services/sheet-skeleton-manager.service';
+import { SheetsRenderService } from '../../../services/sheets-render.service';
+import { AutoClearContentCommand, AutoFillCommand } from '../auto-fill.command';
 import { RefillCommand } from '../refill.command';
 import { createCommandTestBed } from './create-command-test-bed';
 
 const theme = {
     colorBlack: '#35322b',
 };
+
+class mockSheetsRenderService {
+    registerSkeletonChangingMutations(id: string) {
+    }
+}
 
 const TEST_WORKBOOK_DATA = {
     id: 'test',
@@ -260,30 +268,35 @@ describe('Test auto fill rules in controller', () => {
     let commandService: ICommandService;
     let autoFillController: AutoFillController;
     let themeService: ThemeService;
+
     let getValues: (
         startRow: number,
         startColumn: number,
         endRow: number,
         endColumn: number
     ) => Array<Array<Nullable<ICellData>>> | undefined;
+
     let getStyles: (
         startRow: number,
         startColumn: number,
         endRow: number,
         endColumn: number
     ) => Array<Array<Nullable<IStyleData>>> | undefined;
-    let selectionManagerService: SelectionManagerService;
+    let selectionManagerService: SheetsSelectionsService;
+
     beforeEach(() => {
         const testBed = createCommandTestBed(TEST_WORKBOOK_DATA, [
-            [ISelectionRenderService, { useClass: SelectionRenderService }],
+            [DocSelectionManagerService],
+            [ISheetSelectionRenderService, { useClass: SheetSelectionRenderService }],
             [IAutoFillService, { useClass: AutoFillService }],
-            [IShortcutService, { useClass: DesktopShortcutService }],
-            [IPlatformService, { useClass: DesktopPlatformService }],
+            [IShortcutService, { useClass: ShortcutService }],
+            [IPlatformService, { useClass: PlatformService }],
             [IEditorBridgeService, { useClass: EditorBridgeService }],
             [IEditorService, { useClass: EditorService }],
             [IRenderManagerService, { useClass: RenderManagerService }],
             [SheetSkeletonManagerService],
             [AutoFillController],
+            [SheetsRenderService, { useClass: mockSheetsRenderService }],
         ]);
         univer = testBed.univer;
         get = testBed.get;
@@ -292,17 +305,14 @@ describe('Test auto fill rules in controller', () => {
         themeService = get(ThemeService);
         themeService.setTheme(theme);
         autoFillController = get(AutoFillController);
-        selectionManagerService = get(SelectionManagerService);
-        selectionManagerService.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
+        selectionManagerService = get(SheetsSelectionsService);
         commandService.registerCommand(SetRangeValuesMutation);
         commandService.registerCommand(SetSelectionsOperation);
         commandService.registerCommand(RemoveWorksheetMergeMutation);
         commandService.registerCommand(AddWorksheetMergeMutation);
         commandService.registerCommand(RefillCommand);
+        commandService.registerCommand(AutoClearContentCommand);
+        commandService.registerCommand(AutoFillCommand);
 
         getValues = (
             startRow: number,
@@ -336,37 +346,38 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test number
-                (autoFillController as any)._triggerAutoFill(
-                    {
+
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 0,
                         startColumn: 0,
                         endRow: 0,
                         endColumn: 1,
                     },
-                    {
+                    targetRange: {
                         startRow: 0,
                         startColumn: 0,
                         endRow: 0,
                         endColumn: 3,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(0, 2)?.v).toBe(3);
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(0, 3)?.v).toBe(4);
                 // test number. descending
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 1,
                         startColumn: 0,
                         endRow: 1,
                         endColumn: 1,
                     },
-                    {
+                    targetRange: {
                         startRow: 1,
                         startColumn: 0,
                         endRow: 1,
                         endColumn: 3,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(1, 2)?.v).toBe(0);
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(1, 3)?.v).toBe(-1);
             });
@@ -377,20 +388,20 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test extend number
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 2,
                         startColumn: 0,
                         endRow: 2,
                         endColumn: 1,
                     },
-                    {
+                    targetRange: {
                         startRow: 2,
                         startColumn: 0,
                         endRow: 2,
                         endColumn: 3,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(2, 2)?.v).toBe('第 3');
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(2, 3)?.v).toBe('第 4');
             });
@@ -401,20 +412,20 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test chinese number
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 3,
                         startColumn: 0,
                         endRow: 3,
                         endColumn: 2,
                     },
-                    {
+                    targetRange: {
                         startRow: 3,
                         startColumn: 0,
                         endRow: 3,
                         endColumn: 4,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(3, 3)?.v).toBe('五');
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(3, 4)?.v).toBe('日');
             });
@@ -426,20 +437,20 @@ describe('Test auto fill rules in controller', () => {
                 if (!workbook) throw new Error('This is an error');
 
                 // test chinese week
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 4,
                         startColumn: 0,
                         endRow: 4,
                         endColumn: 2,
                     },
-                    {
+                    targetRange: {
                         startRow: 4,
                         startColumn: 0,
                         endRow: 4,
                         endColumn: 4,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(4, 3)?.v).toBe('星期五');
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(4, 4)?.v).toBe('星期日');
             });
@@ -450,20 +461,20 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test loop series
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 5,
                         startColumn: 0,
                         endRow: 5,
                         endColumn: 1,
                     },
-                    {
+                    targetRange: {
                         startRow: 5,
                         startColumn: 0,
                         endRow: 5,
                         endColumn: 3,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(5, 2)?.v).toBe('丙');
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(5, 3)?.v).toBe('丁');
             });
@@ -474,20 +485,20 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test other string
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 6,
                         startColumn: 0,
                         endRow: 6,
                         endColumn: 1,
                     },
-                    {
+                    targetRange: {
                         startRow: 6,
                         startColumn: 0,
                         endRow: 6,
                         endColumn: 3,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(6, 2)?.v).toBe('copy only');
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(6, 3)?.v).toBe('no series');
             });
@@ -498,20 +509,20 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
                 // test mixed mode
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 7,
                         startColumn: 0,
                         endRow: 7,
                         endColumn: 3,
                     },
-                    {
+                    targetRange: {
                         startRow: 7,
                         startColumn: 0,
                         endRow: 7,
                         endColumn: 7,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(7, 4)?.v).toBe(3);
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(7, 5)?.v).toBe(4);
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(7, 6)?.v).toBe('第 3');
@@ -537,8 +548,8 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
 
-                const selectionManagerService = get(SelectionManagerService);
-                selectionManagerService.add([{
+                const selectionManagerService = get(SheetsSelectionsService);
+                selectionManagerService.addSelections([{
                     style: null,
                     range: {
                         startRow: 0,
@@ -558,22 +569,22 @@ describe('Test auto fill rules in controller', () => {
                     },
                 }]);
 
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 0,
                         startColumn: 5,
                         endRow: 2,
                         endColumn: 7,
                     },
-                    {
+                    targetRange: {
                         startRow: 0,
                         startColumn: 5,
                         endRow: 5,
                         endColumn: 7,
-                    }
-                );
-                expect(workbook.getActiveSheet().getMergeData().length).toBe(2);
-                expect(selectionManagerService.getLast()?.primary).toEqual(expect.objectContaining({
+                    },
+                });
+                expect(workbook.getActiveSheet()?.getMergeData().length).toBe(2);
+                expect(selectionManagerService.getCurrentLastSelection()?.primary).toEqual(expect.objectContaining({
                     startRow: 0,
                     startColumn: 5,
                     endRow: 2,
@@ -587,8 +598,8 @@ describe('Test auto fill rules in controller', () => {
                 const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 if (!workbook) throw new Error('This is an error');
 
-                const selectionManagerService = get(SelectionManagerService);
-                selectionManagerService.add([{
+                const selectionManagerService = get(SheetsSelectionsService);
+                selectionManagerService.addSelections([{
                     style: null,
                     range: {
                         startRow: 0,
@@ -609,22 +620,22 @@ describe('Test auto fill rules in controller', () => {
                     },
                 }]);
 
-                (autoFillController as any)._triggerAutoFill(
-                    {
+                commandService.executeCommand(AutoFillCommand.id, {
+                    sourceRange: {
                         startRow: 0,
                         startColumn: 0,
                         endRow: 5,
                         endColumn: 2,
                     },
-                    {
+                    targetRange: {
                         startRow: 0,
                         startColumn: 0,
                         endRow: 3,
                         endColumn: 2,
-                    }
-                );
+                    },
+                });
                 expect(workbook.getSheetBySheetId('sheet1')?.getCell(4, 0)?.v).toBeFalsy();
-                expect(selectionManagerService.getLast()?.primary).toEqual(expect.objectContaining({
+                expect(selectionManagerService.getCurrentLastSelection()?.primary).toEqual(expect.objectContaining({
                     startRow: 0,
                     startColumn: 0,
                     endRow: 0,
@@ -645,9 +656,9 @@ describe('Test auto fill rules in controller', () => {
                 endRow: 10,
                 endColumn: 1,
             });
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(11, 1)?.v).toBe(3);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(12, 1)?.v).toBe(4);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(13, 1)?.v).toBe(5);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(11, 1)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(12, 1)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(13, 1)?.v).toBe(2);
 
             // undo redo
             await commandService.executeCommand(UndoCommand.id);
@@ -656,9 +667,9 @@ describe('Test auto fill rules in controller', () => {
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(13, 1)?.v).toBe(undefined);
 
             await commandService.executeCommand(RedoCommand.id);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(11, 1)?.v).toBe(3);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(12, 1)?.v).toBe(4);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(13, 1)?.v).toBe(5);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(11, 1)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(12, 1)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(13, 1)?.v).toBe(2);
         });
     });
 
@@ -667,20 +678,20 @@ describe('Test auto fill rules in controller', () => {
             const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             if (!workbook) throw new Error('This is an error');
             // test other string
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 14,
                     startColumn: 2,
                     endRow: 14,
                     endColumn: 4,
                 },
-                {
+                targetRange: {
                     startRow: 14,
                     startColumn: 0,
                     endRow: 14,
                     endColumn: 4,
-                }
-            );
+                },
+            });
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 0)?.v).toBe(0.5);
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 1)?.v).toBe(1);
             // undo redo
@@ -699,20 +710,20 @@ describe('Test auto fill rules in controller', () => {
             const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             if (!workbook) throw new Error('This is an error');
             // equal ratio
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 14,
                     startColumn: 2,
                     endRow: 14,
                     endColumn: 4,
                 },
-                {
+                targetRange: {
                     startRow: 14,
                     startColumn: 2,
                     endRow: 14,
                     endColumn: 7,
-                }
-            );
+                },
+            });
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 5)?.v).toBe(16);
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 6)?.v).toBe(32);
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 7)?.v).toBe(64);
@@ -747,20 +758,20 @@ describe('Test auto fill rules in controller', () => {
             const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             if (!workbook) throw new Error('This is an error');
             // equal ratio
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 14,
                     startColumn: 2,
                     endRow: 14,
                     endColumn: 3,
                 },
-                {
+                targetRange: {
                     startRow: 14,
                     startColumn: 2,
                     endRow: 14,
                     endColumn: 4,
-                }
-            );
+                },
+            });
             expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 4)?.v).toBe(6);
             const styles = getStyles(14, 4, 14, 4);
             expect(styles && styles[0][0]).toStrictEqual({
@@ -785,14 +796,14 @@ describe('Test auto fill rules in controller', () => {
 
             // undo redo
             await commandService.executeCommand(UndoCommand.id);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 4)?.v).toBe(6);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(14, 4)?.v).toBe(8);
             const styles_undo = getStyles(14, 4, 14, 4);
             expect(styles_undo && styles_undo[0][0]).toStrictEqual({
                 bg: {
-                    rgb: '#ccc',
+                    rgb: '#eee',
                 },
-                ht: 2,
-                vt: 2,
+                ht: null,
+                vt: null,
             });
 
             // redo
@@ -814,71 +825,71 @@ describe('Test auto fill rules in controller', () => {
             const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             if (!workbook) throw new Error('This is an error');
             // test right
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 2,
                 },
-                {
+                targetRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 4,
-                }
-            );
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 3)?.v).toBe(3);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 4)?.v).toBe(4);
+                },
+            });
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 3)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 4)?.v).toBe(2);
             // test left
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 2,
                 },
-                {
+                targetRange: {
                     startRow: 16,
                     startColumn: 0,
                     endRow: 16,
                     endColumn: 2,
-                }
-            );
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 1)?.v).toBe(1);
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 0)?.v).toBe(0);
+                },
+            });
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 1)?.v).toBe(2);
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(16, 0)?.v).toBe(2);
             // test up
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 2,
                 },
-                {
+                targetRange: {
                     startRow: 15,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 2,
-                }
-            );
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(15, 2)?.v).toBe(1);
+                },
+            });
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(15, 2)?.v).toBe(2);
             // test down
-            (autoFillController as any)._triggerAutoFill(
-                {
+            commandService.executeCommand(AutoFillCommand.id, {
+                sourceRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 16,
                     endColumn: 2,
                 },
-                {
+                targetRange: {
                     startRow: 16,
                     startColumn: 2,
                     endRow: 17,
                     endColumn: 2,
-                }
-            );
-            expect(workbook.getSheetBySheetId('sheet1')?.getCell(17, 2)?.v).toBe(3);
+                },
+            });
+            expect(workbook.getSheetBySheetId('sheet1')?.getCell(17, 2)?.v).toBe(2);
         });
     });
 });

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,21 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import { expandArrayValueObject } from '../../../engine/utils/array-object';
-import { booleanObjectIntersection, valueObjectCompare } from '../../../engine/utils/object-compare';
-import { ArrayValueObject } from '../../../engine/value-object/array-value-object';
 import type { BaseValueObject, IArrayValueObject } from '../../../engine/value-object/base-value-object';
+import { ErrorType } from '../../../basics/error-type';
+import { calculateMaxDimensions, getBooleanResults, getErrorArray } from '../../../engine/utils/value-object';
+import { ArrayValueObject } from '../../../engine/value-object/array-value-object';
 import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BaseFunction } from '../../base-function';
 
 export class Sumifs extends BaseFunction {
+    override minParams = 3;
+
+    override maxParams = 255;
+
     override calculate(sumRange: BaseValueObject, ...variants: BaseValueObject[]) {
-        if (sumRange == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
-        if (variants.length < 2) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
         if (sumRange.isError()) {
-            return ErrorValueObject.create(ErrorType.NA);
+            return sumRange;
         }
 
         if (!sumRange.isArray()) {
@@ -50,61 +45,20 @@ export class Sumifs extends BaseFunction {
             return ErrorValueObject.create(ErrorType.VALUE);
         }
 
-        const sumRowLength = (sumRange as ArrayValueObject).getRowCount();
-        const sumColumnLength = (sumRange as ArrayValueObject).getColumnCount();
-        // The size of the extended range is determined by the maximum width and height of the criteria range.
-        let maxRowLength = 0;
-        let maxColumnLength = 0;
+        const { maxRowLength, maxColumnLength } = calculateMaxDimensions(variants);
 
-        variants.forEach((variant, i) => {
-            if (i % 2 === 1) {
-                if (variant.isArray()) {
-                    const arrayValue = variant as ArrayValueObject;
-                    maxRowLength = Math.max(maxRowLength, arrayValue.getRowCount());
-                    maxColumnLength = Math.max(maxColumnLength, arrayValue.getColumnCount());
-                } else {
-                    maxRowLength = Math.max(maxRowLength, 1);
-                    maxColumnLength = Math.max(maxColumnLength, 1);
-                }
-            }
-        });
+        const errorArray = getErrorArray(variants, sumRange, maxRowLength, maxColumnLength);
 
-        const booleanResults: BaseValueObject[][] = [];
-
-        for (let i = 0; i < variants.length; i++) {
-            if (i % 2 === 1) continue;
-
-            const range = variants[i];
-
-            const rangeRowLength = (range as ArrayValueObject).getRowCount();
-            const rangeColumnLength = (range as ArrayValueObject).getColumnCount();
-            if (rangeRowLength !== sumRowLength || rangeColumnLength !== sumColumnLength) {
-                return expandArrayValueObject(maxRowLength, maxColumnLength, ErrorValueObject.create(ErrorType.NA));
-            }
-
-            const criteria = variants[i + 1];
-            const criteriaArray = expandArrayValueObject(maxRowLength, maxColumnLength, criteria, ErrorValueObject.create(ErrorType.NA));
-
-            criteriaArray.iterator((criteriaValueObject, rowIndex, columnIndex) => {
-                if (!criteriaValueObject) {
-                    return;
-                }
-
-                const resultArrayObject = valueObjectCompare(range, criteriaValueObject);
-
-                if (booleanResults[rowIndex] === undefined) {
-                    booleanResults[rowIndex] = [];
-                }
-
-                if (booleanResults[rowIndex][columnIndex] === undefined) {
-                    booleanResults[rowIndex][columnIndex] = resultArrayObject;
-                    return;
-                }
-
-                booleanResults[rowIndex][columnIndex] = booleanObjectIntersection(booleanResults[rowIndex][columnIndex], resultArrayObject);
-            });
+        if (errorArray) {
+            return errorArray;
         }
 
+        const booleanResults = getBooleanResults(variants, maxRowLength, maxColumnLength, true);
+
+        return this._aggregateResults(sumRange, booleanResults);
+    }
+
+    private _aggregateResults(sumRange: BaseValueObject, booleanResults: BaseValueObject[][]): ArrayValueObject {
         const sumResults = booleanResults.map((row) => {
             return row.map((booleanResult) => {
                 return (sumRange as ArrayValueObject).pick(booleanResult as ArrayValueObject).sum();

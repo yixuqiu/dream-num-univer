@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vitest } from 'vitest';
+import type { Injector } from '@univerjs/core';
 
-import type { Injector } from '@wendellhu/redi';
-import { HTTPService } from '../../http.service';
+import { afterEach, beforeEach, describe, expect, it, vitest } from 'vitest';
 import { createHTTPTestBed, type MockHTTPImplementation } from '../../__testing__/http-testing-utils';
-import { IHTTPImplementation } from '../../implementations/implementation';
-import { HTTPResponse, HTTPResponseError } from '../../response';
 import { HTTPHeaders } from '../../headers';
-import { retryInterceptor } from '../retry-interceptor';
+import { HTTPService } from '../../http.service';
+import { IHTTPImplementation } from '../../implementations/implementation';
 import { __TEST_ONLY_RESET_REQUEST_UID_DO_NOT_USE_IN_PRODUCTION } from '../../request';
+import { HTTPResponse, HTTPResponseError } from '../../response';
+import { RetryInterceptorFactory } from '../retry-interceptor';
 
 describe('test "HTTPRetryInterceptor"', () => {
     let httpService: HTTPService;
@@ -48,6 +48,8 @@ describe('test "HTTPRetryInterceptor"', () => {
 
     function emitError(uid: number) {
         httpImplementation.getHandler(uid).emitError(new HTTPResponseError({
+            // eslint-disable-next-line ts/no-explicit-any
+            request: {} as any,
             headers: new HTTPHeaders(),
             status: 500,
             statusText: 'Internal Server Error',
@@ -69,12 +71,12 @@ describe('test "HTTPRetryInterceptor"', () => {
     it('should retry the request for 3 times until success', () => new Promise<void>((done) => {
         httpService.registerHTTPInterceptor({
             priority: 0,
-            interceptor: retryInterceptor,
+            interceptor: RetryInterceptorFactory(),
         });
 
         const request = httpService.get('http://example.com');
         request.then((response) => {
-            expect(response.body).toEqual({ text: 'Succeeded' });
+            expect((response as HTTPResponse<{ text: string }>).body).toEqual({ text: 'Succeeded' });
             done();
         });
 
@@ -93,7 +95,7 @@ describe('test "HTTPRetryInterceptor"', () => {
     it('should throw error after attempt for 3 times', () => new Promise<void>((done) => {
         httpService.registerHTTPInterceptor({
             priority: 0,
-            interceptor: retryInterceptor,
+            interceptor: RetryInterceptorFactory(),
         });
 
         const request = httpService.get('http://example.com');

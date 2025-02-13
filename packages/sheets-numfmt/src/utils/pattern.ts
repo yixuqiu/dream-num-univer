@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,21 @@
  * limitations under the License.
  */
 
-import numfmt from '@univerjs/engine-numfmt';
-import { LocaleType } from '@univerjs/core';
+import type { INumfmtLocalTag } from '@univerjs/core';
 import type { FormatType } from '@univerjs/sheets';
+import { numfmt } from '@univerjs/core';
+import { stripErrorMargin } from '@univerjs/engine-formula';
 
 export const getPatternType = (pattern: string): FormatType => numfmt.getInfo(pattern).type || 'unknown';
-export const getPatternPreview = (pattern: string, value: number, _locale?: LocaleType) => {
+interface IPatternPreview {
+    result: string;
+    color?: string;
+}
+
+export const getPatternPreview = (pattern: string, value: number, locale: INumfmtLocalTag = 'en'): IPatternPreview => {
     const info = numfmt.getInfo(pattern);
-    const locale = _locale === LocaleType.ZH_CN ? 'zh-CN' : 'en';
     const negInfo = info._partitions[1];
-    const result = numfmt.format(pattern, value, { locale });
+    const result = numfmt.format(pattern, value, { locale, throws: false });
     if (value < 0) {
         return {
             result,
@@ -33,4 +38,13 @@ export const getPatternPreview = (pattern: string, value: number, _locale?: Loca
     return {
         result,
     };
+};
+
+export const getPatternPreviewIgnoreGeneral = (pattern: string, value: number, locale?: INumfmtLocalTag): IPatternPreview => {
+    if (pattern === 'General') {
+        return {
+            result: String(stripErrorMargin(value)), // In Excel, the default General format also needs to handle numeric precision.
+        };
+    }
+    return getPatternPreview(pattern, value, locale);
 };

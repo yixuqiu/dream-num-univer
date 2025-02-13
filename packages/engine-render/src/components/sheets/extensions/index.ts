@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 export * from './background';
 export * from './border';
 export * from './column-header-layout';
+export * from './custom';
 export * from './font';
+export * from './marker';
 export * from './row-header-layout';
 export * from './sheet-extension';
-export * from './marker';
-export * from './custom';

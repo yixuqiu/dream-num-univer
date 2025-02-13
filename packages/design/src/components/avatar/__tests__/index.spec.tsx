@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render } from '@testing-library/react';
 import React from 'react';
-import { describe, expect, it } from 'vitest';
 
 import { Avatar } from '../Avatar';
 
 describe('Avatar', () => {
+    afterEach(cleanup);
+
     it('renders correctly', () => {
         const { container } = render(<Avatar size="small">Jane Doe</Avatar>);
         expect(container);
@@ -36,5 +38,19 @@ describe('Avatar', () => {
         const { container } = render(<Avatar src="test.png" />);
 
         expect(container.querySelector('img')).not.toBeNull();
+    });
+
+    it('renders the image with fit', () => {
+        const { container } = render(<Avatar src="test.png" fit="contain" />);
+
+        expect(container.innerHTML).contains('object-fit: contain');
+    });
+
+    it('renders the size with number', () => {
+        const { container } = render(<Avatar size={100} />);
+
+        expect(container.innerHTML).contains('width: 100px');
+        expect(container.innerHTML).contains('height: 100px');
+        expect(container.innerHTML).contains('line-height: 100px');
     });
 });

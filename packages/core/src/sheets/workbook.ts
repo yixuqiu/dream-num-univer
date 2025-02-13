@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,18 @@
  * limitations under the License.
  */
 
-import { BehaviorSubject, Subject } from 'rxjs';
-
-import { ILogService } from '../services/log/log.service';
+import type { Observable } from 'rxjs';
 import type { Nullable } from '../shared';
-import { Tools } from '../shared';
-import { DEFAULT_RANGE_ARRAY } from '../types/const';
-import { BooleanNumber } from '../types/enum';
-import type {
-    IColumnStartEndData,
-    IGridRange,
-    IRangeArrayData,
-    IRangeStringData,
-    IRangeType,
-    IRowStartEndData,
-    IWorkbookData,
-    IWorksheetData,
-} from '../types/interfaces';
+
+import type { CustomData, IRangeType, IWorkbookData, IWorksheetData } from './typedef';
+import { BehaviorSubject, Subject } from 'rxjs';
 import { UnitModel, UniverInstanceType } from '../common/unit';
+import { ILogService } from '../services/log/log.service';
+import { Tools } from '../shared';
+import { BooleanNumber } from '../types/enum';
+import { getEmptySnapshot } from './empty-snapshot';
 import { Styles } from './styles';
 import { Worksheet } from './worksheet';
-import { getEmptySnapshot } from './empty-snapshot';
 
 export function getWorksheetUID(workbook: Workbook, worksheet: Worksheet): string {
     return `${workbook.getUnitId()}|${worksheet.getSheetId()}`;
@@ -80,8 +71,14 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
 
     private _count: number;
 
+    private readonly _name$: BehaviorSubject<string>;
+    readonly name$: Observable<string>;
     get name(): string {
-        return this._snapshot.name;
+        return this._name$.getValue();
+    }
+
+    static isIRangeType(range: IRangeType | IRangeType[]): boolean {
+        return typeof range === 'string' || 'startRow' in range || 'row' in range;
     }
 
     constructor(
@@ -107,7 +104,10 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
         this._count = 1;
         this._worksheets = new Map<string, Worksheet>();
 
-        this._passWorksheetSnapshots();
+        this._name$ = new BehaviorSubject(workbookData.name || '');
+        this.name$ = this._name$.asObservable();
+
+        this._parseWorksheetSnapshots();
     }
 
     override dispose(): void {
@@ -116,43 +116,52 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
         this._sheetCreated$.complete();
         this._sheetDisposed$.complete();
         this._activeSheet$.complete();
+        this._name$.complete();
     }
 
+    /**
+     * Create a clone of the current snapshot.
+     * Call resourceLoaderService.saveWorkbook to save the data associated with the current plugin if needed.
+     * @memberof Workbook
+     */
     save(): IWorkbookData {
         return Tools.deepClone(this._snapshot);
     }
 
-    static isIRangeType(range: IRangeType | IRangeType[]): boolean {
-        return typeof range === 'string' || 'startRow' in range || 'row' in range;
-    }
-
+    /**
+     * Get current snapshot reference.
+     * Call resourceLoaderService.saveWorkbook to save the data associated with the current plugin if needed.
+     * @return {*}  {IWorkbookData}
+     * @memberof Workbook
+     */
     getSnapshot(): IWorkbookData {
         return this._snapshot;
     }
 
+    /** @deprecated use use name property instead */
     getName(): string {
         return this._snapshot.name;
+    }
+
+    setName(name: string): void {
+        this._name$.next(name);
+        this._snapshot.name = name;
     }
 
     getUnitId() {
         return this._unitId;
     }
 
-    getRev(): number {
+    override getRev(): number {
         return this._snapshot.rev ?? 1; // the revision number should start with one
     }
 
-    incrementRev(): void {
+    override incrementRev(): void {
         this._snapshot.rev = this.getRev() + 1;
     }
 
-    getShouldRenderLoopImmediately() {
-        const should = this._snapshot.shouldStartRenderingImmediately;
-        return should !== false;
-    }
-
-    getContainer() {
-        return this._snapshot.container;
+    override setRev(rev: number): void {
+        this._snapshot.rev = rev;
     }
 
     /**
@@ -171,10 +180,6 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
         this._sheetCreated$.next(worksheet);
 
         return true;
-    }
-
-    getParentRenderUnitId() {
-        return this._snapshot.parentRenderUnitId;
     }
 
     getSheetOrders(): Readonly<string[]> {
@@ -203,19 +208,25 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
     }
 
     /**
-     *
-     * @returns
+     * Get the active sheet.
      */
-    getRawActiveSheet(): Nullable<Worksheet> {
+    getActiveSheet(): Worksheet;
+    getActiveSheet(allowNull: true): Nullable<Worksheet>;
+    getActiveSheet(allowNull?: true): Nullable<Worksheet> {
+        if (!this._activeSheet && typeof allowNull === 'undefined') {
+            throw new Error(`[Workbook]: no active Worksheet on Workbook ${this._unitId}!`);
+        }
+
         return this._activeSheet;
     }
 
     /**
-     * Get the active sheet. If there is no active sheet, the first sheet would
+     * If there is no active sheet, the first sheet would
      * be set active.
+     * @returns
      */
-    getActiveSheet(): Worksheet {
-        const currentActive = this.getRawActiveSheet();
+    ensureActiveSheet() {
+        const currentActive = this._activeSheet;
         if (currentActive) {
             return currentActive;
         }
@@ -237,7 +248,12 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
         return worksheet;
     }
 
-    setActiveSheet(worksheet: Nullable<Worksheet>): void {
+    /**
+     * ActiveSheet should not be null!
+     * There is at least one sheet in a workbook. You can not delete all sheets in a workbook.
+     * @param worksheet
+     */
+    setActiveSheet(worksheet: Worksheet): void {
         this._activeSheet$.next(worksheet);
     }
 
@@ -247,13 +263,10 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
             return false;
         }
 
-        if (this._activeSheet?.getSheetId() === sheetId) {
-            this.setActiveSheet(null);
-        }
-
         this._worksheets.delete(sheetId);
         this._snapshot.sheetOrder.splice(this._snapshot.sheetOrder.indexOf(sheetId), 1);
         delete this._snapshot.sheets[sheetId];
+        this._sheetDisposed$.next(sheetToRemove);
 
         return true;
     }
@@ -326,66 +339,10 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
             .map((s) => s.getConfig().id);
     }
 
-    /**
-     * transform any range type to range data
-     *
-     * @remarks
-     * e.g.,
-     * "A1:B1", "Sheet2!A1:B1"
-     *
-     * or
-     *
-     * {
-     *  row:[0,1],
-     *  column:[0,1]
-     * }
-     *
-     * or
-     *
-     * {
-     *    startRow:0 ,
-     *    startColumn:0,
-     *    endRow:1,
-     *    endColumn:1,
-     * }
-     *
-     * to
-     *
-     * {
-     *    startRow:0 ,
-     *    startColumn:0,
-     *    endRow:1,
-     *    endColumn:1,
-     * }
-     *
-     *   IRangeType[] is to prevent type detection
-     *
-     * @param range support all range types
-     *
-     * @returns range data
-     */
-    transformRangeType(range: IRangeType | IRangeType[]): IGridRange {
-        if (typeof range === 'string') {
-            const gridRange = this._getCellRange(range);
-            return gridRange;
-        }
-        if (typeof range !== 'string' && 'row' in range) {
-            const rangeArrayData = range as IRangeArrayData;
-            return {
-                sheetId: '',
-                range: {
-                    startRow: rangeArrayData.row[0],
-                    startColumn: rangeArrayData.column[0],
-                    endRow: rangeArrayData.row[1],
-                    endColumn: rangeArrayData.column[1],
-                },
-            };
-            // ref : https://www.typescriptlang.org/docs/handbook/advanced-types.html#using-the-in-operator
-        }
-        if (typeof range !== 'string' && 'startRow' in range) {
-            return { sheetId: '', range };
-        }
-        return DEFAULT_RANGE_ARRAY;
+    getUnhiddenWorksheets(): string[] {
+        return this.getSheets()
+            .filter((s) => s.getConfig().hidden !== BooleanNumber.TRUE)
+            .map((s) => s.getConfig().id);
     }
 
     load(config: IWorkbookData) {
@@ -431,94 +388,12 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
         return output;
     }
 
-    /**
-     * Get the range array based on the range string and sheet id
-     *
-     * @param txt - range string
-     * @returns
-     */
-    private _getCellRange(txt: IRangeStringData): IGridRange {
-        let sheetTxt: string = '';
-        let rangeTxt: string | string[] = '';
-        if (txt.indexOf('!') > -1) {
-            const val = txt.split('!');
-            sheetTxt = val[0];
-            rangeTxt = val[1];
-            sheetTxt = sheetTxt.replace(/\\'/g, "'").replace(/''/g, "'");
-            if (sheetTxt.substring(0, 1) === "'" && sheetTxt.substring(sheetTxt.length - 1, 1) === "'") {
-                sheetTxt = sheetTxt.substring(1, sheetTxt.length - 1);
-            }
-        } else {
-            rangeTxt = txt;
-        }
-        if (rangeTxt.indexOf(':') === -1) {
-            const row = Number.parseInt(rangeTxt.replace(/[^0-9]/g, ''), 10) - 1;
-            const col = Tools.ABCatNum(rangeTxt.replace(/[^A-Za-z]/g, ''));
-
-            if (!Number.isNaN(row) && !Number.isNaN(col)) {
-                const item = {
-                    sheetId: sheetTxt,
-                    range: {
-                        startRow: row,
-                        endRow: row,
-                        startColumn: col,
-                        endColumn: col,
-                    },
-                };
-                return item;
-            }
-            return DEFAULT_RANGE_ARRAY;
-        }
-        rangeTxt = rangeTxt.split(':');
-
-        const row: IRowStartEndData = [0, 0];
-        const col: IColumnStartEndData = [0, 0];
-        const maxRow = this.getSheetBySheetName(sheetTxt)?.getMaxRows() || this.getActiveSheet()?.getMaxRows();
-        const maxCol = this.getSheetBySheetName(sheetTxt)?.getMaxColumns() || this.getActiveSheet()?.getMaxColumns();
-        row[0] = Number.parseInt(rangeTxt[0].replace(/[^0-9]/g, ''), 10) - 1;
-        row[1] = Number.parseInt(rangeTxt[1].replace(/[^0-9]/g, ''), 10) - 1;
-
-        if (Number.isNaN(row[0])) {
-            row[0] = 0;
-        }
-
-        if (Number.isNaN(row[1])) {
-            row[1] = maxRow!;
-        }
-
-        if (row[0] > row[1]) {
-            return DEFAULT_RANGE_ARRAY;
-        }
-        col[0] = Tools.ABCatNum(rangeTxt[0].replace(/[^A-Za-z]/g, ''));
-        col[1] = Tools.ABCatNum(rangeTxt[1].replace(/[^A-Za-z]/g, ''));
-        if (Number.isNaN(col[0])) {
-            col[0] = 0;
-        }
-        if (Number.isNaN(col[1])) {
-            col[1] = maxCol!;
-        }
-        if (col[0] > col[1]) {
-            return DEFAULT_RANGE_ARRAY;
-        }
-
-        const item = {
-            sheetId: this.getSheetBySheetName(sheetTxt)?.getSheetId() || '',
-            range: {
-                startRow: row[0],
-                endRow: row[1],
-                startColumn: col[0],
-                endColumn: col[1],
-            },
-        };
-        return item;
-    }
-
     // FIXME: now we always create worksheet from DEFAULT_WORKSHEET?
 
     /**
      * Get Default Sheet
      */
-    private _passWorksheetSnapshots(): void {
+    private _parseWorksheetSnapshots(): void {
         const { _snapshot, _worksheets } = this;
         const { sheets, sheetOrder } = _snapshot;
 
@@ -545,5 +420,24 @@ export class Workbook extends UnitModel<IWorkbookData, UniverInstanceType.UNIVER
                 sheetOrder.push(sheetId);
             }
         }
+
+        // Active the first sheet.
+        this.ensureActiveSheet();
+    }
+
+    /**
+     * Get custom metadata of workbook
+     * @returns {CustomData | undefined} custom metadata
+     */
+    getCustomMetadata(): CustomData | undefined {
+        return this._snapshot.custom;
+    }
+
+    /**
+     * Set custom metadata of workbook
+     * @param {CustomData | undefined} custom custom metadata
+     */
+    setCustomMetadata(custom: CustomData | undefined) {
+        this._snapshot.custom = custom;
     }
 }

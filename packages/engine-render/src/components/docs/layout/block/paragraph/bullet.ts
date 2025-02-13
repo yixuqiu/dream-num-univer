@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 import type { IBullet, ILists, INestingLevel, ITextStyle, LocaleService, Nullable } from '@univerjs/core';
 
-import { FontCache } from '../../shaping-engine/font-cache';
 import type { IDocumentSkeletonBullet } from '../../../../../basics/i-document-skeleton-cached';
 import { getFontStyleString } from '../../../../../basics/tools';
 import { getBulletOrderedSymbol } from './bullet-ruler';
@@ -66,21 +65,23 @@ export function getDefaultBulletSke(listId: string, startIndex: number = 1): IDo
             fs: 9,
         }, // 文字样式
         startIndexItem: startIndex,
-        bBox: {
-            width: 8.4560546875,
-            ba: 7,
-            bd: -1,
-            aba: 7,
-            abd: -1,
-            sp: -2,
-            sbr: 0.5,
-            sbo: 0,
-            spr: 0.5,
-            spo: 0,
+        // bBox: {
+        //     width: 8.4560546875,
+        //     ba: 7,
+        //     bd: -1,
+        //     aba: 7,
+        //     abd: -1,
+        //     sp: -2,
+        //     sbr: 0.5,
+        //     sbo: 0,
+        //     spr: 0.5,
+        //     spo: 0,
+        // },
+        paragraphProperties: {
+            indentFirstLine: { v: 0 },
+            hanging: { v: 21 },
+            indentStart: { v: 0 },
         },
-        indentFirstLine: 0,
-        hanging: 21,
-        indentStart: 0,
     };
 }
 
@@ -90,24 +91,21 @@ function _getBulletSke(
     nestings: INestingLevel[],
     listLevelAncestors?: Array<Nullable<IDocumentSkeletonBullet>>,
     textStyleConfig?: ITextStyle,
-    localeService?: LocaleService
+    _localeService?: LocaleService
 ): IDocumentSkeletonBullet {
     const nesting = nestings[nestingLevel];
     const {
         bulletAlignment,
         glyphFormat,
-        textStyle: textStyleFirst,
-        startNumber,
+        textStyle: textStyleFirst = {},
+        // startNumber,
         glyphType,
         glyphSymbol,
-        indentFirstLine,
-        hanging,
-        indentStart,
     } = nesting;
 
     const textStyle = { ...textStyleConfig, ...textStyleFirst };
 
-    const fontStyle = getFontStyleString(textStyle, localeService); // 获得canvas.font格式的字体样式
+    const fontStyle = getFontStyleString(textStyle); // 获得canvas.font格式的字体样式
 
     let symbolContent: string;
     if (glyphSymbol) {
@@ -118,7 +116,7 @@ function _getBulletSke(
         symbolContent = __generateOrderedListSymbol(glyphFormat, nestingLevel, nestings, listLevelAncestors); // 有序列表的处理
     }
 
-    const bBox = FontCache.getTextSize(symbolContent, fontStyle);
+    // const bBox = FontCache.getTextSize(symbolContent, fontStyle);
     const startIndex = listLevelAncestors?.[nestingLevel]?.startIndexItem ?? 1;
 
     return {
@@ -127,13 +125,11 @@ function _getBulletSke(
         ts: textStyle, // 文字样式
         fontStyle, //
         startIndexItem: startIndex + 1,
-        bBox,
+        // bBox,
         nestingLevel: nesting,
         bulletAlign: bulletAlignment,
         bulletType: glyphSymbol ? false : !!glyphType, // 默认是无序列表，假如glyphSymbol为空且glyphType不为空才是有序列表
-        indentFirstLine,
-        hanging,
-        indentStart,
+        paragraphProperties: nesting.paragraphProperties,
     };
 }
 

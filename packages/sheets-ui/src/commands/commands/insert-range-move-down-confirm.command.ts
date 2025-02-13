@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 import type { ICommand, IRange } from '@univerjs/core';
 import { CommandType, ICommandService, IUniverInstanceService, LocaleService, Rectangle } from '@univerjs/core';
-import { getSheetCommandTarget, InsertRangeMoveDownCommand, SelectionManagerService } from '@univerjs/sheets';
+import { getSheetCommandTarget, InsertRangeMoveDownCommand, SheetsSelectionsService } from '@univerjs/sheets';
 import { IConfirmService } from '@univerjs/ui';
 
 export const InsertRangeMoveDownConfirmCommand: ICommand = {
@@ -26,10 +26,10 @@ export const InsertRangeMoveDownConfirmCommand: ICommand = {
         const confirmService = accessor.get(IConfirmService);
         const commandService = accessor.get(ICommandService);
         const localeService = accessor.get(LocaleService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
 
-        const selection = selectionManagerService.getSelections();
+        const selection = selectionManagerService.getCurrentSelections();
         if (!selection) {
             return false;
         }
@@ -68,7 +68,6 @@ export const InsertRangeMoveDownConfirmCommand: ICommand = {
         if (!mergeData) {
             return commandService.executeCommand(InsertRangeMoveDownCommand.id);
         }
-
 
         const result = await confirmService.confirm({
             id: InsertRangeMoveDownConfirmCommand.id,

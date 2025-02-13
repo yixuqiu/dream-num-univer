@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,44 +14,45 @@
  * limitations under the License.
  */
 
-import { ICommandService, Plugin, UniverInstanceType } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-import { DataValidatorRegistryService } from './services/data-validator-registry.service';
-import { DataValidationModel } from './models/data-validation-model';
+import type { Dependency } from '@univerjs/core';
+import type { IUniverDataValidationConfig } from './controllers/config.schema';
+import { ICommandService, IConfigService, Inject, Injector, merge, Plugin, UniverInstanceType } from '@univerjs/core';
 import { AddDataValidationCommand, RemoveAllDataValidationCommand, RemoveDataValidationCommand, UpdateDataValidationOptionsCommand, UpdateDataValidationSettingCommand } from './commands/commands/data-validation.command';
 import { AddDataValidationMutation, RemoveDataValidationMutation, UpdateDataValidationMutation } from './commands/mutations/data-validation.mutation';
+import { DATA_VALIDATION_PLUGIN_CONFIG_KEY, defaultPluginConfig } from './controllers/config.schema';
 import { DataValidationResourceController } from './controllers/dv-resource.controller';
-import { DataValidationSheetController } from './controllers/dv-sheet.controller';
+import { DataValidationModel } from './models/data-validation-model';
+import { DataValidatorRegistryService } from './services/data-validator-registry.service';
 
-const PLUGIN_NAME = 'data-validation';
+const PLUGIN_NAME = 'UNIVER_DATA_VALIDATION_PLUGIN';
 
 export class UniverDataValidationPlugin extends Plugin {
     static override pluginName = PLUGIN_NAME;
     static override type = UniverInstanceType.UNIVER_SHEET;
 
     constructor(
-        _config: unknown,
+        private readonly _config: Partial<IUniverDataValidationConfig> = defaultPluginConfig,
         @Inject(Injector) protected _injector: Injector,
-        @ICommandService private _commandService: ICommandService
+        @ICommandService private _commandService: ICommandService,
+        @IConfigService private readonly _configService: IConfigService
     ) {
         super();
+
+        // Manage the plugin configuration.
+        const { ...rest } = merge(
+            {},
+            defaultPluginConfig,
+            this._config
+        );
+        this._configService.setConfig(DATA_VALIDATION_PLUGIN_CONFIG_KEY, rest);
     }
 
-    override onStarting(injector: Injector): void {
+    override onStarting(): void {
         ([
-            // model
             [DataValidationModel],
-            // service
             [DataValidatorRegistryService],
-
             [DataValidationResourceController],
-            [DataValidationSheetController],
-        ] as Dependency[]).forEach(
-            (d) => {
-                injector.add(d);
-            }
-        );
+        ] as Dependency[]).forEach((d) => this._injector.add(d));
 
         [
             // command
@@ -68,5 +69,9 @@ export class UniverDataValidationPlugin extends Plugin {
         ].forEach((command) => {
             this._commandService.registerCommand(command);
         });
+    }
+
+    override onReady(): void {
+        this._injector.get(DataValidationResourceController);
     }
 }

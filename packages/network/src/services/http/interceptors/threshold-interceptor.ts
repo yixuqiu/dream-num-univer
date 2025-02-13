@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import type { IAccessor } from '@wendellhu/redi';
 import { Observable } from 'rxjs';
+import type { Nullable } from '@univerjs/core';
 import { remove } from '@univerjs/core';
 import type { HTTPInterceptorFnFactory } from '../interceptor';
 
@@ -24,7 +24,8 @@ export interface IThresholdInterceptorFactoryParams {
 }
 
 type HandlerFn = () => void;
-export const ThresholdInterceptorFactory: HTTPInterceptorFnFactory = (_accessor: IAccessor, params?: IThresholdInterceptorFactoryParams) => {
+
+export const ThresholdInterceptorFactory: HTTPInterceptorFnFactory<[Nullable<IThresholdInterceptorFactoryParams>]> = (params) => {
     /**
      * The local variable to store handles.
      */
@@ -43,7 +44,7 @@ export const ThresholdInterceptorFactory: HTTPInterceptorFnFactory = (_accessor:
         return new Observable((observer) => {
             const handler = () => next(request).subscribe({
                 next: (event) => observer.next(event),
-                error: (err) => observer.next(err),
+                error: (err) => observer.error(err),
                 complete: () => observer.complete(),
             });
 

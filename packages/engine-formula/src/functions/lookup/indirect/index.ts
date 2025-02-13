@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,32 +14,37 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import { REFERENCE_REGEX_COLUMN, REFERENCE_REGEX_ROW, REFERENCE_SINGLE_RANGE_REGEX } from '../../../basics/regex';
-import { operatorToken } from '../../../basics/token';
 import type { BaseReferenceObject } from '../../../engine/reference-object/base-reference-object';
+import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
+import { ErrorType } from '../../../basics/error-type';
+import { regexTestColumn, regexTestRow, regexTestSingeRange } from '../../../basics/regex';
+import { operatorToken } from '../../../basics/token';
 import { CellReferenceObject } from '../../../engine/reference-object/cell-reference-object';
 import { ColumnReferenceObject } from '../../../engine/reference-object/column-reference-object';
 import { RangeReferenceObject } from '../../../engine/reference-object/range-reference-object';
 import { RowReferenceObject } from '../../../engine/reference-object/row-reference-object';
 import { deserializeRangeForR1C1 } from '../../../engine/utils/r1c1-reference';
-import { deserializeRangeWithSheet } from '../../../engine/utils/reference';
-import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
+
+import { deserializeRangeWithSheetWithCache } from '../../../engine/utils/reference-cache';
 import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BaseFunction } from '../../base-function';
 
 export class Indirect extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 2;
+
     override isAddress() {
         return true;
     }
 
     override calculate(refText: BaseValueObject, a1?: BaseValueObject) {
-        if (refText == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
         if (refText.isError()) {
             return refText;
+        }
+
+        if (a1?.isError()) {
+            return a1;
         }
 
         let a1Value = this.getZeroOrOneByOneDefault(a1);
@@ -48,22 +53,33 @@ export class Indirect extends BaseFunction {
             a1Value = 1;
         }
 
+        let _refText = refText;
+
         if (refText.isArray()) {
-            const refTextArray = refText as ArrayValueObject;
-            if (refTextArray.getRowCount() === 1 && refTextArray.getColumnCount() === 1) {
-                refText = refTextArray.getFirstCell();
-            } else {
-                return refTextArray.map(() => {
+            const rowCount = (refText as ArrayValueObject).getRowCount();
+            const columnCount = (refText as ArrayValueObject).getColumnCount();
+
+            if (rowCount > 1 || columnCount > 1) {
+                // TODO
+                return refText.map(() => {
                     return ErrorValueObject.create(ErrorType.VALUE);
                 });
             }
+
+            _refText = (refText as ArrayValueObject).getFirstCell();
         }
 
-        if (!refText.isString()) {
+        return this._handleSingleObject(_refText, a1Value);
+    }
+
+    private _handleSingleObject(refTextObject: BaseValueObject, a1Value: number) {
+        const refTextValue = `${refTextObject.getValue()}`;
+
+        if (refTextValue.trim() === '') {
             return ErrorValueObject.create(ErrorType.REF);
         }
 
-        const refTextV = this._convertToDefinedName(refText.getValue() as string);
+        const refTextV = this._convertToDefinedName(refTextValue);
 
         if (a1Value === 0) {
             const gridRange = deserializeRangeForR1C1(refTextV);
@@ -78,20 +94,24 @@ export class Indirect extends BaseFunction {
             return this._setDefault(rangeReferenceObject);
         }
 
-        if (new RegExp(REFERENCE_SINGLE_RANGE_REGEX).test(refTextV)) {
+        if (regexTestSingeRange(refTextV)) {
             return this._setDefault(new CellReferenceObject(refTextV));
         }
-        if (new RegExp(REFERENCE_REGEX_ROW).test(refTextV)) {
+        if (regexTestRow(refTextV)) {
             return this._setDefault(new RowReferenceObject(refTextV));
         }
 
-        if (new RegExp(REFERENCE_REGEX_COLUMN).test(refTextV)) {
+        if (regexTestColumn(refTextV)) {
             return this._setDefault(new ColumnReferenceObject(refTextV));
         }
 
-        const gridRange = deserializeRangeWithSheet(refTextV);
+        const gridRange = deserializeRangeWithSheetWithCache(refTextV);
 
         const { range, sheetName, unitId } = gridRange;
+
+        if (Number.isNaN(range.startRow) || range.endRow + 1 > 1048576 || Number.isNaN(range.startColumn) || range.endColumn + 1 > 16384) {
+            return ErrorValueObject.create(ErrorType.REF);
+        }
 
         const rangeReferenceObject = new RangeReferenceObject(range);
 

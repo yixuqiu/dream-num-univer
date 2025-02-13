@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,8 @@
 import './adaptors';
 
 import type { IPageElement } from '@univerjs/core';
-import { sortRules } from '@univerjs/core';
+import { Inject, Injector, sortRules } from '@univerjs/core';
 import type { BaseObject, Scene } from '@univerjs/engine-render';
-import { Inject, Injector } from '@wendellhu/redi';
 
 import type { ObjectAdaptor } from './adaptor';
 import { CanvasObjectProviderRegistry } from './adaptor';
@@ -42,6 +41,10 @@ export class ObjectProvider {
             }
         });
         return objects;
+    }
+
+    convertToRenderObject(pageElement: IPageElement, mainScene: Scene) {
+        return this._executor(pageElement, mainScene);
     }
 
     private _executor(pageElement: IPageElement, mainScene: Scene) {

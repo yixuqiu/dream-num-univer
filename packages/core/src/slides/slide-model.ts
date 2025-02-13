@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,36 @@
  * limitations under the License.
  */
 
+import { BehaviorSubject, type Observable } from 'rxjs';
 import { UnitModel, UniverInstanceType } from '../common/unit';
-import { Tools } from '../shared';
+import { generateRandomId, Tools } from '../shared';
 import { DEFAULT_SLIDE } from '../types/const';
-import type { ISlideData, ISlidePage } from '../types/interfaces';
 import { PageType } from '../types/interfaces';
+import type { Nullable } from '../shared';
+import type { ISlideData, ISlidePage } from '../types/interfaces';
 
 export class SlideDataModel extends UnitModel<ISlideData, UniverInstanceType.UNIVER_SLIDE> {
     override type: UniverInstanceType.UNIVER_SLIDE = UniverInstanceType.UNIVER_SLIDE;
+    private readonly _activePage$ = new BehaviorSubject<Nullable<ISlidePage>>(null);
+    private get _activePage(): Nullable<ISlidePage> {
+        const activePage = this._activePage$.getValue();
+
+        if (!activePage) {
+            const activePageId = this.getPageOrder()?.[0];
+            if (!activePageId) {
+                return null;
+            }
+
+            return this.getPages()?.[activePageId];
+        }
+
+        return activePage;
+    }
+
+    readonly activePage$ = this._activePage$.asObservable();
+
+    private readonly _name$: BehaviorSubject<string>;
+    override name$: Observable<string>;
 
     private _snapshot: ISlideData;
 
@@ -32,14 +54,27 @@ export class SlideDataModel extends UnitModel<ISlideData, UniverInstanceType.UNI
 
         this._snapshot = { ...DEFAULT_SLIDE, ...snapshot };
         this._unitId = this._snapshot.id ?? Tools.generateRandomId(6);
+
+        this._name$ = new BehaviorSubject(this._snapshot.title);
+        this.name$ = this._name$.asObservable();
     }
 
-    getContainer() {
-        return this._snapshot.container;
+    override setName(name: string): void {
+        this._snapshot.title = name;
+        this._name$.next(name);
+        this._unitId = this._snapshot.id ?? generateRandomId(6);
     }
 
-    getParentRenderUnitId() {
-        return this._snapshot.parentRenderUnitId;
+    override getRev(): number {
+        return 0; // TODO@jikkai: slide has not implement collaborative editing yet
+    }
+
+    override incrementRev(): void {
+        // do nothing
+    }
+
+    override setRev(_rev: number): void {
+        // do nothing
     }
 
     getSnapshot() {
@@ -75,17 +110,45 @@ export class SlideDataModel extends UnitModel<ISlideData, UniverInstanceType.UNI
         return this._snapshot.pageSize;
     }
 
-    addPage(): ISlidePage {
-        return {
-            id: 'cover_1',
+    getBlankPage() {
+        const id = generateRandomId(6);
+
+        const page = {
+            id,
             pageType: PageType.SLIDE,
-            zIndex: 1,
-            title: 'cover',
-            description: 'this is first page, cover',
+            zIndex: 10,
+            title: id,
+            description: '',
             pageBackgroundFill: {
                 rgb: 'rgb(255,255,255)',
             },
             pageElements: {},
         };
+
+        return page;
+    }
+
+    setActivePage(page: Nullable<ISlidePage>) {
+        this._activePage$.next(page);
+    }
+
+    getActivePage() {
+        return this._activePage;
+    }
+
+    updatePage(pageId: string, page: ISlidePage) {
+        if (!this._snapshot.body) return;
+
+        this._snapshot.body.pages[pageId] = page;
+    }
+
+    appendPage(page: ISlidePage) {
+        if (!this._snapshot.body) return;
+
+        this._snapshot.body.pages[page.id] = page;
+
+        const activePage = this._activePage;
+        const index = this._snapshot.body.pageOrder.indexOf(activePage?.id ?? '');
+        this._snapshot.body.pageOrder.splice(index + 1, 0, page.id);
     }
 }

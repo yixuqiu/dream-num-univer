@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
-import { Disposable, ILogService } from '@univerjs/core';
-import { FUniver } from '@univerjs/facade';
-import { Inject, Injector } from '@wendellhu/redi';
+import { createIdentifier, Disposable, ILogService, Inject, Injector } from '@univerjs/core';
+// eslint-disable-next-line univer/no-facade-imports-outside-facade
+import { FUniver } from '@univerjs/core/facade';
 
+export const IUniscriptExecutionService = createIdentifier<IUniscriptExecutionService>('univer.uniscript.execution-service');
+
+export interface IUniscriptExecutionService {
+    execute(code: string): Promise<boolean>;
+}
 /**
- * This service is to
+ * This service is to execute Uniscript code.
  */
-export class UniscriptExecutionService extends Disposable {
+export class UniscriptExecutionService extends Disposable implements IUniscriptExecutionService {
     constructor(
         @ILogService private readonly _logService: ILogService,
         @Inject(Injector) private readonly _injector: Injector

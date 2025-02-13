@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { IMutation } from '@univerjs/core';
 import { CommandType, IUniverInstanceService, Rectangle } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
+import type { IAccessor, IMutation } from '@univerjs/core';
 
 import type {
     IAddWorksheetMergeMutationParams,
@@ -84,6 +83,8 @@ export const RemoveWorksheetMergeMutation: IMutation<IRemoveWorksheetMergeMutati
                 }
             }
         }
+        // update merge data cache
+        worksheet.getSpanModel().rebuild(mergeConfigData);
         return true;
     },
 };

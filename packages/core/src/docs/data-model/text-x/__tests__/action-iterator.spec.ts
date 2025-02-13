@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ActionIterator } from '../action-iterator';
-import { TextXActionType } from '../../action-types';
 import { BooleanNumber } from '../../../../types/enum/text-style';
+import { ActionIterator } from '../action-iterator';
+import { TextXActionType } from '../action-types';
 
 describe('Test action iterator', () => {
     it('test action iterator basic use', () => {
@@ -37,11 +37,9 @@ describe('Test action iterator', () => {
                 }],
             },
             len: 5,
-            line: 0,
         }, {
             t: TextXActionType.DELETE,
             len: 5,
-            line: 0,
         }]);
 
         expect(iterator.hasNext()).toBe(true);
@@ -79,7 +77,6 @@ describe('Test action iterator', () => {
                 }],
             },
             len: 2,
-            line: 0,
         });
 
         expect(iterator.peekType()).toBe(TextXActionType.INSERT);
@@ -99,7 +96,6 @@ describe('Test action iterator', () => {
                 }],
             },
             len: 3,
-            line: 0,
         });
 
         expect(iterator.peekType()).toBe(TextXActionType.DELETE);
@@ -109,7 +105,6 @@ describe('Test action iterator', () => {
         expect(action).toEqual({
             t: TextXActionType.DELETE,
             len: 5,
-            line: 0,
         });
 
         expect(iterator.hasNext()).toBe(false);
@@ -137,7 +132,6 @@ describe('Test action iterator', () => {
         }, {
             t: TextXActionType.DELETE,
             len: 5,
-            line: 0,
         }]);
 
         expect(iterator.rest()).toEqual([{
@@ -146,7 +140,6 @@ describe('Test action iterator', () => {
         }, {
             t: TextXActionType.DELETE,
             len: 5,
-            line: 0,
         }]);
 
         iterator.next(3);
@@ -157,7 +150,6 @@ describe('Test action iterator', () => {
         }, {
             t: TextXActionType.DELETE,
             len: 5,
-            line: 0,
         }]);
     });
 });

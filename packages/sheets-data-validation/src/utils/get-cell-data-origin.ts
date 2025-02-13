@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,12 @@
  * limitations under the License.
  */
 
-import { DEFAULT_EMPTY_DOCUMENT_VALUE, type ICellData, type Nullable } from '@univerjs/core';
+import { getOriginCellValue, type ICellData, type Nullable } from '@univerjs/core';
 
 export function getCellValueOrigin(cell: Nullable<ICellData>) {
-    if (cell === null) {
-        return '';
-    }
+    return getOriginCellValue(cell);
+}
 
-    if (cell?.p) {
-        const body = cell?.p.body;
-
-        if (body == null) {
-            return '';
-        }
-
-        const data = body.dataStream;
-        const lastString = data.substring(data.length - 2, data.length);
-        const newDataStream = lastString === DEFAULT_EMPTY_DOCUMENT_VALUE ? data.substring(0, data.length - 2) : data;
-
-        return newDataStream;
-    }
-
-    return cell?.v;
+export function getStringCellValue(cell: Nullable<ICellData>) {
+    return String(getCellValueOrigin(cell) ?? '');
 }

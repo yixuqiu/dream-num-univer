@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
+/* eslint-disable no-param-reassign */
+
+import type { TextXAction } from './action-types';
 import { Tools } from '../../../shared/tools';
-import type { TextXAction } from '../action-types';
-import { TextXActionType } from '../action-types';
+import { TextXActionType } from './action-types';
 import { getBodySlice } from './utils';
 
 export class ActionIterator {
     private _index = 0;
     private _offset = 0;
 
-    constructor(private _actions: TextXAction[]) {}
+    constructor(private _actions: TextXAction[]) {
+        // empty
+    }
 
     hasNext() {
         return this.peekLength() < Number.POSITIVE_INFINITY;
@@ -38,6 +42,7 @@ export class ActionIterator {
         if (nextAction) {
             const offset = this._offset;
             const actionLength = nextAction.len;
+
             if (length >= actionLength - offset) {
                 // Return the action if the length is great than action length, and reset offset to 0.
                 length = actionLength - offset;
@@ -64,10 +69,11 @@ export class ActionIterator {
                 });
             } else {
                 // handle condition: (nextAction.t === TextXActionType.INSERT || nextAction.t === TextXActionType.RETAIN && nextAction.body)
+
                 return Tools.deepClone({
                     ...nextAction,
                     len: length,
-                    body: getBodySlice(nextAction.body!, offset, offset + length),
+                    body: getBodySlice(nextAction.body!, offset, offset + length, false),
                 });
             }
         } else {
@@ -111,6 +117,7 @@ export class ActionIterator {
             const index = this._index;
             const next = this.next();
             const restActions = this._actions.slice(this._index);
+
             this._offset = offset;
             this._index = index;
 

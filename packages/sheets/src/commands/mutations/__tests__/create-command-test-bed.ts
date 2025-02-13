@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,26 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+import type { Dependency, IWorkbookData, Workbook } from '@univerjs/core';
 import {
     BooleanNumber,
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
+    LocaleType,
     LogLevel,
     Plugin,
     Univer,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
 
 const TEST_WORKBOOK_DATA_DEMO: () => IWorkbookData = () => ({
     id: 'workbook-01',
     sheetOrder: ['uE_mIgOi73GuLCvu577On'],
     name: 'UniverSheet Demo',
     appVersion: '3.0.0-alpha',
-    locale: 'zhCN' as any,
+    locale: LocaleType.EN_US,
     styles: {},
     sheets: {
         uE_mIgOi73GuLCvu577On: {
@@ -101,6 +102,7 @@ const TEST_WORKBOOK_DATA_DEMO: () => IWorkbookData = () => ({
 export interface ITestBed {
     univer: Univer;
     get: Injector['get'];
+    has: Injector['has'];
     sheet: Workbook;
 }
 
@@ -117,17 +119,15 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
             @Inject(Injector) override readonly _injector: Injector
         ) {
             super();
-
-            this._injector = _injector;
         }
 
-        override onStarting(injector: Injector): void {
-            dependencies?.forEach((d) => injector.add(d));
+        override onStarting(): void {
+            dependencies?.forEach((d) => this._injector.add(d));
         }
     }
 
     univer.registerPlugin(TestPlugin);
-    const sheet = univer.createUniverSheet(workbookData || TEST_WORKBOOK_DATA_DEMO());
+    const sheet = univer.createUnit<IWorkbookData, Workbook>(UniverInstanceType.UNIVER_SHEET, workbookData || TEST_WORKBOOK_DATA_DEMO());
 
     const univerInstanceService = injector.get(IUniverInstanceService);
     univerInstanceService.focusUnit('test');
@@ -138,6 +138,7 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
     return {
         univer,
         get: injector.get.bind(injector),
+        has: injector.has.bind(injector),
         sheet,
     };
 }

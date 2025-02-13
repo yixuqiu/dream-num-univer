@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 import type { Nullable } from '@univerjs/core';
-import { COLORS, Observable } from '@univerjs/core';
+import { COLORS, EventSubject } from '@univerjs/core';
 
 import { CURSOR_TYPE } from '../../basics/const';
 import type { IMouseEvent, IPointerEvent } from '../../basics/i-events';
@@ -35,7 +35,9 @@ const arrowPath =
     'M512 1024C229.248 1024 0 794.752 0 512S229.248 0 512 0s512 229.248 512 512-229.248 512-512 512z m200.746667-478.506667l1.749333-1.664 30.165333-30.165333-330.496-330.581333a42.837333 42.837333 0 0 0-60.288 0 42.538667 42.538667 0 0 0 0 60.330666l270.08 270.165334-270.08 269.952a42.496 42.496 0 0 0 0 60.288c16.64 16.64 43.861333 16.469333 60.288 0.042666l298.581334-298.368z';
 
 export class Slide extends SceneViewer {
-    onSlideChangePageByNavigationObservable = new Observable<Nullable<string>>();
+    slideChangePageByNavigation$ = new EventSubject<Nullable<string>>();
+
+    subSceneChanged$ = new EventSubject<Scene>();
 
     private _navigationEnabled = false;
 
@@ -48,13 +50,17 @@ export class Slide extends SceneViewer {
         this.changePage(firstKey);
     }
 
-    addPage(scene: Scene) {
-        const key = scene.sceneKey;
-        if (this.getSubScene(key) != null) {
-            return;
+    /**
+     * add pageScene to this._subScenes
+     * @param pageScene
+     */
+    addPageScene(pageScene: Scene) {
+        const key = pageScene.sceneKey;
+        if (!this.getSubScene(key)) {
+            this.addSubScene(pageScene);
         }
-        this.addSubScene(scene);
         this.addNavigation();
+        this.subSceneChanged$.emitEvent(pageScene);
     }
 
     changePage(id?: string) {
@@ -196,18 +202,18 @@ export class Slide extends SceneViewer {
     }
 
     private _addNavTrigger(leftArrow: Path, rightArrow: Path) {
-        leftArrow.onPointerDownObserver.add(() => {
+        leftArrow.onPointerDown$.subscribeEvent(() => {
             const result = this._getSubScenesIndex(this.getActiveSubScene()?.sceneKey);
             const prevKey = result?.previousScene.sceneKey;
             this.changePage(prevKey);
-            this.onSlideChangePageByNavigationObservable.notifyObservers(prevKey);
+            this.slideChangePageByNavigation$.emitEvent(prevKey);
         });
 
-        rightArrow.onPointerDownObserver.add(() => {
+        rightArrow.onPointerDown$.subscribeEvent(() => {
             const result = this._getSubScenesIndex(this.getActiveSubScene()?.sceneKey);
             const nextKey = result?.nextScene.sceneKey;
             this.changePage(nextKey);
-            this.onSlideChangePageByNavigationObservable.notifyObservers(nextKey);
+            this.slideChangePageByNavigation$.emitEvent(nextKey);
         });
     }
 

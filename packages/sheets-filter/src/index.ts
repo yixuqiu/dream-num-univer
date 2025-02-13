@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,23 +18,37 @@ export { UniverSheetsFilterPlugin } from './plugin';
 export { FilterColumn, FilterModel } from './models/filter-model';
 export {
     equals,
-    notEquals,
     getCustomFilterFn,
     greaterThan,
     greaterThanOrEqualTo,
     lessThan,
     lessThanOrEqualTo,
+    notEquals,
 } from './models/custom-filters';
-export { SheetsFilterService, FILTER_MUTATIONS, SHEET_FILTER_SNAPSHOT_ID } from './services/sheet-filter.service';
+export { SHEET_FILTER_SNAPSHOT_ID, SheetsFilterService } from './services/sheet-filter.service';
+export type { IAutoFilter, ICustomFilter, ICustomFilters, IFilterColumn, IFilters } from './models/types';
+export { CustomFilterOperator } from './models/types';
+export { FILTER_MUTATIONS } from './common/const';
+
+// #region - all commands
+
 export {
-    type IReCalcSheetsFilterMutationParams,
-    type IRemoveSheetsFilterMutationParams,
     type ISetSheetsFilterCriteriaMutationParams,
     type ISetSheetsFilterRangeMutationParams,
-    SetSheetsFilterCriteriaMutation,
-    SetSheetsFilterRangeMutation,
     ReCalcSheetsFilterMutation,
     RemoveSheetsFilterMutation,
-} from './commands/sheets-filter.mutation';
-export type { IAutoFilter, IFilterColumn, IFilters, ICustomFilters, ICustomFilter } from './models/types';
-export { CustomFilterOperator } from './models/types';
+    SetSheetsFilterCriteriaMutation,
+    SetSheetsFilterRangeMutation,
+} from './commands/mutations/sheets-filter.mutation';
+export {
+    ClearSheetsFilterCriteriaCommand,
+    type ISetSheetFilterRangeCommandParams,
+    type ISetSheetsFilterCriteriaCommandParams,
+    ReCalcSheetsFilterCommand,
+    RemoveSheetFilterCommand,
+    SetSheetFilterRangeCommand,
+    SetSheetsFilterCriteriaCommand,
+    SmartToggleSheetsFilterCommand,
+} from './commands/commands/sheets-filter.command';
+
+// #endregion

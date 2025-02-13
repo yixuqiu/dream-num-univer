@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { BooleanNumber } from '@univerjs/core';
-
-import { extractNodeStyle as getInlineStyle } from '../parse-node-style';
 import type { IPastePlugin } from './type';
 
-const wordPastePlugin: IPastePlugin = {
+import { BooleanNumber } from '@univerjs/core';
+import { extractNodeStyle as getInlineStyle } from '../parse-node-style';
+
+export const LarkPastePlugin: IPastePlugin = {
     name: 'univer-doc-paste-plugin-lark',
     checkPasteType(html: string) {
         return /lark-record-clipboard/i.test(html);
@@ -59,5 +59,3 @@ const wordPastePlugin: IPastePlugin = {
         },
     ],
 };
-
-export default wordPastePlugin;

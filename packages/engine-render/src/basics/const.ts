@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,33 +18,6 @@ export enum SHAPE_TYPE {
     RECT = 'rect',
     CIRCLE = 'circle',
     PATH = 'path',
-}
-
-// MOUSEOUT = 'mouseout',
-// MOUSELEAVE = 'mouseleave',
-// MOUSEOVER = 'mouseover',
-// MOUSEENTER = 'mouseenter',
-// MOUSEMOVE = 'mousemove',
-// MOUSEDOWN = 'mousedown',
-// MOUSEUP = 'mouseup',
-// TOUCHSTART = 'touchstart',
-// TOUCHEND = 'touchend',
-// TOUCHMOVE = 'touchmove',
-// TOUCHCANCEL = 'touchcancel',
-// POINTERCANCEL = 'pointercancel',
-// LOSTPOINTERCAPTURE = 'lostpointercapture',
-
-export enum EVENT_TYPE {
-    PointerMove = 'PointerMove',
-    PointerDown = 'PointerDown',
-    PointerUp = 'PointerUp',
-    PointerOut = 'PointerOut',
-    PointerLeave = 'PointerLeave',
-    PointerOver = 'PointerOver',
-    PointerEnter = 'PointerEnter',
-    wheel = 'MouseWheel',
-    KeyDown = 'KeyDown',
-    KeyUp = 'KeyUp',
 }
 
 export enum LINK_VIEW_PORT_TYPE {
@@ -154,10 +127,17 @@ export enum RENDER_CLASS_TYPE {
     VIEWPORT = 'Viewport',
     LAYER = 'Layer',
     GROUP = 'Group',
+    IMAGE = 'Image',
+    SHAPE = 'Shape',
+    TEXT = 'Text',
 }
 
-export const DEFAULT_SELECTION_LAYER_INDEX = 1000;
-
 export const MAXIMUM_ROW_HEIGHT = 2000;
+export const MAXIMUM_COL_WIDTH = 2000;
+export const MIN_COL_WIDTH = 2;
 
 export const FIX_ONE_PIXEL_BLUR_OFFSET = 0.5;
+
+export const DRAWING_OBJECT_LOWER_LAYER_INDEX = 3;
+export const DRAWING_OBJECT_LAYER_INDEX = 4;
+export const DRAWING_OBJECT_UPPER_LAYER_INDEX = 5;

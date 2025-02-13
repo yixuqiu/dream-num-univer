@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,40 +14,48 @@
  * limitations under the License.
  */
 
-import type { IParagraphStyle } from '@univerjs/core';
+import type { IParagraph } from '@univerjs/core';
 
 import type { ISectionBreakConfig } from '../../../../../basics/interfaces';
+import type { DataStreamTreeNode } from '../../../view-model/data-stream-tree-node';
+import type { DocumentViewModel } from '../../../view-model/document-view-model';
 import { EMOJI_REG, hasArabic, hasSpace, hasTibetan, startWithEmoji } from '../../../../../basics/tools';
 import { createSkeletonLetterGlyph, createSkeletonWordGlyph } from '../../model/glyph';
 import { getFontCreateConfig } from '../../tools';
-import type { DataStreamTreeNode } from '../../../view-model/data-stream-tree-node';
-import type { DocumentViewModel } from '../../../view-model/document-view-model';
 
 // Handle English word, English punctuation, number characters.
 // https://en.wikipedia.org/wiki/CJK_characters
 export function otherHandler(
     index: number,
     charArray: string,
-    bodyModel: DocumentViewModel,
+    viewModel: DocumentViewModel,
     paragraphNode: DataStreamTreeNode,
     sectionBreakConfig: ISectionBreakConfig,
-    paragraphStyle: IParagraphStyle
+    paragraph: IParagraph
 ) {
     const glyphGroup = [];
     let step = 0;
+    let src = charArray;
 
-    for (let i = 0; i < charArray.length; i++) {
-        const newChar = charArray[i];
+    while (src.length) {
+        const char = src.match(/^[\s\S]/gu)?.[0];
 
-        if (hasSpace(newChar) || startWithEmoji(charArray.substring(i))) {
+        if (char == null) {
             break;
         }
 
-        const config = getFontCreateConfig(index + i, bodyModel, paragraphNode, sectionBreakConfig, paragraphStyle);
-        const glyph = createSkeletonLetterGlyph(newChar, config);
+        if (hasSpace(char) || startWithEmoji(charArray.substring(step))) {
+            break;
+        }
+
+        const config = getFontCreateConfig(index + step, viewModel, paragraphNode, sectionBreakConfig, paragraph);
+        const glyph = createSkeletonLetterGlyph(char, config);
 
         glyphGroup.push(glyph);
-        step++;
+
+        src = src.substring(char.length);
+
+        step += char.length;
     }
 
     return {
@@ -59,13 +67,13 @@ export function otherHandler(
 export function ArabicHandler(
     index: number,
     charArray: string,
-    bodyModel: DocumentViewModel,
+    viewModel: DocumentViewModel,
     paragraphNode: DataStreamTreeNode,
     sectionBreakConfig: ISectionBreakConfig,
-    paragraphStyle: IParagraphStyle
+    paragraph: IParagraph
 ) {
     // 组合阿拉伯语的词组
-    const config = getFontCreateConfig(index, bodyModel, paragraphNode, sectionBreakConfig, paragraphStyle);
+    const config = getFontCreateConfig(index, viewModel, paragraphNode, sectionBreakConfig, paragraph);
     const glyph = [];
     let step = 0;
 
@@ -88,12 +96,12 @@ export function ArabicHandler(
 export function emojiHandler(
     index: number,
     charArray: string,
-    bodyModel: DocumentViewModel,
+    viewModel: DocumentViewModel,
     paragraphNode: DataStreamTreeNode,
     sectionBreakConfig: ISectionBreakConfig,
-    paragraphStyle: IParagraphStyle
+    paragraph: IParagraph
 ) {
-    const config = getFontCreateConfig(index, bodyModel, paragraphNode, sectionBreakConfig, paragraphStyle);
+    const config = getFontCreateConfig(index, viewModel, paragraphNode, sectionBreakConfig, paragraph);
     const match = charArray.match(EMOJI_REG);
 
     return {
@@ -105,13 +113,13 @@ export function emojiHandler(
 export function TibetanHandler(
     index: number,
     charArray: string,
-    bodyModel: DocumentViewModel,
+    viewModel: DocumentViewModel,
     paragraphNode: DataStreamTreeNode,
     sectionBreakConfig: ISectionBreakConfig,
-    paragraphStyle: IParagraphStyle
+    paragraph: IParagraph
 ) {
     // 组合藏语词组
-    const config = getFontCreateConfig(index, bodyModel, paragraphNode, sectionBreakConfig, paragraphStyle);
+    const config = getFontCreateConfig(index, viewModel, paragraphNode, sectionBreakConfig, paragraph);
     const glyph = [];
     let step = 0;
     for (let i = 0; i < charArray.length; i++) {

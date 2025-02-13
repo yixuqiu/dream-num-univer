@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,21 +21,23 @@ import { NumberValueObject } from '../../../engine/value-object/primitive-object
 import { BaseFunction } from '../../base-function';
 
 export class Acot extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 1;
+
     override calculate(variant: BaseValueObject) {
-        if (variant == null) {
-            return ErrorValueObject.create(ErrorType.NA);
+        let _variant = variant;
+
+        if (_variant.isString()) {
+            _variant = _variant.convertToNumberObjectValue();
         }
 
-        if (variant.isString()) {
-            variant = variant.convertToNumberObjectValue();
+        if (_variant.isError()) {
+            return _variant;
         }
 
-        if (variant.isError()) {
-            return variant;
-        }
-
-        if ((variant as BaseValueObject).isArray()) {
-            return (variant as BaseValueObject).map((currentValue) => {
+        if ((_variant as BaseValueObject).isArray()) {
+            return (_variant as BaseValueObject).map((currentValue) => {
                 if (currentValue.isError()) {
                     return currentValue;
                 }
@@ -43,7 +45,7 @@ export class Acot extends BaseFunction {
             });
         }
 
-        return acot(variant as BaseValueObject);
+        return acot(_variant as BaseValueObject);
     }
 }
 
@@ -58,7 +60,14 @@ function acot(num: BaseValueObject) {
         return ErrorValueObject.create(ErrorType.VALUE);
     }
 
-    const result = Math.atan(1 / Number(currentValue));
+    currentValue = Number(currentValue);
+
+    let result = Math.atan(1 / currentValue);
+
+    // When the input value is negative, adjust the result to [0, π]
+    if (currentValue < 0) {
+        result += Math.PI;
+    }
 
     if (Number.isNaN(result)) {
         return ErrorValueObject.create(ErrorType.VALUE);

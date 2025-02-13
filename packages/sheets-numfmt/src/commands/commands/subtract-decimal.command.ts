@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
-import { CommandType, ICommandService, IUniverInstanceService, Range } from '@univerjs/core';
-import { getSheetCommandTarget, INumfmtService, SelectionManagerService } from '@univerjs/sheets';
-import type { IAccessor } from '@wendellhu/redi';
-
-import { getDecimalFromPattern, setPatternDecimal } from '../../utils/decimal';
+import type { IAccessor, ICommand } from '@univerjs/core';
 import type { ISetNumfmtCommandParams } from './set-numfmt.command';
+import { CellValueType, CommandType, ICommandService, IUniverInstanceService, Range } from '@univerjs/core';
+import { getSheetCommandTarget, INumfmtService, SheetsSelectionsService } from '@univerjs/sheets';
+import { getDecimalFromPattern, setPatternDecimal } from '../../utils/decimal';
 import { SetNumfmtCommand } from './set-numfmt.command';
 
 export const SubtractDecimalCommand: ICommand = {
@@ -28,11 +26,11 @@ export const SubtractDecimalCommand: ICommand = {
     type: CommandType.COMMAND,
     handler: async (accessor: IAccessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const numfmtService = accessor.get(INumfmtService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
 
-        const selections = selectionManagerService.getSelections();
+        const selections = selectionManagerService.getCurrentSelections();
         if (!selections || !selections.length) {
             return false;
         }
@@ -47,6 +45,17 @@ export const SubtractDecimalCommand: ICommand = {
             Range.foreach(selection.range, (row, col) => {
                 const numfmtValue = numfmtService.getValue(unitId, subUnitId, row, col);
                 if (!numfmtValue) {
+                    const cell = target.worksheet.getCellRaw(row, col);
+                    if (!maxDecimals && cell && cell.t === CellValueType.NUMBER && cell.v) {
+                        const regResult = /\.(\d*)$/.exec(String(cell.v));
+                        if (regResult) {
+                            const length = regResult[1].length;
+                            if (!length) {
+                                return;
+                            }
+                            maxDecimals = Math.max(maxDecimals, length);
+                        }
+                    }
                     return;
                 }
                 const decimals = getDecimalFromPattern(numfmtValue.pattern);

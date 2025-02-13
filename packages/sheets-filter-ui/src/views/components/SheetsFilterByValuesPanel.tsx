@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-import React, { useCallback } from 'react';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import type { ByValuesModel, IFilterByValueWithTreeItem } from '../../services/sheets-filter-panel.service';
 import { LocaleService } from '@univerjs/core';
-import { useObservable } from '@univerjs/ui';
-import List from 'rc-virtual-list';
-import { Button, Checkbox, Input } from '@univerjs/design';
-
-import type { ByValuesModel, IFilterByValueItem } from '../../services/sheets-filter-panel.service';
+import { Button, Checkbox, Input, Tree } from '@univerjs/design';
+import { useDependency, useObservable } from '@univerjs/ui';
+import React, { useCallback } from 'react';
 import { statisticFilterByValueItems } from '../../models/utils';
 import styles from './index.module.less';
 
@@ -41,22 +38,32 @@ export function FilterByValue(props: { model: ByValuesModel }) {
     const allChecked = stat.checked > 0 && stat.unchecked === 0;
     const indeterminate = stat.checked > 0 && stat.unchecked > 0;
 
-    const onFilterCheckToggled = useCallback((item: IFilterByValueItem, checked: boolean) => {
-        model.onFilterCheckToggled(item, checked);
-    }, [model]);
-    const onFilterOnlyClicked = useCallback((item: IFilterByValueItem) => {
-        model.onFilterOnly(item);
-    }, [model]);
+    const treeMap = model.treeMapCache;
+
     const onCheckAllToggled = useCallback(() => {
         model.onCheckAllToggled(!allChecked);
     }, [model, allChecked]);
+
     const onSearchValueChange = useCallback((str: string) => {
         model.setSearchString(str);
     }, [model]);
 
+    function extractCheckedKeys(items: IFilterByValueWithTreeItem[]): string[] {
+        let checkedKeys: string[] = [];
+        items.forEach((item) => {
+            if (item.checked) {
+                checkedKeys.push(item.key);
+            }
+            if (item.children) {
+                checkedKeys = checkedKeys.concat(extractCheckedKeys(item.children));
+            }
+        });
+        return checkedKeys;
+    }
+
     return (
         <div className={styles.sheetsFilterPanelValuesContainer}>
-            <Input value={searchText} placeholder={localeService.t('sheets-filter.panel.search-placeholder')} onChange={onSearchValueChange} />
+            <Input autoFocus value={searchText} placeholder={localeService.t('sheets-filter.panel.search-placeholder')} onChange={onSearchValueChange} />
             <div className={styles.sheetsFilterPanelValuesList}>
                 {/* The on-top select all button */}
                 <div className={styles.sheetsFilterPanelValuesItem}>
@@ -66,34 +73,57 @@ export function FilterByValue(props: { model: ByValuesModel }) {
                             disabled={items.length === 0}
                             checked={allChecked}
                             onChange={onCheckAllToggled}
-                        >
-                        </Checkbox>
+                        />
                         <span className={styles.sheetsFilterPanelValuesItemText}>{`${localeService.t('sheets-filter.panel.select-all')}`}</span>
                         <span className={styles.sheetsFilterPanelValuesItemCount}>{`(${stat.checked}/${stat.checked + stat.unchecked})`}</span>
                     </div>
                 </div>
                 <div className={styles.sheetsFilterPanelValuesVirtual}>
-                    <List style={{ paddingRight: 8 }} data={items} height={190} itemHeight={32} itemKey={(item) => `${item.value}----${item.checked}`}>
-                        {(item) => (
-                            <div className={styles.sheetsFilterPanelValuesItem}>
-                                <div className={styles.sheetsFilterPanelValuesItemInner}>
-                                    <Checkbox checked={item.checked} onChange={() => onFilterCheckToggled(item, !item.checked)}></Checkbox>
-                                    <span className={styles.sheetsFilterPanelValuesItemText}>{item.value}</span>
-                                    <span className={styles.sheetsFilterPanelValuesItemCount}>{`(${item.count})`}</span>
-                                    <Button
-                                        className={styles.sheetsFilterPanelValuesItemExcludeButton}
-                                        size="small"
-                                        type="link"
-                                        onClick={() => onFilterOnlyClicked(item)}
-                                    >
-                                        {filterOnly}
-                                    </Button>
-                                </div>
+                    <Tree
+                        data={items}
+                        defaultExpandAll={false}
+                        valueGroup={extractCheckedKeys(items)}
+                        height={180}
+                        onChange={(node) => {
+                            model.onFilterCheckToggled(node as IFilterByValueWithTreeItem);
+                        }}
+                        defaultCache={treeMap}
+                        itemHeight={28}
+                        treeNodeClassName={styles.sheetsFilterTreeNode}
+                        attachRender={(item) => (
+                            <div className={styles.sheetsFilterTreeNodeAttach}>
+                                <span className={styles.sheetsFilterPanelValuesItemCount}>{`(${item.count})`}</span>
+                                <Button
+                                    className={styles.sheetsFilterTreeNodeFilterOnly}
+
+                                    size="small"
+                                    type="link"
+                                    onClick={() => {
+                                        const filterValues = [];
+                                        if (item.children) {
+                                            item.children.forEach((child) => {
+                                                if (child.children) {
+                                                    child.children.forEach((subChild) => {
+                                                        filterValues.push(subChild.key);
+                                                    });
+                                                } else {
+                                                    filterValues.push(child.key);
+                                                }
+                                            });
+                                        } else {
+                                            filterValues.push(item.key);
+                                        }
+                                        model.onFilterOnly(filterValues);
+                                    }}
+                                >
+                                    {filterOnly}
+                                </Button>
                             </div>
                         )}
-                    </List>
+                    />
                 </div>
             </div>
         </div>
+
     );
 }

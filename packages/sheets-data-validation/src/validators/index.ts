@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-export { CheckboxValidator, CHECKBOX_FORMULA_1, CHECKBOX_FORMULA_2 } from './checkbox-validator';
+export { CHECKBOX_FORMULA_1, CHECKBOX_FORMULA_2, CheckboxValidator } from './checkbox-validator';
 export { DateValidator } from './date-validator';
-export { ListValidator } from './list-validator';
 export { DecimalValidator } from './decimal-validator';
+export { ListValidator } from './list-validator';
 export { TextLengthValidator } from './text-length-validator';

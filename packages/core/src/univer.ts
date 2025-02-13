@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,44 +14,59 @@
  * limitations under the License.
  */
 
-import type { Dependency } from '@wendellhu/redi';
-import { Injector } from '@wendellhu/redi';
-
+import type { Dependency, IDisposable } from './common/di';
+import type { UnitModel, UnitType } from './common/unit';
+import type { LogLevel } from './services/log/log.service';
+import type { Plugin, PluginCtor } from './services/plugin/plugin';
+import type { DependencyOverride } from './services/plugin/plugin-override';
+import type { IStyleSheet } from './services/theme/theme.service';
+import type { IWorkbookData } from './sheets/typedef';
+import type { LocaleType } from './types/enum/locale-type';
+import type { IDocumentData, ISlideData } from './types/interfaces';
+import { Injector, touchDependencies } from './common/di';
+import { UniverInstanceType } from './common/unit';
 import { DocumentDataModel } from './docs/data-model/document-data-model';
+import { AuthzIoLocalService } from './services/authz-io/authz-io-local.service';
+import { IAuthzIoService } from './services/authz-io/type';
 import { CommandService, ICommandService } from './services/command/command.service';
 import { ConfigService, IConfigService } from './services/config/config.service';
 import { ContextService, IContextService } from './services/context/context.service';
 import { ErrorService } from './services/error/error.service';
-import {
-    FloatingObjectManagerService,
-    IFloatingObjectManagerService,
-} from './services/floating-object/floating-object-manager.service';
 import { IUniverInstanceService, UniverInstanceService } from './services/instance/instance.service';
 import { LifecycleStages } from './services/lifecycle/lifecycle';
-import { LifecycleInitializerService, LifecycleService } from './services/lifecycle/lifecycle.service';
+import { LifecycleService } from './services/lifecycle/lifecycle.service';
 import { LocaleService } from './services/locale/locale.service';
 import { DesktopLogService, ILogService } from './services/log/log.service';
-import { IPermissionService, PermissionService } from './services/permission/permission.service';
-import { UniverPermissionService } from './services/permission/univer.permission.service';
-import { ResourceManagerService } from './services/resource-manager/resource-manager.service';
-import { IResourceManagerService } from './services/resource-manager/type';
+import { MentionIOLocalService } from './services/mention-io/mention-io-local.service';
+import { IMentionIOService } from './services/mention-io/type';
+import { PermissionService } from './services/permission/permission.service';
+import { IPermissionService } from './services/permission/type';
+import { mergeOverrideWithDependencies } from './services/plugin/plugin-override';
+import { PluginService } from './services/plugin/plugin.service';
 import { ResourceLoaderService } from './services/resource-loader/resource-loader.service';
 import { IResourceLoaderService } from './services/resource-loader/type';
+import { ResourceManagerService } from './services/resource-manager/resource-manager.service';
+import { IResourceManagerService } from './services/resource-manager/type';
 import { ThemeService } from './services/theme/theme.service';
 import { IUndoRedoService, LocalUndoRedoService } from './services/undoredo/undoredo.service';
+import { UserManagerService } from './services/user-manager/user-manager.service';
+import { DisposableCollection, type ILocales, toDisposable } from './shared';
 import { Workbook } from './sheets/workbook';
 import { SlideDataModel } from './slides/slide-model';
-import type { LocaleType } from './types/enum/locale-type';
-import type { IDocumentData, ISlideData, IUniverData, IWorkbookData } from './types/interfaces';
-import type { UnitModel, UnitType } from './common/unit';
-import { UniverInstanceType } from './common/unit';
-import { PluginService } from './services/plugin/plugin.service';
-import type { Plugin, PluginCtor } from './services/plugin/plugin';
-import type { DependencyOverride } from './services/plugin/plugin-override';
-import { mergeOverrideWithDependencies } from './services/plugin/plugin-override';
-import { UserManagerService } from './services/user-manager/user-manager.service';
 
-export class Univer {
+export interface IUniverConfig {
+    theme: IStyleSheet;
+    locale: LocaleType;
+    locales: ILocales;
+    logLevel: LogLevel;
+
+    override?: DependencyOverride;
+}
+
+/**
+ * @hideconstructor
+ */
+export class Univer implements IDisposable {
     private _startedTypes = new Set<UnitType>();
     private _injector: Injector;
 
@@ -63,34 +78,51 @@ export class Univer {
         return this._injector.get(PluginService);
     }
 
+    private _disposingCallbacks = new DisposableCollection();
+
     /**
      * Create a Univer instance.
      * @param config Configuration data for Univer
      * @param parentInjector An optional parent injector of the Univer injector. For more information, see https://redi.wendell.fun/docs/hierarchy.
      */
-    constructor(config: Partial<IUniverData> = {}, parentInjector?: Injector) {
+    constructor(config: Partial<IUniverConfig> = {}, parentInjector?: Injector) {
         const injector = this._injector = createUniverInjector(parentInjector, config?.override);
 
         const { theme, locale, locales, logLevel } = config;
-
-        theme && this._injector.get(ThemeService).setTheme(theme);
-        locales && this._injector.get(LocaleService).load(locales);
-        locale && this._injector.get(LocaleService).setLocale(locale);
-        logLevel && this._injector.get(ILogService).setLogLevel(logLevel);
+        if (theme) this._injector.get(ThemeService).setTheme(theme);
+        if (locales) this._injector.get(LocaleService).load(locales);
+        if (locale) this._injector.get(LocaleService).setLocale(locale);
+        if (logLevel) this._injector.get(ILogService).setLogLevel(logLevel);
 
         this._init(injector);
-        const _a = this._pluginService;
     }
 
+    /**
+     * @ignore
+     */
     __getInjector(): Injector {
         return this._injector;
     }
 
+    /**
+     * Register a callback function which will be called when this Univer instance is disposing.
+     *
+     * @ignore
+     *
+     * @param callback The callback function.
+     * @returns To remove this callback function from this Univer instance's on disposing list.
+     */
+    onDispose(callback: () => void): IDisposable {
+        const d = this._disposingCallbacks.add(toDisposable(callback));
+        return toDisposable(() => d.dispose(true));
+    }
+
     dispose(): void {
+        this._disposingCallbacks.dispose();
         this._injector.dispose();
     }
 
-    setLocale(locale: LocaleType) {
+    setLocale(locale: LocaleType): void {
         this._injector.get(LocaleService).setLocale(locale);
     }
 
@@ -104,6 +136,7 @@ export class Univer {
      * @deprecated use `createUnit` instead
      */
     createUniverSheet(data: Partial<IWorkbookData>): Workbook {
+        this._injector.get(ILogService).warn('[Univer]: Univer.createUniverSheet is deprecated, use createUnit instead');
         return this._univerInstanceService.createUnit<IWorkbookData, Workbook>(UniverInstanceType.UNIVER_SHEET, data);
     }
 
@@ -111,6 +144,7 @@ export class Univer {
      * @deprecated use `createUnit` instead
      */
     createUniverDoc(data: Partial<IDocumentData>): DocumentDataModel {
+        this._injector.get(ILogService).warn('[Univer]: Univer.createUniverDoc is deprecated, use createUnit instead');
         return this._univerInstanceService.createUnit<IDocumentData, DocumentDataModel>(UniverInstanceType.UNIVER_DOC, data);
     }
 
@@ -118,6 +152,7 @@ export class Univer {
      * @deprecated use `createUnit` instead
      */
     createUniverSlide(data: Partial<ISlideData>): SlideDataModel {
+        this._injector.get(ILogService).warn('[Univer]: Univer.createUniverSlide is deprecated, use createUnit instead');
         return this._univerInstanceService.createUnit<ISlideData, SlideDataModel>(UniverInstanceType.UNIVER_SLIDE, data);
     }
 
@@ -128,13 +163,13 @@ export class Univer {
 
         const univerInstanceService = injector.get(IUniverInstanceService) as UniverInstanceService;
         univerInstanceService.__setCreateHandler(
-            (type: UnitType, data, ctor) => {
+            (type: UnitType, data, ctor, options) => {
                 if (!this._startedTypes.has(type)) {
                     this._pluginService.startPluginForType(type);
                     this._startedTypes.add(type);
 
                     const model = injector.createInstance(ctor, data);
-                    univerInstanceService.__addUnit(model);
+                    univerInstanceService.__addUnit(model, options);
 
                     this._tryProgressToReady();
 
@@ -142,7 +177,7 @@ export class Univer {
                 }
 
                 const model = injector.createInstance(ctor, data);
-                univerInstanceService.__addUnit(model);
+                univerInstanceService.__addUnit(model, options);
                 return model;
             }
         );
@@ -155,21 +190,18 @@ export class Univer {
         }
     }
 
-
     /** Register a plugin into univer. */
     registerPlugin<T extends PluginCtor<Plugin>>(plugin: T, config?: ConstructorParameters<T>[0]): void {
         this._pluginService.registerPlugin(plugin, config);
     }
 }
 
-function createUniverInjector(parentInjector?: Injector, override?: DependencyOverride) {
+function createUniverInjector(parentInjector?: Injector, override?: DependencyOverride): Injector {
     const dependencies: Dependency[] = mergeOverrideWithDependencies([
         [ErrorService],
         [LocaleService],
         [ThemeService],
         [LifecycleService],
-        [LifecycleInitializerService],
-        [UniverPermissionService],
         [PluginService],
         [UserManagerService],
 
@@ -177,14 +209,21 @@ function createUniverInjector(parentInjector?: Injector, override?: DependencyOv
         [IUniverInstanceService, { useClass: UniverInstanceService }],
         [IPermissionService, { useClass: PermissionService }],
         [ILogService, { useClass: DesktopLogService, lazy: true }],
-        [ICommandService, { useClass: CommandService, lazy: true }],
+        [ICommandService, { useClass: CommandService }],
         [IUndoRedoService, { useClass: LocalUndoRedoService, lazy: true }],
         [IConfigService, { useClass: ConfigService }],
         [IContextService, { useClass: ContextService }],
-        [IFloatingObjectManagerService, { useClass: FloatingObjectManagerService, lazy: true }],
         [IResourceManagerService, { useClass: ResourceManagerService, lazy: true }],
         [IResourceLoaderService, { useClass: ResourceLoaderService, lazy: true }],
+        [IAuthzIoService, { useClass: AuthzIoLocalService }],
+        [IMentionIOService, { useClass: MentionIOLocalService, lazy: true }],
     ], override);
 
-    return parentInjector ? parentInjector.createChild(dependencies) : new Injector(dependencies);
+    const injector = parentInjector ? parentInjector.createChild(dependencies) : new Injector(dependencies);
+    touchDependencies(injector, [
+        [UserManagerService],
+        [IResourceLoaderService],
+    ]);
+
+    return injector;
 }

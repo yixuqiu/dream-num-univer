@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,9 +27,10 @@ import type {
 } from '@univerjs/core';
 import { BooleanNumber, DEFAULT_EMPTY_DOCUMENT_VALUE, DocumentDataModel } from '@univerjs/core';
 
-import { BaseObject } from '../base-object';
+import type { BASE_OBJECT_ARRAY } from '../base-object';
+import { BaseObject, ObjectType } from '../base-object';
 import { TRANSFORM_CHANGE_OBSERVABLE_TYPE } from '../basics/interfaces';
-import type { IViewportBound } from '../basics/vector2';
+import type { IViewportInfo } from '../basics/vector2';
 import { DocumentSkeleton } from '../components/docs/layout/doc-skeleton';
 import { Documents } from '../components/docs/document';
 import { DocumentViewModel } from '../components/docs/view-model/document-view-model';
@@ -39,11 +40,17 @@ export interface IRichTextProps extends ITransformState, IStyleBase {
     text?: string;
     richText?: IDocumentData;
     zIndex: number;
-    isTransformer?: boolean;
     forceRender?: boolean;
 }
 
-export const RICHTEXT_OBJECT_ARRAY = ['text', 'richText'];
+export type RichtextObjectJSONType = {
+    [key in typeof BASE_OBJECT_ARRAY[number]]: number;
+} & {
+    text: string;
+    fs: number;
+    richText?: unknown;
+};
+export const RICHTEXT_OBJECT_ARRAY = ['text', 'richText', 'fs'];
 
 export class RichText extends BaseObject {
     private _documentData!: IDocumentData;
@@ -52,31 +59,70 @@ export class RichText extends BaseObject {
 
     private _documents!: Documents;
 
+    documentModel!: DocumentDataModel;
+
+    /**
+     * fontFamily
+     */
     private _ff?: Nullable<string>;
 
+    /**
+     * fontSize
+     * pt
+     */
     private _fs?: number = 12;
 
+    /**
+     * italic
+     * 0: false
+     * 1: true
+     */
     private _it?: BooleanNumber = BooleanNumber.FALSE;
 
+    /**
+     * bold
+     * 0: false
+     * 1: true
+     */
     private _bl?: BooleanNumber = BooleanNumber.FALSE;
 
+    /**
+     * underline
+     */
     private _ul?: ITextDecoration = {
         s: BooleanNumber.FALSE,
     };
 
+    /**
+     * strikethrough
+     */
     private _st?: ITextDecoration = {
         s: BooleanNumber.FALSE,
     };
 
+    /**
+     * overline
+     */
     private _ol?: ITextDecoration = {
         s: BooleanNumber.FALSE,
     };
 
+    /**
+     * background
+     */
     private _bg?: Nullable<IColorStyle>;
 
+    /**
+     * border
+     */
     private _bd?: Nullable<IBorderData>;
 
+    /**
+     * foreground
+     */
     private _cl?: Nullable<IColorStyle>;
+
+    override objectType = ObjectType.RICH_TEXT;
 
     constructor(
         private _localeService: LocaleService,
@@ -101,7 +147,7 @@ export class RichText extends BaseObject {
             this._documentData = this._convertToDocumentData(props.text || '');
         }
 
-        const docModel = new DocumentDataModel(this._documentData);
+        const docModel = this.documentModel = new DocumentDataModel(this._documentData);
         const docViewModel = new DocumentViewModel(docModel);
 
         this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
@@ -113,7 +159,7 @@ export class RichText extends BaseObject {
 
         this._initialProps(props);
 
-        this.onTransformChangeObservable.add((changeState) => {
+        this.onTransformChange$.subscribeEvent((changeState) => {
             const { type } = changeState;
             if (type === TRANSFORM_CHANGE_OBSERVABLE_TYPE.resize || type === TRANSFORM_CHANGE_OBSERVABLE_TYPE.all) {
                 docModel.updateDocumentDataPageSize(this.width);
@@ -122,14 +168,37 @@ export class RichText extends BaseObject {
                 const size = this.getDocsSkeletonPageSize();
                 this.height = size?.height || this.height;
                 this._setTransForm();
+
+                this.refreshDocumentByDocData();
             }
         });
+    }
+
+    get fs(): number {
+        return this._fs!;
+    }
+
+    get text(): string {
+        const textBody = this._documentData.body;
+        if (!textBody) return '';
+        const texts = [];
+        if (textBody.textRuns) {
+            for (const run of textBody.textRuns) {
+                const st = run.st || 0;
+                const ed = run.ed || 0;
+                texts.push(textBody.dataStream.slice(st, ed));
+            }
+        }
+        return texts.join('');
     }
 
     get documentData() {
         return this._documentData;
     }
 
+    /**
+     * get last page size
+     */
     getDocsSkeletonPageSize() {
         const skeletonData = this._documentSkeleton?.getSkeletonData();
 
@@ -143,6 +212,10 @@ export class RichText extends BaseObject {
         return { width, height };
     }
 
+    /**
+     * this[`_${key}`] = props[key];
+     * @param props
+     */
     setProps(props?: IRichTextProps) {
         if (!props) {
             return;
@@ -167,7 +240,7 @@ export class RichText extends BaseObject {
         return this;
     }
 
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;
@@ -197,7 +270,7 @@ export class RichText extends BaseObject {
         return this;
     }
 
-    override toJson() {
+    override toJson(): RichtextObjectJSONType {
         const props: IKeyValue = {};
         RICHTEXT_OBJECT_ARRAY.forEach((key) => {
             // @ts-ignore
@@ -209,7 +282,7 @@ export class RichText extends BaseObject {
         return {
             ...super.toJson(),
             ...props,
-        };
+        } as RichtextObjectJSONType;
     }
 
     protected _draw(ctx: UniverRenderingContext) {
@@ -262,6 +335,7 @@ export class RichText extends BaseObject {
 
         const contentSize = this.getDocsSkeletonPageSize();
 
+        // this[pKey] = option[pKey]
         this.transformByState({
             width: contentSize?.width || 0,
             height: contentSize?.height || 0,
@@ -270,8 +344,47 @@ export class RichText extends BaseObject {
             angle: props?.angle,
         });
 
+        // this[`_${key}`] = props[key];
         this.setProps(props);
 
         this.makeDirty(true);
+    }
+
+    /**
+     * After changing editor size & end of editing, update skeleton of doc.
+     */
+    // TODO: This method should be invoked when _documentData changed.
+    // _documentData changed ---> update _documentSkeleton & _documentSkeleton
+    // now it is invoked when transformByState(change editor size) & end of editing
+    refreshDocumentByDocData() {
+        const docModel = this.documentModel = new DocumentDataModel(this._documentData);
+        const docViewModel = new DocumentViewModel(docModel);
+
+        this._documentSkeleton = DocumentSkeleton.create(docViewModel, this._localeService);
+
+        this._documents = new Documents(`${this.oKey}_DOCUMENTS`, this._documentSkeleton, {
+            pageMarginLeft: 0,
+            pageMarginTop: 0,
+        });
+
+        this._documentSkeleton
+            .getViewModel()
+            .getDataModel()
+            .updateDocumentDataPageSize(this.width, Infinity);
+
+        this._documentSkeleton.calculate();
+    }
+
+    /**
+     * invoked when end editing.
+     */
+    resizeToContentSize() {
+        const contentSize = this.getDocsSkeletonPageSize();
+        if (contentSize && contentSize.width !== 0 && contentSize.height !== 0) {
+            this.transformByState({
+                // width: contentSize?.width || 0,
+                height: contentSize?.height || 0,
+            });
+        }
     }
 }

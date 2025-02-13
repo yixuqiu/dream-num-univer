@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,13 @@
  * limitations under the License.
  */
 
+import type { IDisposable } from '@univerjs/core';
+import type React from 'react';
+import type { defineComponent } from 'vue';
 import { toDisposable } from '@univerjs/core';
+
 import {
+    AddDigitsSingle,
     AdjustHeight,
     AdjustWidth,
     AlignBottomSingle,
@@ -24,6 +29,7 @@ import {
     AllBorderSingle,
     AmplifySingle,
     AutoHeight,
+    AutoWidth,
     AutowrapSingle,
     AvgSingle,
     BackSlashSingle,
@@ -34,6 +40,7 @@ import {
     ClearFormat,
     CntSingle,
     CodeSingle,
+    Conditions,
     ContentSingle16,
     Copy,
     DeleteCellMoveDown,
@@ -43,7 +50,9 @@ import {
     DeleteColumn,
     DeleteRow,
     DirectExportSingle,
+    DollarSingle,
     DownBorder,
+    EuroSingle,
     ExportSingle,
     FolderSingle,
     FontColor,
@@ -53,6 +62,8 @@ import {
     FreezeRowSingle,
     FreezeToSelectedSingle,
     FunctionSingle,
+    GridSingle,
+    HeaderFooterSingle,
     Hide,
     HorizontalBorder,
     HorizontallySingle,
@@ -73,8 +84,10 @@ import {
     LeftRotationNinetyDegreesSingle,
     LeftTridiagonalSingle,
     MaxSingle,
+    MenuSingle24,
     MergeAllSingle,
     MinSingle,
+    MoreDownSingle,
     NoBorderSingle,
     NoColor,
     NoRotationSingle,
@@ -83,15 +96,19 @@ import {
     OverflowSingle,
     PaintBucket,
     PasteSpecial,
+    PercentSingle,
     PipingSingle,
     RedoSingle,
     Reduce,
+    ReduceDigitsSingle,
     RightBorder,
     RightDoubleDiagonalSingle,
     RightInsertColumn,
     RightJustifyingSingle,
     RightRotationFortyFiveDegreesSingle,
     RightRotationNinetyDegreesSingle,
+    RmbSingle,
+    RoubleSingle,
     SlashSingle,
     StrikethroughSingle,
     SubscriptSingle,
@@ -107,15 +124,11 @@ import {
     VerticalIntegrationSingle,
     VerticalTextSingle,
 } from '@univerjs/icons';
-import type { IDisposable } from '@wendellhu/redi';
-import type { defineComponent } from 'vue';
-
-import type React from 'react';
 import { cloneElement, createElement, useEffect, useRef } from 'react';
 
 type ComponentFramework = 'vue3' | 'react';
 
-interface IComponentOptions {
+export interface IComponentOptions {
     framework?: ComponentFramework;
 }
 
@@ -134,7 +147,9 @@ export type ComponentList = Map<string, IVue3Component | IReactComponent>;
 
 export class ComponentManager {
     private _components: ComponentList = new Map();
+    private _componentsReverse = new Map<ComponentType, string>();
 
+    // eslint-disable-next-line max-lines-per-function
     constructor() {
         const iconList: Record<string, React.ForwardRefExoticComponent<any>> = {
             AlignBottomSingle,
@@ -170,6 +185,7 @@ export class ComponentManager {
             OverflowSingle,
             PaintBucket,
             PasteSpecial,
+            MenuSingle24,
             RedoSingle,
             RightBorder,
             RightJustifyingSingle,
@@ -205,6 +221,7 @@ export class ComponentManager {
             Hide,
             HorizontalBorder,
             AutoHeight,
+            AutoWidth,
             AdjustHeight,
             AdjustWidth,
             AvgSingle,
@@ -215,6 +232,8 @@ export class ComponentManager {
             CancelFreezeSingle,
             FreezeColumnSingle,
             FreezeRowSingle,
+            GridSingle,
+            HeaderFooterSingle,
             FreezeToSelectedSingle,
             CodeSingle,
             FontSizeIncreaseSingle,
@@ -227,6 +246,15 @@ export class ComponentManager {
             DirectExportSingle,
             FolderSingle,
             ExportSingle,
+            Conditions,
+            RmbSingle,
+            MoreDownSingle,
+            AddDigitsSingle,
+            ReduceDigitsSingle,
+            PercentSingle,
+            EuroSingle,
+            RoubleSingle,
+            DollarSingle,
         };
 
         for (const k in iconList) {
@@ -245,8 +273,16 @@ export class ComponentManager {
             framework,
             component,
         });
+        this._componentsReverse.set(component, name);
 
-        return toDisposable(() => this._components.delete(name));
+        return toDisposable(() => {
+            this._components.delete(name);
+            this._componentsReverse.delete(component);
+        });
+    }
+
+    getKey(component: ComponentType) {
+        return this._componentsReverse.get(component);
     }
 
     get(name: string) {
@@ -279,14 +315,15 @@ export class ComponentManager {
 async function renderVue3Component(VueComponent: ReturnType<typeof defineComponent>, element: HTMLElement, args: Record<string, any>) {
     try {
         const { h, render } = await import('vue');
-
         const vnode = h(VueComponent, args);
-
         const container = document.createElement('div');
 
         document.body.appendChild(container);
-
         render(vnode, element);
+
+        return () => {
+            document.body.removeChild(container);
+        };
     } catch (error) {
     }
 }
@@ -298,7 +335,11 @@ export function VueComponentWrapper(options: { component: ReturnType<typeof defi
     useEffect(() => {
         if (!domRef.current) return;
 
-        renderVue3Component(component, domRef.current, props);
+        const render = renderVue3Component(component, domRef.current, props);
+
+        return () => {
+            render.then((d) => d?.());
+        };
     }, [props]);
 
     return createElement('div', { ref: domRef });

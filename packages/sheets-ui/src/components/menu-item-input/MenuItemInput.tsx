@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,31 @@
  * limitations under the License.
  */
 
+import type { IMenuItemInputProps } from './interface';
 import { LocaleService } from '@univerjs/core';
 import { InputNumber } from '@univerjs/design';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import React, { useEffect, useState } from 'react';
+import { IContextMenuService, useDependency } from '@univerjs/ui';
 
+import React, { useEffect, useState } from 'react';
 import styles from './index.module.less';
-import type { IMenuItemInputProps } from './interface';
 
 export const MenuItemInput = (props: IMenuItemInputProps) => {
     const { prefix, suffix, value, onChange, min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = props;
 
     const localeService = useDependency(LocaleService);
-
+    const contextMenuService = useDependency(IContextMenuService);
     const [inputValue, setInputValue] = useState<string>(); // Initialized to an empty string
 
     const handleChange = (value: number | null) => {
         setInputValue(value?.toString());
         onChange(value?.toString() ?? '');
     };
+
+    useEffect(() => {
+        if (!contextMenuService.visible) {
+            setInputValue(value);
+        }
+    }, [contextMenuService.visible]);
 
     useEffect(() => {
         setInputValue(value);

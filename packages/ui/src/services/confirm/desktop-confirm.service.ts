@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,28 @@
  * limitations under the License.
  */
 
-import { toDisposable } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-import { Subject } from 'rxjs';
-
+import type { IDisposable } from '@univerjs/core';
 import type { IConfirmPartMethodOptions } from '../../views/components/confirm-part/interface';
 import type { IConfirmService } from './confirm.service';
 
-export class DesktopConfirmService implements IConfirmService {
+import { Disposable, Inject, Injector, toDisposable } from '@univerjs/core';
+import { BehaviorSubject } from 'rxjs';
+import { connectInjector } from '../../utils/di';
+import { ConfirmPart } from '../../views/components/confirm-part/ConfirmPart';
+import { BuiltInUIPart, IUIPartsService } from '../parts/parts.service';
+
+export class DesktopConfirmService extends Disposable implements IConfirmService {
     private _confirmOptions: IConfirmPartMethodOptions[] = [];
-    readonly confirmOptions$ = new Subject<IConfirmPartMethodOptions[]>();
+    readonly confirmOptions$ = new BehaviorSubject<IConfirmPartMethodOptions[]>([]);
+
+    constructor(
+        @Inject(Injector) protected readonly _injector: Injector,
+        @IUIPartsService protected readonly _uiPartsService: IUIPartsService
+    ) {
+        super();
+
+        this._initUIPart();
+    }
 
     open(option: IConfirmPartMethodOptions): IDisposable {
         if (this._confirmOptions.find((item) => item.id === option.id)) {
@@ -67,5 +79,11 @@ export class DesktopConfirmService implements IConfirmService {
             visible: item.id === id ? false : item.visible,
         }));
         this.confirmOptions$.next([...this._confirmOptions]);
+    }
+
+    protected _initUIPart(): void {
+        this.disposeWithMe(
+            this._uiPartsService.registerComponent(BuiltInUIPart.GLOBAL, () => connectInjector(ConfirmPart, this._injector))
+        );
     }
 }

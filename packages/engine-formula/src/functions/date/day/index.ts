@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,13 @@ import { NumberValueObject } from '../../../engine/value-object/primitive-object
 import { BaseFunction } from '../../base-function';
 
 export class Day extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 1;
+
     override calculate(serialNumber: BaseValueObject) {
-        if (serialNumber == null) {
-            return ErrorValueObject.create(ErrorType.NA);
+        if (serialNumber.isError()) {
+            return serialNumber;
         }
 
         if (serialNumber.isArray()) {
@@ -35,10 +39,6 @@ export class Day extends BaseFunction {
     }
 
     private _handleSingleObject(serialNumberObject: BaseValueObject) {
-        if (serialNumberObject.isError()) {
-            return serialNumberObject;
-        }
-
         let date: Date;
         const dateValue = serialNumberObject.getValue();
 

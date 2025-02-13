@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-import type { IRange, Univer, Workbook, Worksheet } from '@univerjs/core';
-import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import type { Injector, IRange, Univer, Workbook, Worksheet } from '@univerjs/core';
 import type { IMoveRangeCommandParams } from '../../commands/commands/move-range.command';
+import { ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MoveRangeCommand } from '../../commands/commands/move-range.command';
 import { MoveRangeMutation } from '../../commands/mutations/move-range.mutation';
 import { SetSelectionsOperation } from '../../commands/operations/selection.operation';
 import { RefRangeService } from '../ref-range/ref-range.service';
-import { SelectionManagerService } from '../selection-manager.service';
+import { SheetsSelectionsService } from '../selections/selection.service';
 import { SheetInterceptorService } from '../sheet-interceptor/sheet-interceptor.service';
 import { createTestBase, TEST_WORKBOOK_DATA_DEMO } from './util';
 
@@ -51,7 +50,7 @@ describe('Test ref-range.service', () => {
 
     beforeEach(() => {
         const testBed = createTestBase(TEST_WORKBOOK_DATA_DEMO, [
-            [SelectionManagerService],
+            [SheetsSelectionsService],
             [RefRangeService],
             [SheetInterceptorService],
         ]);
@@ -66,26 +65,26 @@ describe('Test ref-range.service', () => {
 
         const univerInstanceService = get(IUniverInstanceService);
         workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        worksheet = workbook.getActiveSheet();
+        worksheet = workbook.getActiveSheet()!;
     });
     afterEach(() => {
         univer.dispose();
     });
 
-    it('test registerRefRange', () => {
+    it('test registerRefRange', async () => {
         const mockFn = vi.fn(() => ({ redos: [], undos: [] }));
         refRangeService.registerRefRange(originRange, mockFn);
         const params: IMoveRangeCommandParams = {
             fromRange: { ...originRange },
             toRange: { startRow: 4, endRow: 4, startColumn: 4, endColumn: 4 },
         };
-        commandService.executeCommand(MoveRangeCommand.id, params);
+        await commandService.executeCommand(MoveRangeCommand.id, params);
         expect(mockFn.mock.calls.length).toBe(1);
         const callParams = (mockFn.mock.calls as any)[0][0];
         expect(callParams?.id).toBe('sheet.command.move-range');
     });
 
-    it('test registerRefRange 3', () => {
+    it('test registerRefRange 3', async () => {
         const redoMutationId = 'test-redo-mutation';
         const undoMutationId = 'test-undo-mutation';
 
@@ -115,7 +114,7 @@ describe('Test ref-range.service', () => {
             fromRange: { startRow: 2, endRow: 4, startColumn: 2, endColumn: 2 },
             toRange: { startRow: 3, endRow: 5, startColumn: 2, endColumn: 2 },
         };
-        commandService.executeCommand(MoveRangeCommand.id, params);
+        await commandService.executeCommand(MoveRangeCommand.id, params);
 
         expect(mockFn1.mock.calls.length).toBe(1);
         expect(mockFn2.mock.calls.length).toBe(1);
@@ -125,7 +124,7 @@ describe('Test ref-range.service', () => {
         expect(result.redos.length).toBe(3);
     });
 
-    it('test merge mutation', () => {
+    it('test merge mutation', async () => {
         const redoMutationId = 'test-redo-mutation';
         const undoMutationId = 'test-undo-mutation';
 
@@ -179,7 +178,7 @@ describe('Test ref-range.service', () => {
             fromRange: { startRow: 2, endRow: 4, startColumn: 2, endColumn: 2 },
             toRange: { startRow: 3, endRow: 5, startColumn: 2, endColumn: 2 },
         };
-        commandService.executeCommand(MoveRangeCommand.id, params);
+        await commandService.executeCommand(MoveRangeCommand.id, params);
         const result = sheetInterceptorService.onCommandExecute({ id: MoveRangeCommand.id, params });
         expect((result as any).redos.length).toBe(1);
         expect((result as any).redos[0].params.values.length).toBe(9);

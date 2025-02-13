@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import type { Univer, Workbook } from '@univerjs/core';
+import type { Injector, Univer, Workbook } from '@univerjs/core';
 import { ICommandService, IUniverInstanceService, RANGE_TYPE, RedoCommand, UndoCommand, UniverInstanceType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
 import { SetColHiddenMutation, SetColVisibleMutation } from '../../mutations/set-col-visible.mutation';
 import { SetRowHiddenMutation, SetRowVisibleMutation } from '../../mutations/set-row-visible.mutation';
 import { SetSelectionsOperation } from '../../operations/selection.operation';
@@ -62,13 +61,6 @@ describe('Test row col hide/unhine commands', () => {
         ].forEach((command) => {
             commandService.registerCommand(command);
         });
-
-        const selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
     });
 
     afterEach(() => univer.dispose());
@@ -76,33 +68,33 @@ describe('Test row col hide/unhine commands', () => {
     function getRowCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getRowCount();
     }
 
     function getColCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getColumnCount();
     }
 
     function getRowRawVisible(row: number): boolean {
         const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getRowRawVisible(row);
     }
 
     function getColVisible(col: number): boolean {
         const workbook = get(IUniverInstanceService).getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getColVisible(col);
     }
 
     function selectRow(rowStart: number, rowEnd: number): void {
-        const selectionManagerService = get(SelectionManagerService);
+        const selectionManagerService = get(SheetsSelectionsService);
         const endColumn = getColCount() - 1;
-        selectionManagerService.add([
+        selectionManagerService.addSelections([
             {
                 range: { startRow: rowStart, startColumn: 0, endColumn, endRow: rowEnd, rangeType: RANGE_TYPE.ROW },
                 primary: {
@@ -121,9 +113,9 @@ describe('Test row col hide/unhine commands', () => {
     }
 
     function selectColumn(columnStart: number, columnEnd: number): void {
-        const selectionManagerService = get(SelectionManagerService);
+        const selectionManagerService = get(SheetsSelectionsService);
         const endRow = getRowCount() - 1;
-        selectionManagerService.add([
+        selectionManagerService.addSelections([
             {
                 range: {
                     startRow: 0,
@@ -161,8 +153,12 @@ describe('Test row col hide/unhine commands', () => {
             await commandService.executeCommand(RedoCommand.id);
             expect(getRowRawVisible(0)).toBeFalsy();
 
-            selectRow(2, 2);
-            await commandService.executeCommand(SetRowHiddenCommand.id);
+            // Specify the parameter ranges as the third row
+            await commandService.executeCommand(SetRowHiddenCommand.id, {
+                unitId: 'test',
+                subUnitId: 'sheet1',
+                ranges: [{ startRow: 2, startColumn: 2, endRow: 2, endColumn: 2, rangeType: RANGE_TYPE.ROW }],
+            });
             expect(getRowRawVisible(2)).toBeFalsy();
 
             // select a range and invoke unhide command will unhide all
@@ -174,6 +170,34 @@ describe('Test row col hide/unhine commands', () => {
 
             await commandService.executeCommand(UndoCommand.id);
             expect(getRowRawVisible(0)).toBeFalsy();
+            expect(getRowRawVisible(2)).toBeFalsy();
+        });
+
+        it('should skip over already hidden rows', async () => {
+            expect(getRowRawVisible(0)).toBeTruthy();
+
+            selectRow(2, 2);
+            await commandService.executeCommand(SetRowHiddenCommand.id);
+            expect(getRowRawVisible(2)).toBeFalsy();
+
+            selectRow(1, 4);
+            await commandService.executeCommand(SetRowHiddenCommand.id);
+            expect(getRowRawVisible(1)).toBeFalsy();
+            expect(getRowRawVisible(2)).toBeFalsy();
+            expect(getRowRawVisible(3)).toBeFalsy();
+
+            await commandService.executeCommand(UndoCommand.id);
+            expect(getRowRawVisible(1)).toBeTruthy();
+            expect(getRowRawVisible(2)).toBeFalsy();
+            expect(getRowRawVisible(3)).toBeTruthy();
+
+            selectRow(1, 2);
+            await commandService.executeCommand(SetRowHiddenCommand.id);
+            expect(getRowRawVisible(1)).toBeFalsy();
+            expect(getRowRawVisible(2)).toBeFalsy();
+
+            await commandService.executeCommand(UndoCommand.id);
+            expect(getRowRawVisible(1)).toBeTruthy();
             expect(getRowRawVisible(2)).toBeFalsy();
         });
     });
@@ -192,8 +216,12 @@ describe('Test row col hide/unhine commands', () => {
             await commandService.executeCommand(RedoCommand.id);
             expect(getColVisible(0)).toBeFalsy();
 
-            selectColumn(2, 2);
-            await commandService.executeCommand(SetColHiddenCommand.id);
+            // Specify the parameter ranges as the third column
+            await commandService.executeCommand(SetColHiddenCommand.id, {
+                unitId: 'test',
+                subUnitId: 'sheet1',
+                ranges: [{ startRow: 2, startColumn: 2, endRow: 2, endColumn: 2, rangeType: RANGE_TYPE.COLUMN }],
+            });
             expect(getColVisible(2)).toBeFalsy();
 
             // select a range and invoke unhide command will unhide all
@@ -205,6 +233,34 @@ describe('Test row col hide/unhine commands', () => {
 
             await commandService.executeCommand(UndoCommand.id);
             expect(getColVisible(0)).toBeFalsy();
+            expect(getColVisible(2)).toBeFalsy();
+        });
+
+        it('should skip over already hidden cols', async () => {
+            expect(getColVisible(0)).toBeTruthy();
+
+            selectColumn(2, 2);
+            await commandService.executeCommand(SetColHiddenCommand.id);
+            expect(getColVisible(2)).toBeFalsy();
+
+            selectColumn(1, 4);
+            await commandService.executeCommand(SetColHiddenCommand.id);
+            expect(getColVisible(1)).toBeFalsy();
+            expect(getColVisible(2)).toBeFalsy();
+            expect(getColVisible(3)).toBeFalsy();
+
+            await commandService.executeCommand(UndoCommand.id);
+            expect(getColVisible(1)).toBeTruthy();
+            expect(getColVisible(2)).toBeFalsy();
+            expect(getColVisible(3)).toBeTruthy();
+
+            selectColumn(1, 2);
+            await commandService.executeCommand(SetColHiddenCommand.id);
+            expect(getColVisible(1)).toBeFalsy();
+            expect(getColVisible(2)).toBeFalsy();
+
+            await commandService.executeCommand(UndoCommand.id);
+            expect(getColVisible(1)).toBeTruthy();
             expect(getColVisible(2)).toBeFalsy();
         });
     });

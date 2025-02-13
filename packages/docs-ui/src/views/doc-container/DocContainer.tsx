@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import React, { Component, createRef } from 'react';
+import type { IUniverDocsUIConfig } from '../../controllers/config.schema';
 
-import type { IUniverDocsUIConfig } from '../../basics';
+import React, { Component, createRef } from 'react';
 import style from './index.module.less';
 
 interface IBaseDocContainerProps {
@@ -43,6 +43,7 @@ export class DocContainer extends Component<IBaseDocContainerProps> {
 
     constructor(props: IBaseDocContainerProps) {
         super(props);
+
         this.changeSkin(props.config.container as string, 'default');
     }
 

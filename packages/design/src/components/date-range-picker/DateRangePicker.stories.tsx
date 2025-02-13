@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
  */
 
 import type { Meta } from '@storybook/react';
-import React, { useState } from 'react';
 
-import type { Dayjs } from 'dayjs';
-import dayjs from 'dayjs';
 import type { NoUndefinedRangeValueType } from 'rc-picker/lib/PickerInput/RangePicker';
+import { dayjs } from '@univerjs/core';
+import React, { useState } from 'react';
 import { DateRangePicker } from './DateRangePicker';
 
 const meta: Meta<typeof DateRangePicker> = {
@@ -35,12 +34,10 @@ export default meta;
 
 export const DateRangePickerBasic = {
     render() {
-        const [value, setValue] = useState<NoUndefinedRangeValueType<Dayjs>>([dayjs(), dayjs().add(7, 'day')]);
+        const [value, setValue] = useState<NoUndefinedRangeValueType<dayjs.Dayjs>>([dayjs(), dayjs().add(7, 'day')]);
 
         return (
-            <>
-                <DateRangePicker value={value} onChange={setValue} />
-            </>
+            <DateRangePicker value={value} onChange={setValue} />
         );
     },
 };

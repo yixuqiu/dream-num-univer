@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import type { ICellData, IRange, IStyleData, IWorkbookData, Nullable, Univer, Workbook } from '@univerjs/core';
+import type { ICellData, Injector, IRange, IStyleData, IWorkbookData, Nullable, Univer, Workbook } from '@univerjs/core';
+import type { IRemoveRowColCommandParams } from '../remove-row-col.command';
 import {
     ICommandService,
     IUniverInstanceService,
@@ -25,12 +26,11 @@ import {
     UndoCommand,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MergeCellController } from '../../../controllers/merge-cell.controller';
 import { RefRangeService } from '../../../services/ref-range/ref-range.service';
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../../services/selections/selection.service';
 import { AddWorksheetMergeMutation } from '../../mutations/add-worksheet-merge.mutation';
 import { InsertColMutation, InsertRowMutation } from '../../mutations/insert-row-col.mutation';
 import { MoveRangeMutation } from '../../mutations/move-range.mutation';
@@ -41,13 +41,14 @@ import { SetSelectionsOperation } from '../../operations/selection.operation';
 import {
     InsertColAfterCommand,
     InsertColBeforeCommand,
+    InsertColByRangeCommand,
     InsertColCommand,
     InsertRowAfterCommand,
     InsertRowBeforeCommand,
+    InsertRowByRangeCommand,
     InsertRowCommand,
 } from '../insert-row-col.command';
-import type { IRemoveRowColCommandParams } from '../remove-row-col.command';
-import { RemoveColCommand, RemoveRowCommand } from '../remove-row-col.command';
+import { RemoveColByRangeCommand, RemoveColCommand, RemoveRowByRangeCommand, RemoveRowCommand } from '../remove-row-col.command';
 import { createCommandTestBed } from './create-command-test-bed';
 
 describe('Test insert and remove rows cols commands', () => {
@@ -70,6 +71,10 @@ describe('Test insert and remove rows cols commands', () => {
             InsertColAfterCommand,
             InsertColBeforeCommand,
             InsertColCommand,
+            InsertColByRangeCommand,
+            InsertRowByRangeCommand,
+            RemoveColByRangeCommand,
+            RemoveRowByRangeCommand,
             RemoveRowCommand,
             RemoveColCommand,
 
@@ -83,20 +88,14 @@ describe('Test insert and remove rows cols commands', () => {
             MoveRangeMutation,
             SetRangeValuesMutation,
         ].forEach((c) => commandService.registerCommand(c));
-        const selectionManagerService = get(SelectionManagerService);
-        selectionManagerService.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
     });
 
     afterEach(() => univer.dispose());
 
     function selectRow(rowStart: number, rowEnd: number): void {
-        const selectionManagerService = get(SelectionManagerService);
+        const selectionManagerService = get(SheetsSelectionsService);
         const endColumn = getColCount() - 1;
-        selectionManagerService.add([
+        selectionManagerService.addSelections([
             {
                 range: { startRow: rowStart, startColumn: 0, endColumn, endRow: rowEnd, rangeType: RANGE_TYPE.ROW },
                 primary: {
@@ -115,9 +114,9 @@ describe('Test insert and remove rows cols commands', () => {
     }
 
     function selectColumn(columnStart: number, columnEnd: number): void {
-        const selectionManagerService = get(SelectionManagerService);
+        const selectionManagerService = get(SheetsSelectionsService);
         const endRow = getRowCount() - 1;
-        selectionManagerService.add([
+        selectionManagerService.addSelections([
             {
                 range: {
                     startRow: 0,
@@ -144,14 +143,14 @@ describe('Test insert and remove rows cols commands', () => {
     function getRowCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getRowCount();
     }
 
     function getColCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getColumnCount();
     }
 
@@ -162,21 +161,21 @@ describe('Test insert and remove rows cols commands', () => {
     function getCellInfo(row: number, col: number): Nullable<ICellData> {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getCellMatrix().getValue(row, col);
     }
 
     function getMergedInfo(row: number, col: number): Nullable<IRange> {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getMergedCell(row, col);
     }
 
     function getMergeData() {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getMergeData();
     }
 
@@ -199,6 +198,8 @@ describe('Test insert and remove rows cols commands', () => {
             expect(getRowCount()).toBe(21);
             // the merged cell should be moved down
             expect(getMergedInfo(3, 2)).toEqual({ startRow: 3, endRow: 4, startColumn: 2, endColumn: 2 });
+            // Insert row style
+            expect(getCellStyle(1, 0)).toBe('s1');
 
             await commandService.executeCommand(UndoCommand.id);
             expect(getRowCount()).toBe(20);
@@ -213,7 +214,7 @@ describe('Test insert and remove rows cols commands', () => {
             expect(getRowCount()).toBe(initRowCount);
             expect(getCellStyle(2, 1)).toBe('s4');
             expect(getMergedInfo(2, 2)).toEqual({ startRow: 2, endRow: 3, startColumn: 2, endColumn: 2 });
-            const result = await commandService.executeCommand(InsertRowBeforeCommand.id);
+            const result = await commandService.executeCommand(InsertRowAfterCommand.id);
             // TODO: expect row height
             expect(result).toBeTruthy();
             expect(getRowCount()).toBe(21);
@@ -226,6 +227,15 @@ describe('Test insert and remove rows cols commands', () => {
             await commandService.executeCommand(RedoCommand.id);
             expect(getRowCount()).toBe(21);
         });
+
+        it("Should 'insert after' work, copy style", async () => {
+            selectRow(0, 0);
+            const result = await commandService.executeCommand(InsertRowAfterCommand.id);
+            expect(result).toBeTruthy();
+
+            // Insert row style
+            expect(getCellStyle(1, 0)).toBe('s1');
+        });
     });
 
     describe('Insert columns', () => {
@@ -236,6 +246,8 @@ describe('Test insert and remove rows cols commands', () => {
             const result = await commandService.executeCommand(InsertColBeforeCommand.id);
             expect(result).toBeTruthy();
             expect(getColCount()).toBe(21);
+            // Insert column style
+            expect(getCellStyle(0, 1)).toBe('s1');
 
             const undoResult = await commandService.executeCommand(UndoCommand.id);
             expect(undoResult).toBeTruthy();
@@ -254,6 +266,16 @@ describe('Test insert and remove rows cols commands', () => {
             // expect a merged cell to expand and a merged cell to move
             expect(getMergedInfo(3, 3)).toEqual({ startRow: 2, endRow: 3, startColumn: 3, endColumn: 3 });
             expect(getMergedInfo(1, 4)).toEqual({ startRow: 1, endRow: 1, startColumn: 3, endColumn: 4 });
+        });
+
+        it("Should 'insert after' work, copy style", async () => {
+            selectColumn(0, 0);
+
+            const result = await commandService.executeCommand(InsertColAfterCommand.id);
+            expect(result).toBeTruthy();
+
+            // Insert column style
+            expect(getCellStyle(0, 1)).toBe('s1');
         });
     });
 
@@ -327,10 +349,6 @@ const TEST_ROW_COL_INSERTION_DEMO: IWorkbookData = {
     id: 'test',
     appVersion: '3.0.0-alpha',
     sheets: {
-        // 1
-        //  2-3-
-        // 	4
-        //  |
         sheet1: {
             id: 'sheet1',
             cellData: {
@@ -385,7 +403,12 @@ const TEST_ROW_COL_INSERTION_DEMO: IWorkbookData = {
     locale: LocaleType.ZH_CN,
     name: '',
     sheetOrder: [],
-    styles: {},
+    styles: {
+        s1: { bg: { rgb: '#ff0000' } },
+        s2: { bl: 0 },
+        s3: { bl: 1 },
+        s4: { fs: 12 },
+    },
 };
 
 function createInsertRowColTestBed() {

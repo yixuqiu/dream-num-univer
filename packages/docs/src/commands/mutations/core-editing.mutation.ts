@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,30 @@
  * limitations under the License.
  */
 
-import { CommandType, IUniverInstanceService } from '@univerjs/core';
-import type { IMutation, IMutationCommonParams, Nullable, TextXAction } from '@univerjs/core';
-
-import type { ITextRangeWithStyle } from '@univerjs/engine-render';
-import { DocViewModelManagerService } from '../../services/doc-view-model-manager.service';
-import { serializeTextRange, TextSelectionManagerService } from '../../services/text-selection-manager.service';
-import type { IDocStateChangeParams } from '../../services/doc-state-change-manager.service';
-import { DocStateChangeManagerService } from '../../services/doc-state-change-manager.service';
-import { IMEInputManagerService } from '../../services/ime-input-manager.service';
+import type { IMutation, IMutationCommonParams, JSONXActions, Nullable } from '@univerjs/core';
+import type { IDocStateChangeInfo } from '../../services/doc-state-emit.service';
+import { CommandType, IUniverInstanceService, JSONX } from '@univerjs/core';
+import { IRenderManagerService, type ITextRangeWithStyle } from '@univerjs/engine-render';
+import { DocSelectionManagerService } from '../../services/doc-selection-manager.service';
+import { DocSkeletonManagerService } from '../../services/doc-skeleton-manager.service';
+import { DocStateEmitService } from '../../services/doc-state-emit.service';
 
 export interface IRichTextEditingMutationParams extends IMutationCommonParams {
     unitId: string;
-    actions: TextXAction[];
+    actions: JSONXActions;
     textRanges: Nullable<ITextRangeWithStyle[]>;
+    segmentId?: string;
     prevTextRanges?: Nullable<ITextRangeWithStyle[]>;
     noNeedSetTextRange?: boolean;
-    noHistory?: boolean;
     isCompositionEnd?: boolean;
+    noHistory?: boolean;
+    // Do you need to compose the undo and redo of history, and compose of the change states.
+    debounce?: boolean;
+    options?: { [key: string]: boolean };
+    // Whether this mutation is from a sync operation.
+    isSync?: boolean;
+    isEditing?: boolean;
+    syncer?: string;
 }
 
 const RichTextEditingMutationId = 'doc.mutation.rich-text-editing';
@@ -49,6 +55,7 @@ export const RichTextEditingMutation: IMutation<IRichTextEditingMutationParams, 
     handler: (accessor, params) => {
         const {
             unitId,
+            segmentId = '',
             actions,
             textRanges,
             prevTextRanges,
@@ -56,93 +63,76 @@ export const RichTextEditingMutation: IMutation<IRichTextEditingMutationParams, 
             noHistory,
             isCompositionEnd,
             noNeedSetTextRange,
+            debounce,
+            isEditing = true,
+            isSync,
+            syncer,
         } = params;
         const univerInstanceService = accessor.get(IUniverInstanceService);
+        const renderManagerService = accessor.get(IRenderManagerService);
+        const docStateEmitService = accessor.get(DocStateEmitService);
+
         const documentDataModel = univerInstanceService.getUniverDocInstance(unitId);
-
-        const docViewModelManagerService = accessor.get(DocViewModelManagerService);
-        const documentViewModel = docViewModelManagerService.getViewModel(unitId);
-
-        const textSelectionManagerService = accessor.get(TextSelectionManagerService);
-        const selections = textSelectionManagerService.getSelections() ?? [];
-
-        const serializedSelections = selections.map(serializeTextRange);
-
-        const docStateChangeManagerService = accessor.get(DocStateChangeManagerService);
-
-        const imeInputManagerService = accessor.get(IMEInputManagerService);
-
+        const documentViewModel = renderManagerService.getRenderById(unitId)?.with(DocSkeletonManagerService).getViewModel();
         if (documentDataModel == null || documentViewModel == null) {
             throw new Error(`DocumentDataModel or documentViewModel not found for unitId: ${unitId}`);
         }
 
+        const docSelectionManagerService = accessor.get(DocSelectionManagerService);
+        const docRanges = docSelectionManagerService.getDocRanges() ?? [];
+
         // TODO: `disabled` is only used for read only demo, and will be removed in the future.
         const disabled = !!documentDataModel.getSnapshot().disabled;
 
-        if (actions.length === 0 || disabled) {
+        if (JSONX.isNoop(actions) || (actions && actions.length === 0) || disabled) {
             // The actions' length maybe 0 when the mutation is from collaborative editing.
             // The return result will not be used.
             return {
                 unitId,
                 actions: [],
-                textRanges: serializedSelections,
+                textRanges: docRanges,
             };
         }
 
         // Step 1: Update Doc Data Model.
-        const undoActions = documentDataModel.apply(actions);
-
+        const undoActions = JSONX.invertWithDoc(actions, documentDataModel.getSnapshot());
+        documentDataModel.apply(actions);
         // Step 2: Update Doc View Model.
-        const { segmentId } = actions[0];
-        const segmentDocumentDataModel = documentDataModel.getSelfOrHeaderFooterModel(segmentId);
-        const segmentViewModel = documentViewModel.getSelfOrHeaderFooterViewModel(segmentId);
-
-        segmentViewModel.reset(segmentDocumentDataModel);
-
+        documentViewModel.reset(documentDataModel);
         // Step 3: Update cursor & selection.
         // Make sure update cursor & selection after doc skeleton is calculated.
-        if (!noNeedSetTextRange && textRanges && trigger != null) {
+        if (!noNeedSetTextRange && textRanges && trigger != null && !isSync) {
             queueMicrotask(() => {
-                textSelectionManagerService.replaceTextRanges(textRanges);
+                docSelectionManagerService.replaceDocRanges(textRanges, { unitId, subUnitId: unitId }, isEditing, params.options);
             });
         }
 
-        // Step 4: emit state change event.
-        const changeState: IDocStateChangeParams = {
+        // Step 4: Emit state change event.
+        const changeState: IDocStateChangeInfo = {
             commandId: RichTextEditingMutationId,
             unitId,
+            segmentId,
             trigger,
             noHistory,
+            debounce,
             redoState: {
                 actions,
                 textRanges,
             },
             undoState: {
                 actions: undoActions,
-                textRanges: prevTextRanges ?? serializedSelections,
+                textRanges: prevTextRanges ?? docRanges,
             },
+            isCompositionEnd,
+            isSync,
+            syncer,
         };
-
-        // Handle IME input.
-        if (isCompositionEnd) {
-            const historyParams = imeInputManagerService.fetchComposedUndoRedoMutationParams();
-
-            if (historyParams == null) {
-                throw new Error('historyParams is null in RichTextEditingMutation');
-            }
-
-            const { undoMutationParams, redoMutationParams, previousActiveRange } = historyParams;
-            changeState.redoState.actions = redoMutationParams.actions;
-            changeState.undoState.actions = undoMutationParams.actions;
-            changeState.undoState.textRanges = [previousActiveRange];
-        }
-
-        docStateChangeManagerService.setChangeState(changeState);
+        docStateEmitService.emitStateChangeInfo(changeState);
 
         return {
             unitId,
             actions: undoActions,
-            textRanges: serializedSelections,
+            textRanges: docRanges,
         };
     },
 };

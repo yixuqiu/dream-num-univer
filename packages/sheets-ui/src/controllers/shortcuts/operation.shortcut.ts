@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,20 +19,6 @@ import type { IShortcutItem } from '@univerjs/ui';
 import { KeyCode, MetaKeys } from '@univerjs/ui';
 
 import { whenSheetEditorFocused } from './utils';
-
-// export const SetUndoShortcutItem: IShortcutItem = {
-//     id: UndoCommand.id,
-//     // when focusing on any other input tag do not trigger this shortcut
-//     preconditions: (contextService) => whenSheetEditorFocused(contextService),
-//     binding: KeyCode.Z | MetaKeys.CTRL_COMMAND,
-// };
-
-// export const SetRedoShortcutItem: IShortcutItem = {
-//     id: RedoCommand.id,
-//     // when focusing on any other input tag do not trigger this shortcut
-//     preconditions: (contextService) => whenSheetEditorFocused(contextService),
-//     binding: KeyCode.Y | MetaKeys.CTRL_COMMAND,
-// };
 
 export const SetRowHiddenShortcutItem: IShortcutItem = {
     id: SetRowHiddenCommand.id,

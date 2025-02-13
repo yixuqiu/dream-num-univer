@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,37 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+import type { Dependency, IWorkbookData, Workbook } from '@univerjs/core';
+import type { IRenderContext } from '@univerjs/engine-render';
 import {
     BooleanNumber,
+    DisposableCollection,
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
     LocaleService,
     LocaleType,
     LogLevel,
     Plugin,
+    Tools,
     Univer,
     UniverInstanceType,
 } from '@univerjs/core';
-import { BorderStyleManagerService, SelectionManagerService, SheetInterceptorService, SheetPermissionService } from '@univerjs/sheets';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
 
 import { LexerTreeBuilder } from '@univerjs/engine-formula';
+import {
+    BorderStyleManagerService,
+    IRefSelectionsService,
+    RangeProtectionRuleModel,
+    SheetInterceptorService,
+
+    SheetsSelectionsService, WorkbookPermissionService, WorksheetPermissionService, WorksheetProtectionPointModel, WorksheetProtectionRuleModel,
+} from '@univerjs/sheets';
+import { BehaviorSubject } from 'rxjs';
 import enUS from '../../../locale/en-US';
+import { ISheetSelectionRenderService } from '../../../services/selection/base-selection-render.service';
+import { SheetSelectionRenderService } from '../../../services/selection/selection-render.service';
 
 const getTestWorkbookDataDemo = (): IWorkbookData => {
     return {
@@ -76,7 +89,11 @@ export interface ITestBed {
     sheet: Workbook;
 }
 
-export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?: Dependency[]): ITestBed {
+export function createCommandTestBed(
+    workbookData?: IWorkbookData,
+    dependencies?: Dependency[],
+    renderDependencies?: Dependency[]
+): ITestBed {
     const univer = new Univer();
     const injector = univer.__getInjector();
 
@@ -89,29 +106,53 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
             @Inject(Injector) override readonly _injector: Injector
         ) {
             super();
-
-            this._injector = _injector;
         }
 
-        override onStarting(injector: Injector): void {
-            injector.add([SelectionManagerService]);
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([SheetsSelectionsService]);
             injector.add([BorderStyleManagerService]);
             injector.add([SheetInterceptorService]);
             injector.add([LexerTreeBuilder]);
-            injector.add([SheetPermissionService]);
+            injector.add([WorksheetPermissionService]);
+            injector.add([WorksheetProtectionPointModel]);
+            injector.add([WorkbookPermissionService]);
+            injector.add([WorksheetProtectionRuleModel]);
+            injector.add([RangeProtectionRuleModel]);
+            injector.add([IRefSelectionsService, { useClass: SheetsSelectionsService }]);
 
             dependencies?.forEach((d) => injector.add(d));
         }
     }
 
     univer.registerPlugin(TestPlugin);
-    const sheet = univer.createUniverSheet(workbookData || getTestWorkbookDataDemo());
+
+    const snapshot = Tools.deepClone(workbookData || getTestWorkbookDataDemo());
+    const sheet = univer.createUnit<IWorkbookData, Workbook>(UniverInstanceType.UNIVER_SHEET, snapshot);
+
+    if (!dependencies || !dependencies.find((d) => d[0] === ISheetSelectionRenderService)) {
+        const context: IRenderContext<Workbook> = {
+            unitId: sheet.getUnitId(),
+            unit: sheet,
+            type: UniverInstanceType.UNIVER_SHEET,
+            engine: new DisposableCollection() as any,
+            scene: new DisposableCollection() as any,
+            mainComponent: null as any,
+            components: new Map(),
+            isMainScene: true,
+            activated$: new BehaviorSubject(true),
+            activate: () => { },
+            deactivate: () => { },
+        };
+
+        injector.add([ISheetSelectionRenderService, { useFactory: () => injector.createInstance(SheetSelectionRenderService, context) }]);
+    }
 
     const univerInstanceService = injector.get(IUniverInstanceService);
     univerInstanceService.focusUnit('test');
     const logService = injector.get(ILogService);
 
-    logService.setLogLevel(LogLevel.SILENT); // change this to `LogLevel.VERBOSE` to debug tests via logs
+    logService.setLogLevel(LogLevel.VERBOSE); // change this to `LogLevel.VERBOSE` to debug tests via logs
 
     const localeService = injector.get(LocaleService);
     localeService.load({ enUS });

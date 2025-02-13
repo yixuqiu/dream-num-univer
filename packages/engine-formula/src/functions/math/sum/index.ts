@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
+import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Sum extends BaseFunction {
-    override calculate(...variants: BaseValueObject[]) {
-        if (variants.length === 0) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 1;
 
+    override maxParams = 255;
+
+    override calculate(...variants: BaseValueObject[]) {
         let accumulatorAll: BaseValueObject = NumberValueObject.create(0);
         for (let i = 0; i < variants.length; i++) {
             let variant = variants[i];
@@ -39,6 +38,10 @@ export class Sum extends BaseFunction {
 
             if (variant.isArray()) {
                 variant = variant.sum();
+            }
+
+            if (variant.isError()) {
+                return variant;
             }
 
             accumulatorAll = accumulatorAll.plus(variant);

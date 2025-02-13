@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-import { Injector } from '@wendellhu/redi';
 import { afterEach, describe, expect, it } from 'vitest';
+import { Injector } from '../../../common/di';
 
 import { DesktopLogService, ILogService } from '../../log/log.service';
 import { LifecycleStages } from '../lifecycle';
-import { LifecycleInitializerService, LifecycleService } from '../lifecycle.service';
+import { LifecycleService } from '../lifecycle.service';
 
 function createLifecycleTestBed() {
     const injector = new Injector();
 
     injector.add([ILogService, { useClass: DesktopLogService }]);
-    injector.add([LifecycleInitializerService]);
     injector.add([LifecycleService]);
 
     return {
@@ -117,34 +116,4 @@ describe('Test LifecycleService', () => {
         expect(lifecycleStages4).toEqual(steadyStages);
         expect(lifecycleStages5).toEqual(steadyStages);
     });
-
-    // describe('Test automatically instantiate modules on lifecycle stages', () => {
-    //     let initializer: LifecycleInitializerService;
-
-    //     it('Should instantiate modules on lifecycle stages', () => {
-    //         injector = createLifecycleTestBed().injector;
-    //         initializer = injector.get(LifecycleInitializerService);
-    //         lifecycleService = injector.get(LifecycleService);
-
-    //         initializer.start();
-    //         initializer.start(); // For just test coverage.
-
-    //         const initModules: string[] = [];
-
-    //         @OnLifecycle(LifecycleStages.Rendered, TestModule1)
-    //         class TestModule1 {
-    //             constructor() {
-    //                 initModules.push('test1');
-    //             }
-    //         }
-    //         injector.add([TestModule1]);
-
-    //         lifecycleService.stage = LifecycleStages.Starting;
-    //         lifecycleService.stage = LifecycleStages.Ready;
-    //         expect(initModules).toEqual([]);
-
-    //         lifecycleService.stage = LifecycleStages.Rendered;
-    //         expect(initModules).toEqual(['test1']);
-    //     });
-    // });
 });

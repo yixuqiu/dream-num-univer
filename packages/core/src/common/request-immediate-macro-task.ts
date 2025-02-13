@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,19 @@ export function requestImmediateMacroTask(callback: (value?: unknown) => void): 
     const channel = new MessageChannel();
     let cancelled = false;
 
-    channel.port1.onmessage = () => {
+    const hanlder = () => {
         if (!cancelled) {
             callback();
         }
     };
 
+    // This would cause memory leak. But we cannot use addEventListener because it won't work in web worker.
+    channel.port1.onmessage = hanlder;
     channel.port2.postMessage(null);
 
     return () => {
         cancelled = true;
+        channel.port1.close();
+        channel.port2.close();
     };
 }

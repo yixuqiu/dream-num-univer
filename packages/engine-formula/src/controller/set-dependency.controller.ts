@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,26 +15,30 @@
  */
 
 import type { ICommandInfo } from '@univerjs/core';
-import { Disposable, ICommandService, LifecycleStages, ObjectMatrix, OnLifecycle } from '@univerjs/core';
+import type { ISetDefinedNameMutationParam } from '../commands/mutations/set-defined-name.mutation';
 
+import type {
+    IRemoveFeatureCalculationMutationParam,
+    ISetFeatureCalculationMutation } from '../commands/mutations/set-feature-calculation.mutation';
+import type { ISetFormulaDataMutationParams } from '../commands/mutations/set-formula-data.mutation';
+import type { IRemoveOtherFormulaMutationParams, ISetOtherFormulaMutationParams } from '../commands/mutations/set-other-formula.mutation';
+import { Disposable, ICommandService, ObjectMatrix } from '@univerjs/core';
+import { SetDefinedNameMutation } from '../commands/mutations/set-defined-name.mutation';
 import {
     RemoveFeatureCalculationMutation,
     SetFeatureCalculationMutation,
 } from '../commands/mutations/set-feature-calculation.mutation';
-import { IFeatureCalculationManagerService } from '../services/feature-calculation-manager.service';
-import { IDependencyManagerService } from '../services/dependency-manager.service';
-import type { IRemoveOtherFormulaMutationParams, ISetOtherFormulaMutationParams } from '../commands/mutations/set-other-formula.mutation';
-import { RemoveOtherFormulaMutation, SetOtherFormulaMutation } from '../commands/mutations/set-other-formula.mutation';
-import type { ISetFormulaDataMutationParams } from '../commands/mutations/set-formula-data.mutation';
 import { SetFormulaDataMutation } from '../commands/mutations/set-formula-data.mutation';
+import { RemoveOtherFormulaMutation, SetOtherFormulaMutation } from '../commands/mutations/set-other-formula.mutation';
+import { IDependencyManagerService } from '../services/dependency-manager.service';
+import { IFeatureCalculationManagerService } from '../services/feature-calculation-manager.service';
 
-@OnLifecycle(LifecycleStages.Ready, SetDependencyController)
 export class SetDependencyController extends Disposable {
     constructor(
         @ICommandService private readonly _commandService: ICommandService,
         @IFeatureCalculationManagerService
-        @IDependencyManagerService private readonly _dependencyManagerService: IDependencyManagerService
-    ) {
+        @IDependencyManagerService private readonly _dependencyManagerService: IDependencyManagerService,
+        @IFeatureCalculationManagerService private readonly _featureCalculationManagerService: IFeatureCalculationManagerService) {
         super();
 
         this._initialize();
@@ -42,18 +46,37 @@ export class SetDependencyController extends Disposable {
 
     private _initialize(): void {
         this._commandExecutedListener();
+
+        this._featureCalculationManagerServiceListener();
+    }
+
+    private _featureCalculationManagerServiceListener() {
+        this.disposeWithMe(
+            this._featureCalculationManagerService.onChanged$.subscribe((params) => {
+                const { unitId, subUnitId, featureIds } = params;
+                this._dependencyManagerService.removeFeatureFormulaDependency(unitId, subUnitId, featureIds);
+            })
+        );
     }
 
     private _commandExecutedListener() {
         this.disposeWithMe(
             this._commandService.onCommandExecuted((command: ICommandInfo) => {
-                if (command.id === RemoveFeatureCalculationMutation.id || command.id === SetFeatureCalculationMutation.id) {
-                    const params = command.params as { featureId: string };
+                if (command.id === RemoveFeatureCalculationMutation.id) {
+                    const params = command.params as IRemoveFeatureCalculationMutationParam;
                     if (params == null) {
                         return;
                     }
-                    const { featureId } = params;
-                    this._dependencyManagerService.removeFeatureFormulaDependency(featureId);
+                    const { featureIds, unitId, subUnitId } = params;
+                    this._dependencyManagerService.removeFeatureFormulaDependency(unitId, subUnitId, featureIds);
+                } else if (command.id === SetFeatureCalculationMutation.id) {
+                    const params = command.params as ISetFeatureCalculationMutation;
+                    if (params == null) {
+                        return;
+                    }
+                    const { featureId, calculationParam } = params;
+                    const { unitId, subUnitId } = calculationParam;
+                    this._dependencyManagerService.removeFeatureFormulaDependency(unitId, subUnitId, [featureId]);
                 } else if (command.id === RemoveOtherFormulaMutation.id) {
                     const params = command.params as IRemoveOtherFormulaMutationParams;
                     if (params == null) {
@@ -76,12 +99,26 @@ export class SetDependencyController extends Disposable {
                 } else if (command.id === SetFormulaDataMutation.id) {
                     const formulaData = (command.params as ISetFormulaDataMutationParams).formulaData;
                     Object.keys(formulaData).forEach((unitId) => {
-                        if (formulaData[unitId] == null) {
-                            return true;
+                        const unitFormulaData = formulaData[unitId];
+                        // undefined means do nothing
+                        if (unitFormulaData === undefined) {
+                            return;
                         }
-                        Object.keys(formulaData[unitId]!).forEach((subUnitId) => {
-                            const formulaDataItem = formulaData[unitId]![subUnitId];
-                            if (formulaDataItem == null) {
+
+                        // null means clear all formula data with the unitId
+                        if (unitFormulaData === null) {
+                            this._dependencyManagerService.clearFormulaDependency(unitId);
+                            return;
+                        }
+
+                        Object.keys(unitFormulaData).forEach((subUnitId) => {
+                            const formulaDataItem = unitFormulaData[subUnitId];
+
+                            if (formulaDataItem === undefined) {
+                                return;
+                            }
+
+                            if (formulaDataItem === null) {
                                 this._dependencyManagerService.clearFormulaDependency(unitId, subUnitId);
                                 return true;
                             }
@@ -91,8 +128,23 @@ export class SetDependencyController extends Disposable {
                             });
                         });
                     });
+                } else if (command.id === SetDefinedNameMutation.id) {
+                    this._handleSetDefinedName(command);
                 }
             })
         );
+    }
+
+    private _handleSetDefinedName(
+        command: ICommandInfo
+    ): void {
+        const params = command.params as ISetDefinedNameMutationParam;
+        if (params == null) {
+            return;
+        }
+
+        const { unitId, name } = params;
+
+        this._dependencyManagerService.removeFormulaDependencyByDefinedName(unitId, name);
     }
 }

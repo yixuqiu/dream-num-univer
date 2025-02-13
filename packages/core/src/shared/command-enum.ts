@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,5 +17,6 @@
 export enum UpdateDocsAttributeType {
     COVER, // Default, if not present, add; if present, overwrite, while retaining the original properties.
     REPLACE, // Replace the original properties entirely.
-    INTERSECTION, // Retain only the intersecting properties.
+    // Retain only the intersecting properties.
+    // INTERSECTION,
 }

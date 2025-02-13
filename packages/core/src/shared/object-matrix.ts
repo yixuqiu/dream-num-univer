@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import type { IRange } from '../types/interfaces/i-range';
-import { Tools } from './tools';
+import type { IRange } from '../sheets/typedef';
 import type { Nullable } from './types';
+import { Tools } from './tools';
 
 /**
  * Object Matrix Primitive Type
@@ -274,18 +274,16 @@ export class ObjectMatrix<T> {
      */
     forValue(callback: (row: number, col: number, value: T) => Nullable<boolean>): ObjectMatrix<T> {
         const matrix = this._matrix;
-        const matrixRow = Object.keys(matrix);
 
-        for (const row of matrixRow) {
+        for (const row in matrix) {
             const rowNumber = Number(row);
             const columns = matrix[rowNumber];
 
             if (!columns) continue;
 
-            const columnKeys = Object.keys(columns);
-            for (const column of columnKeys) {
+            for (const column in columns) {
                 const colNumber = Number(column);
-                const value = columns[Number(column)];
+                const value = columns[colNumber];
 
                 const result = callback(rowNumber, colNumber, value);
                 if (result === false) {
@@ -342,7 +340,7 @@ export class ObjectMatrix<T> {
         return false;
     }
 
-    getValue(row: number, column: number): T {
+    getValue(row: number, column: number): Nullable<T> {
         return this._matrix?.[row]?.[column];
     }
 
@@ -400,7 +398,9 @@ export class ObjectMatrix<T> {
     insertColumns(start: number, count: number): void {
         for (let c = start; c < start + count; c++) {
             this.forEach((row, data) => {
-                insertMatrixArray(c, undefined, data);
+                if (data) {
+                    insertMatrixArray(c, undefined, data);
+                }
             });
         }
     }
@@ -411,7 +411,9 @@ export class ObjectMatrix<T> {
 
     removeColumns(start: number, count: number): void {
         this.forEach((row, value) => {
-            spliceArray(start, count, value);
+            if (value) {
+                spliceArray(start, count, value);
+            }
         });
     }
 
@@ -469,19 +471,10 @@ export class ObjectMatrix<T> {
     getSizeOf(): number {
         const keys = Object.keys(this._matrix);
         return keys.length;
-        // return this._option.getSizeOf();
     }
 
     getLength(): number {
         return getArrayLength(this._matrix);
-        // let maxIndex = 0;
-        // const keys = Object.keys(this._matrix);
-        // for (const key of keys) {
-        //     const rowIndex = Number(key);
-        //     maxIndex = Math.max(maxIndex, rowIndex);
-        // }
-        // return maxIndex + 1;
-        // return this._option.getLength();
     }
 
     getRange(): IRange {
@@ -522,7 +515,7 @@ export class ObjectMatrix<T> {
             }
 
             cols.forEach((column) => {
-                array[row][column] = this.getValue(row, column);
+                array[row][column] = this.getValue(row, column)!;
             });
         });
         return array;
@@ -533,7 +526,7 @@ export class ObjectMatrix<T> {
         const { endColumn, endRow } = range;
         const array: T[][] = [];
         for (let i = 0; i <= endRow; i++) {
-            const subArr = Array(endColumn + 1).fill(undefined);
+            const subArr = new Array(endColumn + 1).fill(undefined);
             array.push(subArr);
         }
 
@@ -590,6 +583,34 @@ export class ObjectMatrix<T> {
         });
 
         return objectMatrix.getData();
+    }
+
+    /**
+     * the function can only be used in all the row and column are positive integer
+     * @description the positive integer in V8 Object is stored in a fast memory space and it is sorted  when we get the keys
+     * @returns {IRange} the start and end scope of the matrix
+     */
+    getStartEndScope(): IRange {
+        let startRow = Infinity;
+        let endRow = -Infinity;
+        let startColumn = Infinity;
+        let endColumn = -Infinity;
+
+        const rows = Object.keys(this._matrix);
+        if (rows.length > 0) {
+            startRow = +rows[0];
+            endRow = +rows[rows.length - 1];
+        }
+
+        for (const row of rows) {
+            const columns = Object.keys(this._matrix[row as unknown as number]);
+            if (columns.length > 0) {
+                startColumn = Math.min(startColumn, +columns[0]);
+                endColumn = Math.max(endColumn, +columns[columns.length - 1]);
+            }
+        }
+
+        return { startRow, endRow, startColumn, endColumn };
     }
 
     getDataRange(): IRange {
@@ -678,15 +699,6 @@ export class ObjectMatrix<T> {
         });
 
         return ranges;
-    }
-
-    merge(newObject: ObjectMatrix<T>) {
-        this.forValue((row, column) => {
-            const cellValue = newObject.getValue(row, column);
-            if (cellValue != null) {
-                this.setValue(row, column, cellValue);
-            }
-        });
     }
 
     private _setOriginValue(matrix: IObjectMatrixPrimitiveType<T> = {}) {

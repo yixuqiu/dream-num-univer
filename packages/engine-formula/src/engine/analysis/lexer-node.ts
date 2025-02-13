@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-import type { Nullable, Observable } from '@univerjs/core';
+import type { Nullable } from '@univerjs/core';
 
-import { DEFAULT_TOKEN_TYPE_ROOT } from '../../basics/token-type';
 import type { LambdaPrivacyVarType } from '../ast-node/base-ast-node';
+import { DEFAULT_TOKEN_TYPE_ROOT } from '../../basics/token-type';
 
 interface LexerNodeJson {
     token: string;
     children: Array<LexerNodeJson | string>;
-}
-
-export interface UniverFormulaEngineObserver {
-    onBeforeFormulaCalculateObservable: Observable<string>;
-    onAfterFormulaLexerObservable: Observable<LexerNode>;
 }
 
 export class LexerNode {
@@ -56,7 +51,13 @@ export class LexerNode {
         });
         this._functionDefinitionPrivacyVar?.clear();
 
+        this._functionDefinitionPrivacyVar = null;
+
+        this._children = [];
+
         this._parent = null;
+
+        this._definedNames = [];
     }
 
     getDefinedNames() {
@@ -166,14 +167,6 @@ export class LexerNode {
         }
 
         this.getChildren().splice(i, 1);
-        // const childrenCount = childrenNode.length;
-        // for (let i = 0; i < childrenCount; i++) {
-        //     const child = childrenNode[i];
-        //     if (child === lexerNode) {
-        //         childrenNode.splice(i, 1);
-        //         return;
-        //     }
-        // }
     }
 
     serialize() {

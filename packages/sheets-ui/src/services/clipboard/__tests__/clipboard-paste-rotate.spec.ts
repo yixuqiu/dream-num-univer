@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-import type { ICellData, IStyleData, Nullable, Univer } from '@univerjs/core';
+import type { ICellData, Injector, IStyleData, Nullable, Univer } from '@univerjs/core';
 import { ICommandService, IUniverInstanceService, LocaleType, RANGE_TYPE } from '@univerjs/core';
 import {
     AddWorksheetMergeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RemoveWorksheetMergeMutation,
-    SelectionManagerService,
     SetRangeValuesMutation,
     SetSelectionsOperation,
     SetWorksheetColWidthMutation,
     SetWorksheetRowHeightMutation,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ISheetClipboardService } from '../clipboard.service';
@@ -72,6 +70,7 @@ describe('Test clipboard', () => {
             sheetOrder: [],
             styles: {},
         });
+
         univer = testBed.univer;
         get = testBed.get;
 
@@ -82,7 +81,8 @@ describe('Test clipboard', () => {
         commandService.registerCommand(AddWorksheetMergeMutation);
         commandService.registerCommand(RemoveWorksheetMergeMutation);
         commandService.registerCommand(SetSelectionsOperation);
-        sheetSkeletonManagerService = get(SheetSkeletonManagerService);
+
+        sheetSkeletonManagerService = get(SheetSkeletonManagerService)!;
         sheetClipboardService = get(ISheetClipboardService);
 
         getValues = (
@@ -98,9 +98,7 @@ describe('Test clipboard', () => {
                 .getValues();
 
         getStyles = (key) => {
-            if (!key) return;
-            const styles = get(IUniverInstanceService).getUniverSheetInstance('test')?.getStyles();
-            return styles?.get(key);
+            return get(IUniverInstanceService).getUniverSheetInstance('test')!.getStyles().get(key);
         };
 
         convertColor = (color) => {
@@ -118,19 +116,14 @@ describe('Test clipboard', () => {
 
     describe('Test paste from univer ', () => {
         beforeEach(() => {
-            const selectionManager = get(SelectionManagerService);
+            const selectionManager = get(SheetsSelectionsService);
 
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
             const startRow = 1;
             const startColumn = 1;
             const endRow = 1;
             const endColumn = 1;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -139,23 +132,22 @@ describe('Test clipboard', () => {
             ]);
 
             sheetSkeletonManagerService.setCurrent({
-                unitId: 'test',
                 sheetId: 'sheet1',
             });
         });
+
         it('test font style paste from univer', async () => {
-            const worksheet = get(IUniverInstanceService).getUniverSheetInstance('test')?.getSheetBySheetId('sheet1');
-            if (!worksheet) return false;
+            const worksheet = get(IUniverInstanceService).getUniverSheetInstance('test')!.getSheetBySheetId('sheet1')!;
             const res = await sheetClipboardService.legacyPaste(rotateSampleByUniver);
             expect(res).toBeTruthy();
+
             const cellData = worksheet.getCellMatrix();
-            expect(getStyles(cellData.getValue(1, 1)?.s)?.tr?.a).toBeFalsy();
-            expect(getStyles(cellData.getValue(2, 1)?.s)?.tr?.a).toBe(-45);
-            expect(getStyles(cellData.getValue(3, 1)?.s)?.tr?.a).toBe(45);
-            expect(getStyles(cellData.getValue(4, 1)?.s)?.tr).toStrictEqual(
-                { a: 0, v: 1 });
-            expect(getStyles(cellData.getValue(5, 1)?.s)?.tr?.a).toBe(-90);
-            expect(getStyles(cellData.getValue(6, 1)?.s)?.tr?.a).toBe(90);
+            expect(getStyles(cellData.getValue(1, 1)!.s)?.tr?.a).toBeFalsy();
+            expect(getStyles(cellData.getValue(2, 1)!.s)?.tr!.a).toBe(-45);
+            expect(getStyles(cellData.getValue(3, 1)!.s)?.tr!.a).toBe(45);
+            expect(getStyles(cellData.getValue(4, 1)!.s)?.tr).toStrictEqual({ a: 0, v: 1 });
+            expect(getStyles(cellData.getValue(5, 1)!.s)?.tr!.a).toBe(-90);
+            expect(getStyles(cellData.getValue(6, 1)!.s)?.tr!.a).toBe(90);
         });
     });
 });

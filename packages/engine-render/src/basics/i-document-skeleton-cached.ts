@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,17 @@ import type {
     BulletAlignment,
     ColumnSeparatorType,
     DataStreamTreeTokenType,
+    IDocDrawingBase,
     IDocumentRenderConfig,
-    IDrawing,
-    IIndentStart,
     INestingLevel,
+    IParagraph,
+    IParagraphProperties,
+    ITable,
+    ITableRow,
     ITextStyle,
     PageOrientType,
 } from '@univerjs/core';
+import type { BreakPointType } from '../components/docs/layout/line-breaker/break';
 
 export interface IDocumentSkeletonCached extends ISkeletonResourceReference {
     pages: IDocumentSkeletonPage[];
@@ -32,14 +36,20 @@ export interface IDocumentSkeletonCached extends ISkeletonResourceReference {
     top: number;
     st: number; // startIndex 文本开始索引
     ed?: number; // endIndex 文本结束索引
+    parent?: unknown;
+}
+
+export interface IParagraphList {
+    bullet: IDocumentSkeletonBullet;
+    paragraph: IParagraph;
 }
 
 export interface ISkeletonResourceReference {
-    skeHeaders: Map<string, Map<number, IDocumentSkeletonHeader>>; // id:{ width: IDocumentSkeletonFooter }
-    skeFooters: Map<string, Map<number, IDocumentSkeletonFooter>>;
+    skeHeaders: Map<string, Map<number, IDocumentSkeletonHeaderFooter>>; // id:{ width: IDocumentSkeletonHeaderFooter }
+    skeFooters: Map<string, Map<number, IDocumentSkeletonHeaderFooter>>;
     /* Global cache, does not participate in rendering, only helps skeleton generation */
-    skeListLevel?: Map<string, IDocumentSkeletonBullet[]>; // 有序列表缓存，id：{ level: max(width)的bullet }
-    drawingAnchor?: Map<number, IDocumentSkeletonDrawingAnchor>; // Anchor point to assist floating element positioning
+    skeListLevel?: Map<string, IParagraphList[][]>; // 有序列表缓存，id：{ level: max(width)的bullet }
+    drawingAnchor?: Map<string, Map<number, IDocumentSkeletonDrawingAnchor>>; // Anchor point to assist floating element positioning
 }
 
 export interface IDocumentSkeletonDrawingAnchor {
@@ -48,22 +58,21 @@ export interface IDocumentSkeletonDrawingAnchor {
     top: number; // relative height for previous block
 }
 
-export interface IDocumentSkeletonHeaderFooterBase {
-    lines: IDocumentSkeletonLine[];
-    skeDrawings: Map<string, IDocumentSkeletonDrawing>;
-    height: number; // footer或header的总长度
-    st: number; // startIndex 文本开始索引
-    ed: number; // endIndex 文本结束索引
-    marginLeft: number;
-}
+// export interface IDocumentSkeletonHeaderFooterBase {
+//     lines: IDocumentSkeletonLine[];
+//     skeDrawings: Map<string, IDocumentSkeletonDrawing>;
+//     height: number; // footer或header的总长度
+//     st: number; // startIndex 文本开始索引
+//     ed: number; // endIndex 文本结束索引
+//     marginLeft: number;
+// }
 
-export interface IDocumentSkeletonHeader extends IDocumentSkeletonHeaderFooterBase {
-    marginTop: number;
-}
-
-export interface IDocumentSkeletonFooter extends IDocumentSkeletonHeaderFooterBase {
-    marginBottom: number;
-}
+export enum DocumentSkeletonPageType {
+    BODY,
+    HEADER,
+    FOOTER,
+    CELL,
+};
 
 export interface IDocumentSkeletonPage {
     sections: IDocumentSkeletonSection[];
@@ -75,8 +84,12 @@ export interface IDocumentSkeletonPage {
     pageOrient: PageOrientType; // Paper orientation, whether it's portrait (vertical) or landscape (horizontal)
     marginLeft: number; // The current page's padding, used to accommodate column title space, follows the snapshot configuration, jointly determined by documentStyle and sectionBreak. It represents the static limit for each page, which may vary per page.
     marginRight: number;
+    originMarginTop: number; // The margin top in document style config, used to draw margin identifier.
     marginTop: number;
+    originMarginBottom: number; // The margin bottom in document style config, used to draw margin identifier.
     marginBottom: number;
+
+    left: number; // Only use for cell.
 
     pageNumber: number; // page页数
     pageNumberStart: number; // page开始页序号
@@ -89,9 +102,14 @@ export interface IDocumentSkeletonPage {
     st: number; // startIndex 文本开始索引
     ed: number; // endIndex 文本结束索引
     skeDrawings: Map<string, IDocumentSkeletonDrawing>;
+    skeTables: Map<string, IDocumentSkeletonTable>; // 页面中表格的 skeletons
+    segmentId: string; // 如果是页眉、页脚，就是页眉页脚的 id，如果是正文页面，为空字符串
+    type: DocumentSkeletonPageType; // 页面类型，页眉、页脚或正文、单元格
     renderConfig?: IDocumentRenderConfig;
-    parent?: IDocumentSkeletonCached;
+    parent?: IDocumentSkeletonCached | IDocumentSkeletonRow;
 }
+
+export interface IDocumentSkeletonHeaderFooter extends IDocumentSkeletonPage {}
 
 export interface IDocumentSkeletonSection {
     columns: IDocumentSkeletonColumn[];
@@ -102,6 +120,31 @@ export interface IDocumentSkeletonSection {
     st: number; // startIndex 文本开始索引
     ed: number; // endIndex 文本结束索引
     parent?: IDocumentSkeletonPage;
+}
+
+export interface IDocumentSkeletonTable {
+    rows: IDocumentSkeletonRow[];
+    width: number; // 根据表格设置或者 columns 的宽度计算表格的宽度
+    height: number; // 根据行数及行高计算整个表格高度
+    top: number; // 根据表格所在段落，计算表格的 top
+    left: number; // 根据表格外围容器的宽度、align、及indent 计算 left 值
+    st: number; // startIndex 开始索引
+    ed: number; // endIndex 结束索引
+    tableId: string; // 表格的id
+    tableSource: ITable;
+    parent?: IDocumentSkeletonPage;
+}
+
+export interface IDocumentSkeletonRow {
+    cells: IDocumentSkeletonPage[];
+    index: number; // 行号
+    height: number; // 实际的高度
+    top: number; // top 相对于表格上沿
+    st: number; // startIndex 文本开始索引
+    ed: number; // endIndex 文本结束索引
+    rowSource: ITableRow;
+    parent?: IDocumentSkeletonTable;
+    isRepeatRow: boolean; // 是否是标题重复行
 }
 
 export interface IDocumentSkeletonColumn {
@@ -129,7 +172,8 @@ export interface IDocumentSkeletonLine {
     lineHeight: number; // 行总体高度 lineHeight =max(glyph.fontBoundingBoxAscent + glyph.fontBoundingBoxDescent, glyph2.....) + space
     contentHeight: number; // contentHeight 行内容高度，contentHeight,=max(glyph.fontBoundingBoxAscent + glyph.fontBoundingBoxDescent, glyph2.....)
     top: number; // top paragraph(spaceAbove, spaceBelow, lineSpacing*PreLineHeight)
-    asc: number; //  =max(glyph.textMetrics.asc) alphabet对齐，需要校准
+    asc: number; //  =max(glyph.textMetrics.ba) alphabet 对齐，需要校准
+    dsc: number; //  =max(glyph.textMetrics.bd) alphabet 对齐，需要校准
     paddingTop: number; // paddingTop 内容到顶部的距离
     paddingBottom: number; // paddingBottom 内容到底部的距离
     marginTop: number; // marginTop 针对段落的spaceAbove
@@ -142,6 +186,9 @@ export interface IDocumentSkeletonLine {
     lineIndex: number; // lineIndex 行号
     bullet?: IDocumentSkeletonBullet; // 无序和有序列表标题
     paragraphStart: boolean; // Paragraph start 默认 false
+
+    isBehindTable: boolean; // 在 DataStream 中，如果段落包含 table，那么段落第一行 isBehindTable 为 true, 并且 tableId 不为空，主要用来计算 st\ed.
+    tableId: string; // tableId 如果段落包含 table，那么 tableId 不为空，主要用来计算 st\ed.
 
     // dtId: string[]; // drawingTBIds 影响行的元素id集合，会切割divide，影响上下
     // bmt: number; // benchmarkTop， drawing的位置是根据paragraph的位置进行相对定位的，段落跨页后，需要一个校准
@@ -157,6 +204,7 @@ export interface IDocumentSkeletonDivide {
     isFull: boolean; // isFull， // 内容是否装满
     st: number; // startIndex
     ed: number; // endIndex
+    breakType?: BreakPointType;
     parent?: IDocumentSkeletonLine;
 }
 
@@ -178,6 +226,7 @@ export interface IDocumentSkeletonGlyph {
     left: number; // left
     count: number; // count, content length，default 1
     content: string; // content
+    raw: string;
     adjustability: IAdjustability; // The adjustability of the glyph.
     isJustifiable: boolean; // Whether this glyph is justifiable for CJK scripts.
     ts?: ITextStyle; // text style
@@ -185,33 +234,39 @@ export interface IDocumentSkeletonGlyph {
     parent?: IDocumentSkeletonDivide;
     url?: string; // image url
     featureId?: string; // support interaction for feature ,eg. hyperLine person
-    objectId?: string; // drawing.objectId
+    drawingId?: string; // drawing.drawingId
 }
 
-export interface IDocumentSkeletonBullet extends IIndentStart {
+export interface IDocumentSkeletonBullet {
     listId: string; // listId
     symbol: string; // symbol 列表的内容
     ts: ITextStyle; // 文字样式
     fontStyle?: IDocumentSkeletonFontStyle; // fontStyle 从ITextStyle转换为canvas font
     startIndexItem: number; // startIndexItem，列表从第几开始
-    bBox: IDocumentSkeletonBoundingBox; // bBox 文字的位置信息
+    // bBox: IDocumentSkeletonBoundingBox; // bBox 文字的位置信息
     nestingLevel?: INestingLevel;
     bulletAlign?: BulletAlignment;
     bulletType?: boolean; // bulletType false unordered, true ordered;
+    paragraphProperties?: IParagraphProperties;
     // bp: number; // bulletPosition 列表离页边的距离
     // ti: number; // textIndent 内容距列表的距离，取Max(textIndent, followWith+)
     // fw: number; // followWidth 内容距离列表的间隔距离
 }
 
 export interface IDocumentSkeletonDrawing {
-    objectId: string;
+    drawingId: string;
     aLeft: number; // 相对于 page 的左方
     aTop: number; // 相对于 page 的上方
     width: number;
     height: number;
     angle: number; // 旋转
     initialState: boolean; // 是否初始化
-    drawingOrigin: IDrawing;
+    drawingOrigin: IDocDrawingBase;
+    columnLeft: number;
+    isPageBreak: boolean;
+    lineTop: number;
+    lineHeight: number;
+    blockAnchorTop: number; // The paragraph top.
 }
 
 export interface IDocumentSkeletonFontStyle {

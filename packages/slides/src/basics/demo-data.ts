@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import {
     BaselineOffset,
     BooleanNumber,
     ColumnSeparatorType,
+    DocumentFlavor,
+    DrawingTypeEnum,
     ObjectRelativeFromH,
     ObjectRelativeFromV,
     PositionedObjectLayoutType,
@@ -31,10 +33,13 @@ export const docsDemoData: IDocumentData = {
     id: 'd',
     drawings: {
         shapeTest1: {
-            objectId: 'shapeTest1',
+            unitId: 'd',
+            subUnitId: 'd',
+            drawingType: DrawingTypeEnum.DRAWING_SHAPE,
+            drawingId: 'shapeTest1',
             title: 'test shape',
             description: 'test shape',
-            objectTransform: {
+            docTransform: {
                 size: {
                     width: 100,
                     height: 400,
@@ -199,6 +204,7 @@ export const docsDemoData: IDocumentData = {
             width: 594.3,
             height: 840.51,
         },
+        documentFlavor: DocumentFlavor.UNSPECIFIED,
         marginTop: 72,
         marginBottom: 72,
         marginRight: 90,

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,33 +14,35 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
-import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BaseFunction } from '../../base-function';
+import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
 
 export class Mod extends BaseFunction {
+    override minParams = 2;
+
+    override maxParams = 2;
+
     override calculate(number: BaseValueObject, divisor: BaseValueObject) {
-        if (number == null || divisor == null) {
-            return ErrorValueObject.create(ErrorType.NA);
+        let _number = number;
+
+        if (_number.isString()) {
+            _number = _number.convertToNumberObjectValue();
         }
 
-        if (number.isString()) {
-            number = number.convertToNumberObjectValue();
+        if (_number.isError()) {
+            return _number;
         }
 
-        if (number.isError()) {
-            return number;
+        let _divisor = divisor;
+
+        if (_divisor.isString()) {
+            _divisor = _divisor.convertToNumberObjectValue();
         }
 
-        if (divisor.isString()) {
-            divisor = divisor.convertToNumberObjectValue();
+        if (_divisor.isError()) {
+            return _divisor;
         }
 
-        if (divisor.isError()) {
-            return divisor;
-        }
-
-        return number.mod(divisor);
+        return _number.mod(_divisor);
     }
 }

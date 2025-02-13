@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle } from '@univerjs/core';
-import type { Ctor } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
 import type { IFunctionNames } from '../basics/function';
+import type { BaseFunction } from '../functions/base-function';
+import type { IUniverEngineFormulaConfig } from './config.schema';
+
+import { Disposable, ICommandService, IConfigService } from '@univerjs/core';
+import { type Ctor, Optional } from '@univerjs/core';
+import { DataSyncPrimaryController } from '@univerjs/rpc';
 import { RegisterFunctionMutation } from '../commands/mutations/register-function.mutation';
 import { SetArrayFormulaDataMutation } from '../commands/mutations/set-array-formula-data.mutation';
 import { RemoveDefinedNameMutation, SetDefinedNameMutation } from '../commands/mutations/set-defined-name.mutation';
@@ -39,9 +41,7 @@ import {
     SetSuperTableMutation,
     SetSuperTableOptionMutation,
 } from '../commands/mutations/set-super-table.mutation';
-import { UnregisterFunctionMutation } from '../commands/mutations/unregister-function.mutation';
 import { functionArray } from '../functions/array/function-map';
-import type { BaseFunction } from '../functions/base-function';
 import { functionCompatibility } from '../functions/compatibility/function-map';
 import { functionCube } from '../functions/cube/function-map';
 import { functionDatabase } from '../functions/database/function-map';
@@ -58,14 +58,14 @@ import { functionText } from '../functions/text/function-map';
 import { functionUniver } from '../functions/univer/function-map';
 import { functionWeb } from '../functions/web/function-map';
 import { IFunctionService } from '../services/function.service';
+import { ENGINE_FORMULA_PLUGIN_CONFIG_KEY } from './config.schema';
 
-@OnLifecycle(LifecycleStages.Ready, FormulaController)
 export class FormulaController extends Disposable {
     constructor(
-        private _function: Array<[Ctor<BaseFunction>, IFunctionNames]> = [],
         @ICommandService private readonly _commandService: ICommandService,
-        @Inject(Injector) private readonly _injector: Injector,
-        @IFunctionService private readonly _functionService: IFunctionService
+        @IFunctionService private readonly _functionService: IFunctionService,
+        @IConfigService private readonly _configService: IConfigService,
+        @Optional(DataSyncPrimaryController) private readonly _dataSyncPrimaryController?: DataSyncPrimaryController
     ) {
         super();
 
@@ -97,11 +97,15 @@ export class FormulaController extends Disposable {
             RemoveSuperTableMutation,
             SetSuperTableOptionMutation,
             RegisterFunctionMutation,
-            UnregisterFunctionMutation,
-        ].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
+        ].forEach((mutation) => {
+            this._commandService.registerCommand(mutation);
+            this._dataSyncPrimaryController?.registerSyncingMutations(mutation);
+        });
     }
 
     private _registerFunctions() {
+        const config = this._configService.getConfig<IUniverEngineFormulaConfig>(ENGINE_FORMULA_PLUGIN_CONFIG_KEY);
+
         const functions: BaseFunction[] = (
             [
                 ...functionArray,
@@ -122,7 +126,7 @@ export class FormulaController extends Disposable {
                 ...functionWeb,
             ] as Array<[Ctor<BaseFunction>, IFunctionNames]>
         )
-            .concat(this._function)
+            .concat(config?.function ?? [])
             .map((registerObject) => {
                 const Func = registerObject[0] as Ctor<BaseFunction>;
                 const name = registerObject[1] as IFunctionNames;

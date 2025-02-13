@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import { NumberValueObject } from '../../../engine/value-object/primitive-object
 import { BaseFunction } from '../../base-function';
 
 export class Year extends BaseFunction {
-    override calculate(serialNumber: BaseValueObject) {
-        if (serialNumber == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 1;
 
+    override maxParams = 1;
+
+    override calculate(serialNumber: BaseValueObject) {
         if (serialNumber.isArray()) {
             return serialNumber.map((serialNumberObject) => this._handleSingleObject(serialNumberObject));
         }

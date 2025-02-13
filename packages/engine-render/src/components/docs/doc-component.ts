@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-import type { Nullable } from '@univerjs/core';
-
-import { RENDER_CLASS_TYPE } from '../../basics/const';
 import type { IDocumentSkeletonGlyph, IDocumentSkeletonLine, IDocumentSkeletonPage } from '../../basics/i-document-skeleton-cached';
-import { PageLayoutType } from '../../basics/i-document-skeleton-cached';
-import type { INodeInfo } from '../../basics/interfaces';
-import type { IBoundRectNoAngle, IViewportBound } from '../../basics/vector2';
+import type { IBoundRectNoAngle, IViewportInfo } from '../../basics/vector2';
 import type { UniverRenderingContext } from '../../context';
-import { RenderComponent } from '../component';
 import type { DOCS_EXTENSION_TYPE } from './doc-extension';
 import type { DocumentSkeleton } from './layout/doc-skeleton';
+import { RENDER_CLASS_TYPE } from '../../basics/const';
+import { PageLayoutType } from '../../basics/i-document-skeleton-cached';
+import { RenderComponent } from '../component';
 
 export interface IPageMarginLayout {
     pageMarginLeft: number;
@@ -36,7 +33,7 @@ export interface IDocumentsConfig extends IPageMarginLayout {
     hasEditor?: boolean;
 }
 
-export class DocComponent extends RenderComponent<
+export abstract class DocComponent extends RenderComponent<
     IDocumentSkeletonGlyph | IDocumentSkeletonLine,
     DOCS_EXTENSION_TYPE,
     IBoundRectNoAngle[]
@@ -85,7 +82,7 @@ export class DocComponent extends RenderComponent<
         }
     }
 
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;
@@ -121,7 +118,7 @@ export class DocComponent extends RenderComponent<
         };
     }
 
-    isSkipByDiffBounds(page: IDocumentSkeletonPage, pageTop: number, pageLeft: number, bounds?: IViewportBound) {
+    isSkipByDiffBounds(page: IDocumentSkeletonPage, pageTop: number, pageLeft: number, bounds?: IViewportInfo) {
         if (bounds === null || bounds === undefined) {
             return false;
         }
@@ -149,19 +146,5 @@ export class DocComponent extends RenderComponent<
         return false;
     }
 
-    scrollBySelection() {}
-
-    syncSelection() {}
-
-    remainActiveSelection() {}
-
-    findNodeByCoord(offsetX: number, offsetY: number): Nullable<INodeInfo> {}
-
-    findCoordByNode(glyph: IDocumentSkeletonGlyph) {}
-
-    protected _getBounding(bounds?: IViewportBound) {}
-
-    protected _draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
-        /* abstract */
-    }
+    protected abstract _draw(ctx: UniverRenderingContext, bounds?: IViewportInfo): void;
 }

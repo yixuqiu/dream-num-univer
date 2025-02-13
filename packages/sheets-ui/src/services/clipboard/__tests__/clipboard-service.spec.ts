@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,28 +14,26 @@
  * limitations under the License.
  */
 
-import type { ICellData, IRange, IStyleData, Nullable, Univer } from '@univerjs/core';
 import { ICommandService, IUniverInstanceService, RANGE_TYPE, Rectangle, RedoCommand, UndoCommand } from '@univerjs/core';
 import {
     AddWorksheetMergeMutation,
     MoveRangeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RemoveWorksheetMergeMutation,
-    SelectionManagerService,
     SetRangeValuesMutation,
     SetSelectionsOperation,
     SetWorksheetColWidthMutation,
     SetWorksheetRowHeightMutation,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ICellData, Injector, IRange, IStyleData, Nullable, Univer } from '@univerjs/core';
 
-import { ISheetClipboardService } from '../clipboard.service';
-import { COPY_TYPE } from '../type';
 import { discreteRangeToRange } from '../../../controllers/utils/range-tools';
+import { ISheetClipboardService, PREDEFINED_HOOK_NAME } from '../clipboard.service';
+import { COPY_TYPE } from '../type';
 import { clipboardTestBed } from './clipboard-test-bed';
-import type { IClipboardItem } from './mock-clipboard';
 import { MockClipboard } from './mock-clipboard';
+import type { IClipboardItem } from './mock-clipboard';
 
 describe('Test clipboard', () => {
     let univer: Univer;
@@ -134,13 +132,7 @@ describe('Test clipboard', () => {
 
     describe('Test paste, the original data is a merged cell of 1 row and 2 columns, the current selection consists only of ordinary cells', () => {
         it('The current selection is a single cell in 1 row and 1 column', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to A1
             const startRow = 0;
@@ -148,7 +140,7 @@ describe('Test clipboard', () => {
             const endRow = 0;
             const endColumn = 0;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -161,15 +153,52 @@ describe('Test clipboard', () => {
             const styles = getStyles(startRow, startColumn, endRow, endColumn);
             const mergedCells = getMergedCells(startRow, startColumn, endRow, endColumn);
             const rowManager = get(IUniverInstanceService).getUniverSheetInstance('test')?.getSheetBySheetId('sheet1')?.getRowManager();
-            const rowHeight = rowManager?.getRowData()?.[0].h;
             const columnManager = get(IUniverInstanceService).getUniverSheetInstance('test')?.getSheetBySheetId('sheet1')?.getColumnManager();
-            const columnWidth = columnManager?.getColumnData()?.[0].w;
-            expect(columnWidth).toBe(73);
-            expect(rowHeight).toBe(81);
+            const columnWidth = columnManager?.getColumnData()?.[0]?.w;
+            expect(columnWidth).toBe(88);
             expect(values && values[0][0]?.v).toBe('row1col2');
             expect(styles && styles[0][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(mergedCells && mergedCells[0]).toStrictEqual({
@@ -180,13 +209,7 @@ describe('Test clipboard', () => {
             });
         });
         it('The current selection is a single cell in 1 row and 2 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to A2:B2
             const startRow = 1;
@@ -194,7 +217,7 @@ describe('Test clipboard', () => {
             const endRow = 1;
             const endColumn = 1;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -208,8 +231,47 @@ describe('Test clipboard', () => {
             const mergedCells = getMergedCells(startRow, startColumn, endRow, endColumn);
             expect(values && values[0][0]?.v).toBe('row1col2');
             expect(styles && styles[0][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(mergedCells && mergedCells[0]).toStrictEqual({
@@ -220,13 +282,7 @@ describe('Test clipboard', () => {
             });
         });
         it('The current selection is a single cell in 1 row and 3 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to A3:C3
             const startRow = 2;
@@ -234,7 +290,7 @@ describe('Test clipboard', () => {
             const endRow = 2;
             const endColumn = 2;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -248,8 +304,47 @@ describe('Test clipboard', () => {
             const mergedCells = getMergedCells(startRow, startColumn, endRow, endColumn);
             expect(values && values[0][0]?.v).toBe('row1col2');
             expect(styles && styles[0][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(values && values[0][2]?.v).toBe(undefined);
@@ -262,13 +357,7 @@ describe('Test clipboard', () => {
             });
         });
         it('The current selection is a single cell in 2 rows and 2 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to A4:B5
             const startRow = 3;
@@ -276,7 +365,7 @@ describe('Test clipboard', () => {
             const endRow = 4;
             const endColumn = 1;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -292,13 +381,91 @@ describe('Test clipboard', () => {
             expect(values && values[1][0]?.v).toBe('row1col2');
 
             expect(styles && styles[0][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(styles && styles[1][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(mergedCells).toStrictEqual([
@@ -317,13 +484,7 @@ describe('Test clipboard', () => {
             ]);
         });
         it('The current selection is a single cell in 4 rows and 4 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to A6:D9
             const startRow = 5;
@@ -331,7 +492,7 @@ describe('Test clipboard', () => {
             const endRow = 8;
             const endColumn = 3;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -348,13 +509,91 @@ describe('Test clipboard', () => {
                 expect(values && values[i][0]?.v).toBe('row1col2');
                 expect(values && values[i][2]?.v).toBe('row1col2');
                 expect(styles && styles[i][0]).toStrictEqual({
-                    bg: { rgb: 'rgb(255,0,0)' },
+                    bg: {
+                        rgb: 'rgb(255,0,0)',
+                    },
+                    bl: 0,
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    ff: 'Arial',
+                    fs: 10,
                     ht: 2,
+                    it: 0,
+                    ol: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
+                    pd: {
+                        b: 2,
+                        l: 2,
+                        r: 2,
+                        t: 0,
+                    },
+                    st: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
+                    tb: 0,
+                    td: 0,
+                    tr: {
+                        a: 0,
+                        v: 0,
+                    },
+                    ul: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
                     vt: 2,
                 });
                 expect(styles && styles[i][2]).toStrictEqual({
-                    bg: { rgb: 'rgb(255,0,0)' },
+                    bg: {
+                        rgb: 'rgb(255,0,0)',
+                    },
+                    bl: 0,
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    ff: 'Arial',
+                    fs: 10,
                     ht: 2,
+                    it: 0,
+                    ol: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
+                    pd: {
+                        b: 2,
+                        l: 2,
+                        r: 2,
+                        t: 0,
+                    },
+                    st: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
+                    tb: 0,
+                    td: 0,
+                    tr: {
+                        a: 0,
+                        v: 0,
+                    },
+                    ul: {
+                        // cl: {
+                        //     rgb: '#000',
+                        // },
+                        s: 0,
+                    },
                     vt: 2,
                 });
             }
@@ -413,13 +652,7 @@ describe('Test clipboard', () => {
 
     describe('Test paste, the original data is a merged cell of 1 row and 2 columns, the current selection contains merged cells and no content', () => {
         it('The current selection is a merged cell of 1 row and 2 columns.', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F1:G2
             const startRow = 0;
@@ -427,7 +660,7 @@ describe('Test clipboard', () => {
             const endRow = 0;
             const endColumn = 6;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -442,8 +675,47 @@ describe('Test clipboard', () => {
 
             expect(values && values[0][0]?.v).toBe('row1col2');
             expect(styles && styles[0][0]).toStrictEqual({
-                bg: { rgb: 'rgb(255,0,0)' },
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
                 ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
                 vt: 2,
             });
             expect(mergedCells && mergedCells[0]).toStrictEqual({
@@ -455,13 +727,7 @@ describe('Test clipboard', () => {
         });
 
         it('The current selection is a merged cell of 1 row and 3 columns.', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F3:H3
             const startRow = 2;
@@ -469,7 +735,7 @@ describe('Test clipboard', () => {
             const endRow = 2;
             const endColumn = 7;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -482,13 +748,7 @@ describe('Test clipboard', () => {
         });
 
         it('The current selection is a merged cell of 1 row and 4 columns.', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F5:I5
             const startRow = 4;
@@ -496,7 +756,7 @@ describe('Test clipboard', () => {
             const endRow = 4;
             const endColumn = 8;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -509,13 +769,7 @@ describe('Test clipboard', () => {
         });
 
         it('The current selection is a merged cell of 2 rows and 2 columns.', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F7:G8
             const startRow = 6;
@@ -523,7 +777,7 @@ describe('Test clipboard', () => {
             const endRow = 7;
             const endColumn = 6;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -536,13 +790,7 @@ describe('Test clipboard', () => {
         });
 
         it('The current selection is a merged cell of 1 row and 2 columns, with 1 ordinary cell', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F10:H10
             const startRow = 9;
@@ -550,7 +798,7 @@ describe('Test clipboard', () => {
             const endRow = 9;
             const endColumn = 7;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -564,7 +812,50 @@ describe('Test clipboard', () => {
             const mergedCells = getMergedCells(startRow, startColumn, endRow, endColumn);
 
             expect(values && values[0][0]?.v).toBe('row1col2');
-            expect(styles && styles[0][0]).toStrictEqual({ bg: { rgb: 'rgb(255,0,0)' }, ht: 2, vt: 2 });
+            expect(styles && styles[0][0]).toStrictEqual({
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
+                ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                vt: 2,
+            });
             expect(mergedCells && mergedCells[0]).toStrictEqual({
                 startRow: 9,
                 startColumn: 5,
@@ -574,13 +865,7 @@ describe('Test clipboard', () => {
         });
 
         it('The current selection is a merged cell of 2 rows and 2 columns, with a merged cell of 2 rows and 1 column', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to F12:H13
             const startRow = 11;
@@ -588,7 +873,7 @@ describe('Test clipboard', () => {
             const endRow = 12;
             const endColumn = 7;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -610,13 +895,7 @@ describe('Test clipboard', () => {
 
     describe('Test paste, the original data is a merged cell of 1 row and 2 columns, the current selection contains merged cells with content and style', () => {
         it('The current selection is a merged cell of 1 row and 3 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to K4:M4
             const startRow = 3;
@@ -624,7 +903,7 @@ describe('Test clipboard', () => {
             const endRow = 3;
             const endColumn = 12;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -636,13 +915,7 @@ describe('Test clipboard', () => {
             expect(res).toBeFalsy();
         });
         it('The current selection is a merged cell of 1 row and 2 columns, with a merged cell of 2 rows and 2 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to K7:M10
             const startRow = 6;
@@ -650,7 +923,7 @@ describe('Test clipboard', () => {
             const endRow = 9;
             const endColumn = 12;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -666,7 +939,50 @@ describe('Test clipboard', () => {
 
             // first merged cells changed
             expect(values && values[0][0]?.v).toBe('row1col2');
-            expect(styles && styles[0][0]).toStrictEqual({ bg: { rgb: 'rgb(255,0,0)' }, ht: 2, vt: 2 });
+            expect(styles && styles[0][0]).toStrictEqual({
+                bg: {
+                    rgb: 'rgb(255,0,0)',
+                },
+                bl: 0,
+                // cl: {
+                //     rgb: '#000',
+                // },
+                ff: 'Arial',
+                fs: 10,
+                ht: 2,
+                it: 0,
+                ol: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                tb: 0,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    // cl: {
+                    //     rgb: '#000',
+                    // },
+                    s: 0,
+                },
+                vt: 2,
+            });
 
             // second merged cells not changed
             expect(values && values[2][1]?.v).toBe('456');
@@ -688,13 +1004,7 @@ describe('Test clipboard', () => {
             ]);
         });
         it('The current selection is a merged cell of 1 row and 3 columns, with a merged cell of 2 rows and 2 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to K12:M15
             const startRow = 11;
@@ -702,7 +1012,7 @@ describe('Test clipboard', () => {
             const endRow = 14;
             const endColumn = 12;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -746,13 +1056,7 @@ describe('Test clipboard', () => {
             ]);
         });
         it('The current selection is a merged cell of 2 rows and 2 columns, with a merged cell of 1 row and 2 columns', async () => {
-            const selectionManager = get(SelectionManagerService);
-
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
+            const selectionManager = get(SheetsSelectionsService);
 
             // set selection to K22:M24
             const startRow = 21;
@@ -760,7 +1064,7 @@ describe('Test clipboard', () => {
             const endRow = 23;
             const endColumn = 12;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -823,15 +1127,9 @@ describe('Test clipboard', () => {
                 copyType: COPY_TYPE.CUT,
             });
 
-            const selectionManager = get(SelectionManagerService);
+            const selectionManager = get(SheetsSelectionsService);
 
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
-
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { ...toRange, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -839,7 +1137,7 @@ describe('Test clipboard', () => {
                 },
             ]);
 
-            (sheetClipboardService as any)._pasteInternal(copyId, 'default-paste');
+            (sheetClipboardService as any)._pasteInternal(copyId, PREDEFINED_HOOK_NAME.DEFAULT_PASTE);
 
             expect(getValues(24, 0, 24, 0)![0][0]).toBe(null);
             expect(getValues(24, 1, 24, 1)![0][0]!.v).toBe('A25');

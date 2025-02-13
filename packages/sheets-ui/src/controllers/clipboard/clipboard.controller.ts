@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 import type {
     ICellData,
+    ICommandInfo,
     IDocumentData,
     IMutationInfo,
     IObjectArrayPrimitiveType,
@@ -26,27 +27,6 @@ import type {
     Workbook,
     Worksheet,
 } from '@univerjs/core';
-import {
-    BooleanNumber,
-    convertBodyToHtml,
-    DEFAULT_WORKSHEET_COLUMN_WIDTH,
-    DEFAULT_WORKSHEET_COLUMN_WIDTH_KEY,
-    DEFAULT_WORKSHEET_ROW_HEIGHT,
-    extractPureTextFromCell,
-    handleStyleToString,
-    ICommandService,
-    IConfigService,
-    IContextService,
-    isFormulaString,
-    IUniverInstanceService,
-    LifecycleStages,
-    LocaleService,
-    ObjectMatrix,
-    OnLifecycle,
-    RxDisposable,
-    UniverInstanceType,
-} from '@univerjs/core';
-import { MessageType } from '@univerjs/design';
 import type {
     IInsertColMutationParams,
     IInsertRowMutationParams,
@@ -54,30 +34,6 @@ import type {
     ISetWorksheetColWidthMutationParams,
     ISetWorksheetRowHeightMutationParams,
 } from '@univerjs/sheets';
-import {
-    InsertColMutation,
-    InsertRowMutation,
-    MAX_CELL_PER_SHEET_KEY,
-    SetRangeValuesMutation,
-    SetRangeValuesUndoMutationFactory,
-    SetWorksheetColWidthMutation,
-    SetWorksheetRowHeightMutation,
-} from '@univerjs/sheets';
-import { IClipboardInterfaceService, IMessageService, textTrim } from '@univerjs/ui';
-import { Inject, Injector, Optional } from '@wendellhu/redi';
-
-import { ITextSelectionRenderManager, ptToPx } from '@univerjs/engine-render';
-import { takeUntil } from 'rxjs';
-import {
-    SheetCopyCommand,
-    SheetCutCommand,
-    SheetPasteBesidesBorderCommand,
-    SheetPasteColWidthCommand,
-    SheetPasteCommand,
-    SheetPasteFormatCommand,
-    SheetPasteValueCommand,
-} from '../../commands/commands/clipboard.command';
-import { ISheetClipboardService, PREDEFINED_HOOK_NAME } from '../../services/clipboard/clipboard.service';
 import type {
     ICellDataWithSpanInfo,
     IClipboardPropertyItem,
@@ -85,8 +41,72 @@ import type {
     ISheetClipboardHook,
     ISheetDiscreteRangeLocation,
 } from '../../services/clipboard/type';
+import type { IScrollStateWithSearchParam } from '../../services/scroll-manager.service';
+
+import type { IUniverSheetsUIConfig } from '../config.schema';
+
+import {
+    BooleanNumber,
+    convertBodyToHtml,
+    DEFAULT_WORKSHEET_COLUMN_WIDTH,
+    DEFAULT_WORKSHEET_COLUMN_WIDTH_KEY,
+    DEFAULT_WORKSHEET_ROW_HEIGHT,
+    DOCS_NORMAL_EDITOR_UNIT_ID_KEY,
+    extractPureTextFromCell,
+    handleStyleToString,
+    ICommandService,
+    IConfigService,
+    IContextService,
+    Inject,
+    Injector,
+    isFormulaString,
+    IUniverInstanceService,
+    LocaleService,
+    ObjectMatrix,
+    RxDisposable,
+    Tools,
+    UniverInstanceType,
+} from '@univerjs/core';
+
+import { MessageType } from '@univerjs/design';
+import { DocSelectionRenderService } from '@univerjs/docs-ui';
+
+import { IRenderManagerService } from '@univerjs/engine-render';
+import {
+    InsertColMutation,
+    InsertRowMutation,
+    MAX_CELL_PER_SHEET_KEY,
+    MoveColsMutation,
+    MoveRangeMutation,
+    MoveRowsMutation,
+    RemoveColMutation,
+    RemoveRowMutation,
+    SetRangeValuesMutation,
+    SetRangeValuesUndoMutationFactory,
+    SetWorksheetColWidthMutation,
+    SetWorksheetRowHeightMutation,
+} from '@univerjs/sheets';
+import { BuiltInUIPart, connectInjector, IMessageService, IUIPartsService } from '@univerjs/ui';
+import { Subject, takeUntil } from 'rxjs';
+import { AddWorksheetMergeCommand } from '../../commands/commands/add-worksheet-merge.command';
+import {
+    SheetCopyCommand,
+    SheetCutCommand,
+    SheetOptionalPasteCommand,
+    SheetPasteBesidesBorderCommand,
+    SheetPasteColWidthCommand,
+    SheetPasteCommand,
+    SheetPasteFormatCommand,
+    SheetPasteShortKeyCommand,
+    SheetPasteValueCommand,
+} from '../../commands/commands/clipboard.command';
+import { SetScrollOperation } from '../../commands/operations/scroll.operation';
+import { ISheetClipboardService, PREDEFINED_HOOK_NAME } from '../../services/clipboard/clipboard.service';
 import { SheetSkeletonManagerService } from '../../services/sheet-skeleton-manager.service';
+import { ClipboardPopupMenu } from '../../views/clipboard/ClipboardPopupMenu';
+import { SHEETS_UI_PLUGIN_CONFIG_KEY } from '../config.schema';
 import { whenSheetEditorFocused } from '../shortcuts/utils';
+import { RemovePasteMenuCommands } from './const';
 import {
     generateBody,
     getClearAndSetMergeMutations,
@@ -100,41 +120,95 @@ import {
  * This controller add basic clipboard logic for basic features such as text color / BISU / row widths to the clipboard
  * service. You can create a similar clipboard controller to add logic for your own features.
  */
-@OnLifecycle(LifecycleStages.Steady, SheetClipboardController)
+
+const shouldRemoveShapeIds = [
+    InsertColMutation.id,
+    InsertRowMutation.id,
+    RemoveColMutation.id,
+    RemoveRowMutation.id,
+    MoveRangeMutation.id,
+    MoveRowsMutation.id,
+    MoveColsMutation.id,
+];
+
 export class SheetClipboardController extends RxDisposable {
+    private _refreshOptionalPaste$ = new Subject();
+    refreshOptionalPaste$ = this._refreshOptionalPaste$.asObservable();
+
     constructor(
         @Inject(Injector) private readonly _injector: Injector,
         @IUniverInstanceService private readonly _currentUniverSheet: IUniverInstanceService,
+        @IRenderManagerService private readonly _renderManagerService: IRenderManagerService,
         @ICommandService private readonly _commandService: ICommandService,
         @IContextService private readonly _contextService: IContextService,
         @IConfigService private readonly _configService: IConfigService,
         @ISheetClipboardService private readonly _sheetClipboardService: ISheetClipboardService,
-        @IClipboardInterfaceService private readonly _clipboardInterfaceService: IClipboardInterfaceService,
         @IMessageService private readonly _messageService: IMessageService,
-        @Inject(SheetSkeletonManagerService) private readonly _sheetSkeletonManagerService: SheetSkeletonManagerService,
         @Inject(LocaleService) private readonly _localService: LocaleService,
-        @Optional(ITextSelectionRenderManager) private readonly _textSelectionRenderManager?: ITextSelectionRenderManager
+        @IUIPartsService protected readonly _uiPartsService: IUIPartsService
     ) {
         super();
-
         this._init();
+        this._initCommandListener();
+        this._initUIComponents();
+        this._pasteWithDoc();
+    }
 
-        this._textSelectionRenderManager?.onPaste$.pipe(takeUntil(this.dispose$)).subscribe((config) => {
-            if (!whenSheetEditorFocused(this._contextService)) {
-                return;
+    refreshOptionalPaste() {
+        this._refreshOptionalPaste$.next(Math.random());
+    }
+
+    private _pasteWithDoc() {
+        const sheetPasteShortKeyFn = (docSelectionRenderService: DocSelectionRenderService) => {
+            docSelectionRenderService.onPaste$.pipe(takeUntil(this.dispose$)).subscribe((config) => {
+                if (!whenSheetEditorFocused(this._contextService)) {
+                    return;
+                }
+
+                // editor's value should not change and avoid triggering input event
+                config!.event.preventDefault();
+
+                const clipboardEvent = config!.event as ClipboardEvent;
+                const htmlContent = clipboardEvent.clipboardData?.getData('text/html');
+                const textContent = clipboardEvent.clipboardData?.getData('text/plain');
+                const files = this._resolveClipboardFiles(clipboardEvent.clipboardData);
+
+                this._commandService.executeCommand(SheetPasteShortKeyCommand.id, { htmlContent, textContent, files });
+            });
+        };
+
+        // docSelectionRenderService would init before clipboardService controller when creating a univer.
+        // But when creating a sheet unit again after the previous sheet unit has been disposed, clipboard controller would init before docSelectionRenderService.
+        // In this case, DocSelectionRenderService isn't ready when clipboardService controller init.
+        // So better listening to the created$ event of the renderManagerService to get the DocSelectionRenderService instance.
+        let docSelectionRenderService = this._renderManagerService.getRenderById(DOCS_NORMAL_EDITOR_UNIT_ID_KEY)?.with(DocSelectionRenderService);
+
+        if (docSelectionRenderService) {
+            sheetPasteShortKeyFn(docSelectionRenderService);
+        }
+        this._renderManagerService.created$.subscribe((renderer) => {
+            if (renderer.unitId === DOCS_NORMAL_EDITOR_UNIT_ID_KEY) {
+                docSelectionRenderService = this._renderManagerService.getRenderById(DOCS_NORMAL_EDITOR_UNIT_ID_KEY)?.with(DocSelectionRenderService);
+                if (docSelectionRenderService) {
+                    sheetPasteShortKeyFn(docSelectionRenderService);
+                }
             }
-
-            // editor's value should not change and avoid triggering input event
-            config!.event.preventDefault();
-
-            const clipboardEvent = config!.event as ClipboardEvent;
-            const htmlContent = clipboardEvent.clipboardData?.getData('text/html');
-            const textContent = clipboardEvent.clipboardData?.getData('text/plain');
-            this._sheetClipboardService.legacyPaste(htmlContent, textContent);
         });
     }
 
-    private _init() {
+    private _resolveClipboardFiles(clipboardData: DataTransfer | null) {
+        if (!clipboardData) {
+            return;
+        }
+
+        const files = Array.from(clipboardData.items)
+            .map((item) => item.kind === 'file' ? item.getAsFile() : undefined)
+            .filter(Boolean) as File[];
+
+        return files.length > 0 ? files : undefined;
+    }
+
+    private _init(): void {
         // register sheet clipboard commands
         [SheetCopyCommand, SheetCutCommand, SheetPasteCommand].forEach((command) =>
             this.disposeWithMe(this._commandService.registerMultipleCommand(command))
@@ -145,6 +219,8 @@ export class SheetClipboardController extends RxDisposable {
             SheetPasteFormatCommand,
             SheetPasteColWidthCommand,
             SheetPasteBesidesBorderCommand,
+            SheetPasteShortKeyCommand,
+            SheetOptionalPasteCommand,
         ].forEach((command) => this.disposeWithMe(this._commandService.registerCommand(command)));
 
         // register basic sheet clipboard hooks
@@ -156,6 +232,7 @@ export class SheetClipboardController extends RxDisposable {
         this.disposeWithMe({ dispose: () => disposables.forEach((d) => d.dispose()) });
     }
 
+    // eslint-disable-next-line max-lines-per-function
     private _initCopyingHooks(): ISheetClipboardHook {
         const self = this;
         let currentSheet: Worksheet | null = null;
@@ -188,37 +265,8 @@ export class SheetClipboardController extends RxDisposable {
                 const mergedCellByRowCol = currentSheet!.getMergedCell(row, col);
 
                 const textStyle = range.getTextStyle();
-                // const color = range.getFontColor();
-                // const backgroundColor = range.getBackground();
 
                 let style = '';
-                // if (color) {
-                //     style += `color: ${color};`;
-                // }
-                // if (backgroundColor) {
-                //     style += `background-color: ${backgroundColor};`;
-                // }
-                // if (textStyle?.bl) {
-                //     style += 'font-weight: bold;';
-                // }
-                // if (textStyle?.fs) {
-                //     style += `font-size: ${textStyle.fs}px;`;
-                // }
-                // if (textStyle?.tb === WrapStrategy.WRAP) {
-                //     style += 'word-wrap: break-word;';
-                // }
-                // if (textStyle?.it) {
-                //     style += 'font-style: italic;';
-                // }
-                // if (textStyle?.ff) {
-                //     style += `font-family: ${textStyle.ff};`;
-                // }
-                // if (textStyle?.st) {
-                //     style += 'text-decoration: line-through;';
-                // }
-                // if (textStyle?.ul) {
-                //     style += 'text-decoration: underline';
-                // }
 
                 if (textStyle) {
                     style = handleStyleToString(textStyle);
@@ -243,7 +291,7 @@ export class SheetClipboardController extends RxDisposable {
                     properties.style = style;
                 }
 
-                return properties;
+                return Object.keys(properties).length ? properties : null;
             },
             onCopyColumn(col: number) {
                 const sheet = currentSheet!;
@@ -279,6 +327,7 @@ export class SheetClipboardController extends RxDisposable {
         };
     }
 
+    // eslint-disable-next-line max-lines-per-function
     private _initPastingHook(): ISheetClipboardHook {
         const self = this;
 
@@ -310,6 +359,7 @@ export class SheetClipboardController extends RxDisposable {
                 return true;
             },
 
+            // eslint-disable-next-line max-lines-per-function
             onPasteRows(pasteTo, rowProperties) {
                 const { range } = pasteTo;
                 const redoMutations: IMutationInfo[] = [];
@@ -317,38 +367,16 @@ export class SheetClipboardController extends RxDisposable {
 
                 // if the range is outside ot the worksheet's boundary, we should add rows
                 const maxRow = currentSheet!.getMaxRows();
-                const addingRowsCount = range.rows[range.rows.length - 1] - maxRow;
+                const rowCount = maxRow - 1;
+                const addingRowsCount = range.rows[range.rows.length - 1] - rowCount;
                 const existingRowsCount = rowProperties.length - addingRowsCount;
 
                 const rowManager = currentSheet!.getRowManager();
                 if (addingRowsCount > 0) {
                     const rowInfo: IObjectArrayPrimitiveType<IRowData> = {};
                     rowProperties.slice(existingRowsCount).forEach((property, index) => {
-                        const { style, height: PropertyHeight } = property || {};
-                        if (style) {
-                            const cssTextArray = style.split(';');
-                            let height = DEFAULT_WORKSHEET_ROW_HEIGHT;
-
-                            cssTextArray.find((css) => {
-                                css = css.toLowerCase();
-                                const key = textTrim(css.substr(0, css.indexOf(':')));
-                                const value = textTrim(css.substr(css.indexOf(':') + 1));
-                                if (key === 'height') {
-                                    if (value.endsWith('pt')) {
-                                        height = ptToPx(Number.parseFloat(value));
-                                    } else {
-                                        height = Number.parseFloat(value);
-                                    }
-                                    return true;
-                                }
-                                return false;
-                            });
-
-                            rowInfo[index] = {
-                                h: height,
-                                hd: BooleanNumber.FALSE,
-                            };
-                        } else if (PropertyHeight) {
+                        const { height: PropertyHeight } = property || {};
+                        if (PropertyHeight) {
                             rowInfo[index] = {
                                 h: Number.parseFloat(PropertyHeight),
                                 hd: BooleanNumber.FALSE,
@@ -356,19 +384,30 @@ export class SheetClipboardController extends RxDisposable {
                         }
                     });
 
+                    const addRowRange = {
+                        startColumn: range.cols[0],
+                        endColumn: range.cols[range.cols.length - 1],
+                        endRow: range.rows[range.rows.length - 1],
+                        startRow: maxRow,
+                    };
+
                     const addRowMutation: IInsertRowMutationParams = {
                         unitId: unitId!,
                         subUnitId: subUnitId!,
-                        range: {
-                            startColumn: range.cols[0],
-                            endColumn: range.cols[range.cols.length - 1],
-                            endRow: range.rows[range.rows.length - 1],
-                            startRow: maxRow },
+                        range: addRowRange,
                         rowInfo,
                     };
                     redoMutations.push({
                         id: InsertRowMutation.id,
                         params: addRowMutation,
+                    });
+                    undoMutations.push({
+                        id: RemoveRowMutation.id,
+                        params: {
+                            unitId,
+                            subUnitId,
+                            range: addRowRange,
+                        },
                     });
                 }
 
@@ -377,28 +416,8 @@ export class SheetClipboardController extends RxDisposable {
                 const rowHeight: IObjectArrayPrimitiveType<number> = {};
                 const originRowHeight: IObjectArrayPrimitiveType<number> = {};
                 rowProperties.slice(0, existingRowsCount).forEach((property, index) => {
-                    const { style, height: propertyHeight } = property;
-                    if (style) {
-                        const cssTextArray = style.split(';');
-                        let height = DEFAULT_WORKSHEET_ROW_HEIGHT;
-
-                        cssTextArray.find((css) => {
-                            css = css.toLowerCase();
-                            const key = textTrim(css.substr(0, css.indexOf(':')));
-                            const value = textTrim(css.substr(css.indexOf(':') + 1));
-                            if (key === 'height') {
-                                if (value.endsWith('pt')) {
-                                    height = ptToPx(Number.parseFloat(value));
-                                } else {
-                                    height = Number.parseFloat(value);
-                                }
-                                return true;
-                            }
-                            return false;
-                        });
-
-                        rowHeight[index + range.rows[0]] = height;
-                    } else if (propertyHeight) {
+                    const { height: propertyHeight } = property;
+                    if (propertyHeight) {
                         const rowConfigBeforePaste = rowManager.getRow(range.rows[0] + index);
                         const willSetHeight = Number.parseFloat(propertyHeight);
                         if (rowConfigBeforePaste) {
@@ -406,6 +425,9 @@ export class SheetClipboardController extends RxDisposable {
                             const nowRowHeight = Math.max(h, ah);
                             if (willSetHeight > nowRowHeight) {
                                 rowHeight[index + range.rows[0]] = willSetHeight;
+                                originRowHeight[index + range.rows[0]] = nowRowHeight;
+                            } else {
+                                rowHeight[index + range.rows[0]] = nowRowHeight;
                                 originRowHeight[index + range.rows[0]] = nowRowHeight;
                             }
                         } else {
@@ -416,26 +438,29 @@ export class SheetClipboardController extends RxDisposable {
                 });
 
                 // apply row properties to the existing rows
-                const setRowPropertyMutation: ISetWorksheetRowHeightMutationParams = {
-                    unitId: unitId!,
-                    subUnitId: subUnitId!,
-                    ranges: [{ startRow: range.rows[0], endRow: Math.min(range.rows[range.rows.length - 1], maxRow),
-                               startColumn: range.cols[0], endColumn: range.cols[range.cols.length - 1],
-                    }],
-                    rowHeight,
-                };
-                redoMutations.push({
-                    id: SetWorksheetRowHeightMutation.id,
-                    params: setRowPropertyMutation,
-                });
+                if (Object.keys(rowHeight).length) {
+                    const setRowPropertyMutation: ISetWorksheetRowHeightMutationParams = {
+                        unitId: unitId!,
+                        subUnitId: subUnitId!,
+                        ranges: [{
+                            startRow: range.rows[0], endRow: Math.min(range.rows[range.rows.length - 1], maxRow),
+                            startColumn: range.cols[0], endColumn: range.cols[range.cols.length - 1],
+                        }],
+                        rowHeight,
+                    };
+                    redoMutations.push({
+                        id: SetWorksheetRowHeightMutation.id,
+                        params: setRowPropertyMutation,
+                    });
 
-                undoMutations.push({
-                    id: SetWorksheetRowHeightMutation.id,
-                    params: {
-                        ...setRowPropertyMutation,
-                        rowHeight: 20,
-                    },
-                });
+                    undoMutations.push({
+                        id: SetWorksheetRowHeightMutation.id,
+                        params: {
+                            ...setRowPropertyMutation,
+                            rowHeight: originRowHeight,
+                        },
+                    });
+                }
 
                 return {
                     redos: redoMutations,
@@ -443,6 +468,7 @@ export class SheetClipboardController extends RxDisposable {
                 };
             },
 
+            // eslint-disable-next-line max-lines-per-function
             onPasteColumns(pasteTo, colProperties, pasteType) {
                 const { range } = pasteTo;
                 const redoMutations: IMutationInfo[] = [];
@@ -450,23 +476,27 @@ export class SheetClipboardController extends RxDisposable {
 
                 // if the range is outside ot the worksheet's boundary, we should add rows
                 const maxColumn = currentSheet!.getMaxColumns();
-                const addingColsCount = range.cols[range.cols.length - 1] - maxColumn;
+                const colCount = maxColumn - 1;
+                const addingColsCount = range.cols[range.cols.length - 1] - colCount;
                 const existingColsCount = colProperties.length - addingColsCount;
 
                 const defaultColumnWidth = self._configService.getConfig<number>(DEFAULT_WORKSHEET_COLUMN_WIDTH_KEY) ?? DEFAULT_WORKSHEET_COLUMN_WIDTH;
+                const pasteToCols = range.cols;
+                const startColumn = pasteToCols[0];
 
                 if (addingColsCount > 0) {
+                    const addColRange = {
+                        startRow: range.rows[0],
+                        endRow: range.rows[range.rows.length - 1],
+                        endColumn: range.cols[range.cols.length - 1],
+                        startColumn: maxColumn,
+                    };
                     const addColMutation: IInsertColMutationParams = {
                         unitId: unitId!,
                         subUnitId: subUnitId!,
-                        range: {
-                            startRow: range.rows[0],
-                            endRow: range.rows[range.rows.length - 1],
-                            endColumn: range.cols[range.cols.length - 1],
-                            startColumn: maxColumn,
-                        },
-                        colInfo: colProperties.slice(existingColsCount).map((property) => ({
-                            w: property.width ? +property.width : defaultColumnWidth,
+                        range: addColRange,
+                        colInfo: colProperties.slice(existingColsCount).map((property, index) => ({
+                            w: property.width ? Math.max(+property.width, currentSheet!.getColumnWidth(pasteToCols[index])) : defaultColumnWidth,
                             hd: BooleanNumber.FALSE,
                         })),
                     };
@@ -474,9 +504,17 @@ export class SheetClipboardController extends RxDisposable {
                         id: InsertColMutation.id,
                         params: addColMutation,
                     });
+                    undoMutations.push({
+                        id: RemoveColMutation.id,
+                        params: {
+                            unitId,
+                            subUnitId,
+                            range: addColRange,
+                        },
+                    });
                 }
-                // apply col properties to the existing rows
-                const setColPropertyMutation: ISetWorksheetColWidthMutationParams = {
+
+                const targetSetColPropertyParams = {
                     unitId: unitId!,
                     subUnitId: subUnitId!,
                     ranges: [{
@@ -484,21 +522,46 @@ export class SheetClipboardController extends RxDisposable {
                         endRow: range.rows[range.rows.length - 1],
 
                         startColumn: range.cols[0],
-                        endColumn: Math.min(range.cols[range.cols.length - 1], maxColumn) }],
-                    colWidth: colProperties
-                        .slice(0, existingColsCount)
-                        .map((property) => (property.width ? +property.width : defaultColumnWidth)),
+                        endColumn: Math.min(range.cols[range.cols.length - 1], maxColumn),
+                    }],
                 };
-                redoMutations.push({
-                    id: SetWorksheetColWidthMutation.id,
-                    params: setColPropertyMutation,
-                });
 
-                // TODO: add undo mutations but we cannot do it now because underlying mechanism is not ready
+                // apply col properties to the existing rows
+                if (colProperties.length > 0) {
+                    const setColPropertyMutation: ISetWorksheetColWidthMutationParams = {
+                        ...targetSetColPropertyParams,
+                        colWidth: colProperties
+                            .slice(0, existingColsCount)
+                            .reduce((p, c, index) => {
+                                p[index + startColumn] = c.width ? Math.max(+c.width, currentSheet!.getColumnWidth(pasteToCols[index]) ?? defaultColumnWidth) : defaultColumnWidth;
+                                return p;
+                            }, {} as IObjectArrayPrimitiveType<number>),
+                    };
+
+                    const undoSetColPropertyParams: ISetWorksheetColWidthMutationParams = {
+                        ...targetSetColPropertyParams,
+                        colWidth: colProperties
+                            .slice(0, existingColsCount)
+                            .reduce((p, c, index) => {
+                                p[index + startColumn] = currentSheet!.getColumnWidth(pasteToCols[index]) ?? defaultColumnWidth;
+                                return p;
+                            }, {} as IObjectArrayPrimitiveType<Nullable<number>>),
+                    };
+
+                    redoMutations.push({
+                        id: SetWorksheetColWidthMutation.id,
+                        params: setColPropertyMutation,
+                    });
+
+                    undoMutations.push({
+                        id: SetWorksheetColWidthMutation.id,
+                        params: undoSetColPropertyParams,
+                    });
+                }
 
                 return {
                     redos: redoMutations,
-                    undos: [] || undoMutations,
+                    undos: undoMutations,
                 };
             },
 
@@ -522,10 +585,11 @@ export class SheetClipboardController extends RxDisposable {
     }
 
     private _generateDocumentDataModelSnapshot(snapshot: Partial<IDocumentData>) {
-        const currentSkeleton = this._sheetSkeletonManagerService.getCurrent();
+        const currentSkeleton = this._renderManagerService.withCurrentTypeOfUnit(UniverInstanceType.UNIVER_SHEET, SheetSkeletonManagerService)?.getCurrentParam();
         if (currentSkeleton == null) {
             return null;
         }
+
         const { skeleton } = currentSkeleton;
         const documentModel = skeleton.getBlankCellDocumentModel()?.documentModel;
         const p = documentModel?.getSnapshot();
@@ -537,7 +601,7 @@ export class SheetClipboardController extends RxDisposable {
     private _onPastePlainText(pasteTo: ISheetDiscreteRangeLocation, text: string, payload: ICopyPastePayload) {
         const { range, unitId, subUnitId } = pasteTo;
         let cellValue: IObjectMatrixPrimitiveType<ICellData>;
-        if (/\r|\n/.test(text)) {
+        if (/\r|\n/.test(text) || Tools.isLegalUrl(text)) {
             const body = generateBody(text);
             const p = this._generateDocumentDataModelSnapshot({ body });
             cellValue = {
@@ -598,16 +662,13 @@ export class SheetClipboardController extends RxDisposable {
             redos: IMutationInfo[];
             undos: IMutationInfo[];
         } {
-        const accessor = {
-            get: this._injector.get.bind(this._injector),
-        };
-        return getDefaultOnPasteCellMutations(pasteFrom, pasteTo, data, payload, accessor);
+        return this._injector.invoke((accessor) => {
+            return getDefaultOnPasteCellMutations(pasteFrom, pasteTo, data, payload, accessor);
+        });
     }
 
+    // eslint-disable-next-line max-lines-per-function
     private _initSpecialPasteHooks() {
-        const accessor = {
-            get: this._injector.get.bind(this._injector),
-        };
         const self = this;
 
         const specialPasteValueHook: ISheetClipboardHook = {
@@ -616,7 +677,9 @@ export class SheetClipboardController extends RxDisposable {
                 label: 'specialPaste.value',
             },
             onPasteCells: (pasteFrom, pasteTo, data) => {
-                return getSetCellValueMutations(pasteTo, pasteFrom, data, accessor);
+                return this._injector.invoke((accessor) => {
+                    return getSetCellValueMutations(pasteTo, pasteFrom, data, accessor);
+                });
             },
         };
         const specialPasteFormatHook: ISheetClipboardHook = {
@@ -624,29 +687,35 @@ export class SheetClipboardController extends RxDisposable {
             specialPasteInfo: {
                 label: 'specialPaste.format',
             },
-            onPasteCells(pasteFrom, pasteTo, matrix) {
+            onPasteCells: (pasteFrom, pasteTo, matrix) => {
                 const redoMutationsInfo: IMutationInfo[] = [];
                 const undoMutationsInfo: IMutationInfo[] = [];
 
                 // clear cell style
-                const { undos: styleUndos, redos: styleRedos } = getClearCellStyleMutations(pasteTo, matrix, accessor);
+                const { undos: styleUndos, redos: styleRedos } = this._injector.invoke((accessor) => {
+                    return getClearCellStyleMutations(pasteTo, matrix, accessor);
+                });
                 redoMutationsInfo.push(...styleRedos);
                 undoMutationsInfo.push(...styleUndos);
 
                 // clear and set merge
-                const { undos: mergeUndos, redos: mergeRedos } = getClearAndSetMergeMutations(
-                    pasteTo,
-                    matrix,
-                    accessor
-                );
+                const { undos: mergeUndos, redos: mergeRedos } = this._injector.invoke((accessor) => {
+                    return getClearAndSetMergeMutations(
+                        pasteTo,
+                        matrix,
+                        accessor
+                    );
+                });
                 redoMutationsInfo.push(...mergeRedos);
                 undoMutationsInfo.push(...mergeUndos);
 
-                const { undos: setStyleUndos, redos: setStyleRedos } = getSetCellStyleMutations(
-                    pasteTo,
-                    matrix,
-                    accessor
-                );
+                const { undos: setStyleUndos, redos: setStyleRedos } = this._injector.invoke((accessor) => {
+                    return getSetCellStyleMutations(
+                        pasteTo,
+                        matrix,
+                        accessor
+                    );
+                });
 
                 redoMutationsInfo.push(...setStyleRedos);
                 undoMutationsInfo.push(...setStyleUndos);
@@ -672,11 +741,19 @@ export class SheetClipboardController extends RxDisposable {
             onPasteColumns(pasteTo, colProperties, payload) {
                 const workbook = self._currentUniverSheet.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 const unitId = workbook.getUnitId();
-                const subUnitId = workbook.getActiveSheet().getSheetId();
+                const subUnitId = workbook.getActiveSheet()?.getSheetId();
+
+                if (!unitId || !subUnitId) {
+                    throw new Error('Cannot find unitId or subUnitId');
+                }
+
                 const redoMutations: IMutationInfo[] = [];
                 const undoMutations: IMutationInfo[] = [];
                 const currentSheet = self._getWorksheet(unitId, subUnitId);
+
                 const { range } = pasteTo;
+                const pasteToCols = range.cols;
+                const startColumn = pasteToCols[0];
                 // if the range is outside ot the worksheet's boundary, we should add rows
                 const maxColumn = currentSheet!.getMaxColumns();
                 const addingColsCount = range.cols[range.cols.length - 1] - maxColumn;
@@ -694,23 +771,42 @@ export class SheetClipboardController extends RxDisposable {
                     }],
                     colWidth: colProperties
                         .slice(0, existingColsCount)
-                        .map((property) => (property.width ? +property.width : defaultColumnWidth)),
+                        .reduce((p, c, index) => {
+                            p[index + startColumn] = c.width ? Math.max(+c.width, currentSheet!.getColumnWidth(pasteToCols[index]) ?? defaultColumnWidth) : defaultColumnWidth;
+                            return p;
+                        }, {} as IObjectArrayPrimitiveType<number>),
                 };
-                redoMutations.push({
-                    id: SetWorksheetColWidthMutation.id,
-                    params: setColPropertyMutation,
-                });
+
+                const undoSetColPropertyMutation: ISetWorksheetColWidthMutationParams = {
+                    unitId: unitId!,
+                    subUnitId: subUnitId!,
+                    ranges: [{
+                        startRow: range.rows[0],
+                        endRow: Math.min(range.cols[range.cols.length - 1], maxColumn),
+                        startColumn: range.cols[0],
+                        endColumn: range.cols[range.cols.length - 1],
+                    }],
+                    colWidth: colProperties
+                        .slice(0, existingColsCount)
+                        .reduce((p, c, index) => {
+                            p[index + startColumn] = currentSheet!.getColumnWidth(pasteToCols[index]) ?? defaultColumnWidth;
+                            return p;
+                        }, {} as IObjectArrayPrimitiveType<Nullable<number>>),
+                };
 
                 redoMutations.push({
                     id: SetWorksheetColWidthMutation.id,
                     params: setColPropertyMutation,
                 });
 
-                // TODO: add undo mutations but we cannot do it now because underlying mechanism is not ready
+                undoMutations.push({
+                    id: SetWorksheetColWidthMutation.id,
+                    params: undoSetColPropertyMutation,
+                });
 
                 return {
                     redos: redoMutations,
-                    undos: [] || undoMutations,
+                    undos: undoMutations,
                 };
             },
         };
@@ -720,7 +816,7 @@ export class SheetClipboardController extends RxDisposable {
             specialPasteInfo: {
                 label: 'specialPaste.besidesBorder',
             },
-            onPasteCells(pasteFrom, pasteTo, matrix, payload) {
+            onPasteCells: (pasteFrom, pasteTo, matrix, payload) => {
                 const workbook = self._currentUniverSheet.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
                 const redoMutationsInfo: IMutationInfo[] = [];
                 const undoMutationsInfo: IMutationInfo[] = [];
@@ -731,10 +827,14 @@ export class SheetClipboardController extends RxDisposable {
                 matrix.forValue((row, col, value) => {
                     const style = value.s;
                     if (typeof style === 'object') {
-                        valueMatrix.setValue(range.rows[row], range.cols[col], {
-                            s: { ...style, bd: undefined },
-                            v: value.v,
-                        });
+                        const newValue = Tools.deepClone(value);
+                        if (newValue.s) {
+                            newValue.s = {
+                                ...style,
+                                bd: null,
+                            };
+                        }
+                        valueMatrix.setValue(range.rows[row], range.cols[col], newValue);
                     }
                 });
 
@@ -751,8 +851,8 @@ export class SheetClipboardController extends RxDisposable {
                 });
 
                 // undo
-                const undoSetValuesMutation: ISetRangeValuesMutationParams = SetRangeValuesUndoMutationFactory(
-                    accessor,
+                const undoSetValuesMutation: ISetRangeValuesMutationParams = this._injector.invoke(
+                    SetRangeValuesUndoMutationFactory,
                     setValuesMutation
                 );
 
@@ -761,7 +861,9 @@ export class SheetClipboardController extends RxDisposable {
                     params: undoSetValuesMutation,
                 });
 
-                const { undos, redos } = getClearAndSetMergeMutations(pasteTo, matrix, accessor);
+                const { undos, redos } = this._injector.invoke((accessor) => {
+                    return getClearAndSetMergeMutations(pasteTo, matrix, accessor);
+                });
                 undoMutationsInfo.push(...undos);
                 redoMutationsInfo.push(...redos);
 
@@ -786,19 +888,57 @@ export class SheetClipboardController extends RxDisposable {
 
         return worksheet;
     }
-}
 
-// Generate cellValue from range and set null
-function generateNullCellValue(range: IRange[]): IObjectMatrixPrimitiveType<Nullable<ICellData>> {
-    const cellValue = new ObjectMatrix<Nullable<ICellData>>();
-    range.forEach((range: IRange) => {
-        const { startRow, startColumn, endRow, endColumn } = range;
-        for (let i = startRow; i <= endRow; i++) {
-            for (let j = startColumn; j <= endColumn; j++) {
-                cellValue.setValue(i, j, null);
-            }
+    private _initCommandListener() {
+        this.disposeWithMe(
+            this._commandService.onCommandExecuted((command: ICommandInfo) => {
+                if (command.id === AddWorksheetMergeCommand.id) {
+                    this._sheetClipboardService.removeMarkSelection();
+                } else if (shouldRemoveShapeIds.includes(command.id)) {
+                    this._sheetClipboardService.removeMarkSelection();
+                }
+            })
+        );
+
+        const sheetsUIConfig = this._configService.getConfig<IUniverSheetsUIConfig>(SHEETS_UI_PLUGIN_CONFIG_KEY);
+        if (sheetsUIConfig?.clipboardConfig?.hidePasteOptions) {
+            return;
         }
-    });
 
-    return cellValue.getData();
+        this.disposeWithMe(
+            this._commandService.onCommandExecuted((command: ICommandInfo) => {
+                if (RemovePasteMenuCommands.includes(command.id)) {
+                    this._sheetClipboardService.disposePasteOptionsCache();
+                }
+            })
+        );
+
+        this.disposeWithMe(
+            this._commandService.onCommandExecuted((command: ICommandInfo) => {
+                if (command.id === SetScrollOperation.id) {
+                    if (!this._sheetClipboardService.getPasteMenuVisible()) {
+                        return;
+                    }
+                    const params = command.params as IScrollStateWithSearchParam;
+                    const scrollUnitId = params.unitId;
+                    const pasteOptionsCache = this._sheetClipboardService.getPasteOptionsCache();
+                    const menuUnitId = pasteOptionsCache?.target.unitId;
+                    if (scrollUnitId === menuUnitId) {
+                        this._refreshOptionalPaste$.next(Math.random());
+                    }
+                }
+            })
+        );
+    }
+
+    private _initUIComponents() {
+        const sheetsUIConfig = this._configService.getConfig<IUniverSheetsUIConfig>(SHEETS_UI_PLUGIN_CONFIG_KEY);
+        if (sheetsUIConfig?.clipboardConfig?.hidePasteOptions) {
+            return;
+        }
+
+        this.disposeWithMe(
+            this._uiPartsService.registerComponent(BuiltInUIPart.CONTENT, () => connectInjector(ClipboardPopupMenu, this._injector))
+        );
+    }
 }

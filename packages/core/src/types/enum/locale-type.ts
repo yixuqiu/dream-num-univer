@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
+/**
+ * Built-in locales.
+ */
 export enum LocaleType {
     EN_US = 'enUS',
+    FR_FR = 'frFR',
     ZH_CN = 'zhCN',
+    RU_RU = 'ruRU',
+    ZH_TW = 'zhTW',
+    VI_VN = 'viVN',
+    FA_IR = 'faIR',
 }
-
-export type LocaleTypes = `${LocaleType}`;

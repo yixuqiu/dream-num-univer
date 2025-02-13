@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
  * limitations under the License.
  */
 
-import type { IDrawing, Nullable } from '@univerjs/core';
-import { PositionedObjectLayoutType, WrapTextType } from '@univerjs/core';
+import type { IDistFromText, Nullable } from '@univerjs/core';
+import type { IParagraphConfig } from '../../../../basics';
 
 import type {
     IDocumentSkeletonDivide,
     IDocumentSkeletonDrawing,
     IDocumentSkeletonDrawingAnchor,
     IDocumentSkeletonLine,
+    IDocumentSkeletonPage,
+    IDocumentSkeletonTable,
     LineType,
 } from '../../../../basics/i-document-skeleton-cached';
+import type { IFloatObject } from '../tools';
+import { PositionedObjectLayoutType, TableTextWrapType, WrapTextType } from '@univerjs/core';
 import { Path2 } from '../../../../basics/path2';
 import { Transform } from '../../../../basics/transform';
 import { Vector2 } from '../../../../basics/vector2';
@@ -64,9 +68,10 @@ export function createSkeletonLine(
     columnWidth: number,
     lineIndex: number = 0,
     isParagraphStart: boolean = false,
-    pageSkeDrawings: Map<string, IDocumentSkeletonDrawing> = new Map(),
-    headersDrawings?: Map<string, IDocumentSkeletonDrawing>,
-    footersDrawings?: Map<string, IDocumentSkeletonDrawing>
+    paragraphConfig: IParagraphConfig,
+    page: IDocumentSkeletonPage,
+    headerPage: Nullable<IDocumentSkeletonPage>,
+    footerPage: Nullable<IDocumentSkeletonPage>
 ): IDocumentSkeletonLine {
     const {
         lineHeight = 15.6,
@@ -79,6 +84,11 @@ export function createSkeletonLine(
         marginTop = 0,
         spaceBelowApply = 0,
     } = lineBoundingBox;
+    const { skeTablesInParagraph } = paragraphConfig;
+    const pageSkeDrawings = page.skeDrawings ?? new Map();
+    const pageSkeTables = page.skeTables ?? new Map();
+    const headersDrawings = headerPage?.skeDrawings;
+    const footersDrawings = footerPage?.skeDrawings;
 
     const lineSke = _getLineSke(lineType, paragraphIndex);
 
@@ -92,7 +102,15 @@ export function createSkeletonLine(
     lineSke.marginTop = marginTop; // marginTop is initialized when it is created, and marginBottom is not calculated when it is created, it will be determined according to the situation of the next paragraph
     lineSke.spaceBelowApply = spaceBelowApply;
 
+    if (isParagraphStart && Array.isArray(skeTablesInParagraph) && skeTablesInParagraph.length > 0) {
+        const tableId = skeTablesInParagraph[skeTablesInParagraph.length - 1].tableId;
+
+        lineSke.isBehindTable = true;
+        lineSke.tableId = tableId;
+    }
+
     const affectSkeDrawings = new Map(Array.from(pageSkeDrawings).filter(([_, drawing]) => drawing.drawingOrigin.layoutType !== PositionedObjectLayoutType.INLINE));
+    const wrapTypeTables = new Map(Array.from(pageSkeTables).filter(([_, table]) => table.tableSource.textWrap === TableTextWrapType.WRAP));
 
     lineSke.divides = _calculateDividesByDrawings(
         lineHeight,
@@ -100,9 +118,13 @@ export function createSkeletonLine(
         columnWidth,
         paddingLeft,
         paddingRight,
+        page,
+        headerPage,
+        footerPage,
         affectSkeDrawings,
         headersDrawings,
-        footersDrawings
+        footersDrawings,
+        wrapTypeTables
     );
 
     for (const divide of lineSke.divides) {
@@ -115,24 +137,35 @@ export function createSkeletonLine(
 export function calculateLineTopByDrawings(
     lineHeight: number = 15.6,
     lineTop: number = 0,
-    pageSkeDrawings?: Map<string, IDocumentSkeletonDrawing>,
-    headersDrawings?: Map<string, IDocumentSkeletonDrawing>,
-    footersDrawings?: Map<string, IDocumentSkeletonDrawing>
+    page: IDocumentSkeletonPage,
+    headerPage: Nullable<IDocumentSkeletonPage>,
+    footerPage: Nullable<IDocumentSkeletonPage>
 ) {
     let maxTop = lineTop;
-    headersDrawings?.forEach((drawing) => {
-        const top = _getLineTopWidthWrapTopBottom(drawing, lineHeight, lineTop);
-        if (top) {
-            maxTop = Math.max(maxTop, top);
-        }
-    });
+    const pageSkeDrawings = page.skeDrawings;
+    const skeNonWrapTables = new Map(Array.from(page.skeTables).filter(([_, table]) => table.tableSource.textWrap === TableTextWrapType.NONE));
+    const headersDrawings = headerPage?.skeDrawings;
+    const footersDrawings = footerPage?.skeDrawings;
 
-    footersDrawings?.forEach((drawing) => {
-        const top = _getLineTopWidthWrapTopBottom(drawing, lineHeight, lineTop);
-        if (top) {
-            maxTop = Math.max(maxTop, top);
-        }
-    });
+    if (headerPage && headersDrawings) {
+        headersDrawings.forEach((drawing) => {
+            const transformedDrawing = translateHeaderFooterDrawingPosition(drawing, headerPage, page, true);
+            const top = _getLineTopWidthWrapTopBottom(transformedDrawing, lineHeight, lineTop);
+            if (top) {
+                maxTop = Math.max(maxTop, top);
+            }
+        });
+    }
+
+    if (footerPage && footersDrawings) {
+        footersDrawings.forEach((drawing) => {
+            const transformedDrawing = translateHeaderFooterDrawingPosition(drawing, footerPage, page, false);
+            const top = _getLineTopWidthWrapTopBottom(transformedDrawing, lineHeight, lineTop);
+            if (top) {
+                maxTop = Math.max(maxTop, top);
+            }
+        });
+    }
 
     pageSkeDrawings?.forEach((drawing) => {
         const top = _getLineTopWidthWrapTopBottom(drawing, lineHeight, lineTop);
@@ -141,7 +174,25 @@ export function calculateLineTopByDrawings(
         }
     });
 
+    skeNonWrapTables?.forEach((table) => {
+        const top = _getLineTopWidthWrapNone(table, lineHeight, lineTop);
+        if (top) {
+            maxTop = Math.max(maxTop, top);
+        }
+    });
+
     return maxTop;
+}
+
+function _getLineTopWidthWrapNone(table: IDocumentSkeletonTable, lineHeight: number, lineTop: number) {
+    const { top, height } = table;
+
+    // No need to consider the dist.
+    if (top + height < lineTop || top > lineHeight + lineTop) {
+        return;
+    }
+
+    return top + height;
 }
 
 function _getLineTopWidthWrapTopBottom(drawing: IDocumentSkeletonDrawing, lineHeight: number, lineTop: number) {
@@ -160,16 +211,16 @@ function _getLineTopWidthWrapTopBottom(drawing: IDocumentSkeletonDrawing, lineHe
 
     if (angle === 0) {
         const newAtop = aTop - distT;
-        const newHeight = height + distB;
+        const newHeight = distT + height + distB;
 
         if (newAtop + newHeight < lineTop || newAtop > lineHeight + lineTop) {
             return;
         }
 
-        return newAtop + height;
+        return newAtop + newHeight;
     }
     // 旋转的情况，要考虑行首位与drawing旋转后得到的最大区域
-    let { top: sTop = 0, height: sHeight = 0 } = __getBoundingBox(angle, aLeft, width, aTop, height);
+    let { top: sTop = 0, height: sHeight = 0 } = getBoundingBox(angle, aLeft, width, aTop, height);
 
     sTop -= distT;
     sHeight += distB;
@@ -186,9 +237,13 @@ function _calculateDividesByDrawings(
     columnWidth: number,
     paddingLeft: number,
     paddingRight: number,
-    paragraphAffectSkeDrawings?: Map<string, IDocumentSkeletonDrawing>,
+    page: IDocumentSkeletonPage,
+    headerPage: Nullable<IDocumentSkeletonPage>,
+    footerPage: Nullable<IDocumentSkeletonPage>,
+    paragraphNonInlineSkeDrawings?: Map<string, IDocumentSkeletonDrawing>,
     headersDrawings?: Map<string, IDocumentSkeletonDrawing>,
-    footersDrawings?: Map<string, IDocumentSkeletonDrawing>
+    footersDrawings?: Map<string, IDocumentSkeletonDrawing>,
+    wrapTypeTables?: Map<string, IDocumentSkeletonTable>
 ): IDocumentSkeletonDivide[] {
     const drawingsMix: IDrawingsSplit[] = []; // 图文混排的情况
     // 插入indent占位
@@ -202,49 +257,80 @@ function _calculateDividesByDrawings(
             width: paddingRight,
         }
     );
-    headersDrawings?.forEach((drawing, drawingId) => {
+
+    if (headerPage && headersDrawings) {
+        headersDrawings.forEach((drawing) => {
+            const transformedDrawing = translateHeaderFooterDrawingPosition(drawing, headerPage, page, true);
+            const split = _calculateSplit(transformedDrawing, lineHeight, lineTop, columnWidth);
+
+            if (split) {
+                drawingsMix.push(split);
+            }
+        });
+    }
+
+    if (footerPage && footersDrawings) {
+        footersDrawings.forEach((drawing) => {
+            const transformedDrawing = translateHeaderFooterDrawingPosition(drawing, footerPage, page, false);
+            const split = _calculateSplit(transformedDrawing, lineHeight, lineTop, columnWidth);
+
+            if (split) {
+                drawingsMix.push(split);
+            }
+        });
+    }
+
+    paragraphNonInlineSkeDrawings?.forEach((drawing) => {
         const split = _calculateSplit(drawing, lineHeight, lineTop, columnWidth);
+
         if (split) {
             drawingsMix.push(split);
         }
     });
 
-    footersDrawings?.forEach((drawing, drawingId) => {
-        const split = _calculateSplit(drawing, lineHeight, lineTop, columnWidth);
-        if (split) {
-            drawingsMix.push(split);
-        }
-    });
-    paragraphAffectSkeDrawings?.forEach((drawing, drawingId) => {
-        const split = _calculateSplit(drawing, lineHeight, lineTop, columnWidth);
-        if (split) {
-            drawingsMix.push(split);
-        }
-    });
+    if (wrapTypeTables && wrapTypeTables.size > 0) {
+        wrapTypeTables.forEach((table) => {
+            const { left, top, width, height, tableSource } = table;
+            const { dist } = tableSource;
+            const split = __getSplitWidthNoAngle(top, height, left, width, lineTop, lineHeight, columnWidth, dist);
+
+            if (split) {
+                drawingsMix.push(split);
+            }
+        });
+    }
 
     return _calculateDivideByDrawings(columnWidth, drawingsMix);
 }
 
-export function setDivideFullState(divide: IDocumentSkeletonDivide, state: boolean) {
-    divide.isFull = state;
+export function updateDivideInfo(divide: IDocumentSkeletonDivide, states: Partial<IDocumentSkeletonDivide>) {
+    Object.assign(divide, states);
 }
 
 export function setLineMarginBottom(line: IDocumentSkeletonLine, marginBottom: number) {
     line.marginBottom = marginBottom;
 }
 
-// 获得文字内容后的行信息计算
-export function updateDivideInLine(line: IDocumentSkeletonLine) {}
-
 export function collisionDetection(
-    drawing: IDocumentSkeletonDrawing,
+    floatObject: IFloatObject,
     lineHeight: number,
     lineTop: number,
+    columnLeft: number,
     columnWidth: number
 ) {
-    const { aTop, height, aLeft, width, angle = 0, drawingOrigin } = drawing;
-    // TODO: handle angle is not 0.
-    return !!__getSplitWidthNoAngle(aTop, height, aLeft, width, lineTop, lineHeight, columnWidth, drawingOrigin);
+    const { top: oTop, height: oHeight, left: oLeft, width: oWidth, angle = 0 } = floatObject;
+
+    const { top = 0, left = 0, width = 0, height = 0 } = getBoundingBox(angle, oLeft, oWidth, oTop, oHeight);
+
+    if (top + height < lineTop || top > lineHeight + lineTop) {
+        return false;
+    }
+
+    if (left + width < columnLeft || left > columnLeft + columnWidth) {
+        return false;
+    }
+
+    return true;
 }
 
 function _calculateSplit(
@@ -287,13 +373,16 @@ function _calculateSplit(
         return __getCrossPoint(points, lineTop, lineHeight, columnWidth);
     }
 
+    const { distL = 0, distT = 0, distB = 0, distR = 0, wrapText } = drawingOrigin;
+    const dist = { distL, distT, distB, distR };
+
     if (angle === 0) {
         // 无旋转的情况， wrapSquare | wrapThrough | wrapTight
-        return __getSplitWidthNoAngle(aTop, height, aLeft, width, lineTop, lineHeight, columnWidth, drawingOrigin);
+        return __getSplitWidthNoAngle(aTop, height, aLeft, width, lineTop, lineHeight, columnWidth, dist, layoutType, wrapText);
     }
 
     // 旋转的情况，要考虑行首位与drawing旋转后得到的最大区域
-    const boundingBox = __getBoundingBox(angle, aLeft, width, aTop, height);
+    const boundingBox = getBoundingBox(angle, aLeft, width, aTop, height);
 
     if (layoutType === PositionedObjectLayoutType.WRAP_SQUARE) {
         // WRAP_SQUARE的情况下，旋转后的图形会重新有一个rect，用这个新rect来决定split
@@ -306,7 +395,9 @@ function _calculateSplit(
             lineTop,
             lineHeight,
             columnWidth,
-            drawingOrigin
+            dist,
+            layoutType,
+            wrapText
         );
     }
 
@@ -314,10 +405,16 @@ function _calculateSplit(
     return __getCrossPoint(boundingBox.points, lineTop, lineHeight, columnWidth);
 }
 
-function __getBoundingBox(angle: number, left: number, width: number, top: number, height: number) {
+export function getBoundingBox(angle: number, left: number, width: number, top: number, height: number) {
     // 旋转的情况，要考虑行首位与drawing旋转后得到的最大区域
-    const transform = new Transform().rotate(angle); // 建一个旋转后的变换类
-    // 把drawing四个端点分别进行旋转
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    // 建一个旋转后的变换类
+    const transform = new Transform()
+        .translate(centerX, centerY)
+        .rotate(angle)
+        .translate(-centerX, -centerY);
+    // 把 drawing 四个端点分别进行旋转
     const lt = new Vector2(left, top);
     const lb = new Vector2(left, top + height);
     const rt = new Vector2(left + width, top);
@@ -325,6 +422,30 @@ function __getBoundingBox(angle: number, left: number, width: number, top: numbe
     const boundingBox = transform.makeBoundingBoxFromPoints([lt, lb, rt, rb]); // 返回旋转后的点集合以及矩形选区
 
     return boundingBox;
+}
+
+// Converts the vertical position of the image in the header and footer to the position
+// of the image relative to the body position.
+function translateHeaderFooterDrawingPosition(
+    drawing: IDocumentSkeletonDrawing,
+    segmentPage: IDocumentSkeletonPage,
+    page: IDocumentSkeletonPage,
+    isHeader = true
+) {
+    const { aTop: prevATop } = drawing;
+
+    let aTop = prevATop;
+
+    if (isHeader) {
+        aTop = prevATop + segmentPage.marginTop - page.marginTop;
+    } else {
+        aTop = prevATop + segmentPage.marginTop + page.pageHeight - page.marginBottom - page.marginTop;
+    }
+
+    return {
+        ...drawing,
+        aTop,
+    };
 }
 
 function __getCrossPoint(points: Vector2[], lineTop: number, lineHeight: number, columnWidth: number) {
@@ -370,26 +491,26 @@ function __getSplitWidthNoAngle(
     lineTop: number,
     lineHeight: number,
     columnWidth: number,
-    drawingOrigin: IDrawing
+    dist: IDistFromText,
+    layoutType: PositionedObjectLayoutType = PositionedObjectLayoutType.WRAP_SQUARE,
+    wrapText: WrapTextType = WrapTextType.BOTH_SIDES
 ) {
     const {
-        layoutType,
-        wrapText = WrapTextType.BOTH_SIDES,
         distL = 0,
         distR = 0,
         distT = 0,
         distB = 0,
-    } = drawingOrigin;
+    } = dist;
 
     const newAtop = top - (layoutType === PositionedObjectLayoutType.WRAP_SQUARE ? distT : 0);
-    const newHeight = height + (layoutType === PositionedObjectLayoutType.WRAP_SQUARE ? distB : 0);
+    const newHeight = height + (layoutType === PositionedObjectLayoutType.WRAP_SQUARE ? distB + distT : 0);
 
-    if (newAtop + newHeight < lineTop || newAtop > lineHeight + lineTop) {
+    if (newAtop + newHeight <= lineTop || newAtop >= lineHeight + lineTop) {
         return;
     }
 
     let resultLeft = left - distL;
-    let resultWidth = width + distR;
+    let resultWidth = width + distL + distR;
     const ruler = ___getWrapTextRuler(wrapText, resultLeft, resultWidth, columnWidth);
 
     if (ruler === WrapTextRuler.LEFT) {
@@ -482,7 +603,8 @@ function _getLineSke(lineType: LineType, paragraphIndex: number): IDocumentSkele
         lineHeight: 0, // lineHeight =max(glyph.fontBoundingBoxAscent + glyph.fontBoundingBoxDescent, span2.....) + space
         contentHeight: 0, // contentHeight =max(glyph.fontBoundingBoxAscent + glyph.fontBoundingBoxDescent, span2.....)
         top: 0, // top paragraph(spaceAbove, spaceBelow, lineSpacing*PreLineHeight)
-        asc: 0, // =max(glyph.textMetrics.asc) alphaBeta对齐，需要校准
+        asc: 0, // =max(glyph.textMetrics.ba) alphaBeta对齐，需要校准
+        dsc: 0, // =max(glyph.textMetrics.bd) alphaBeta对齐，需要校准
         paddingTop: 0, // paddingTop 内容到顶部的距离
         paddingBottom: 0, // paddingBottom 内容到底部的距离
         marginTop: 0, // marginTop 针对段落的spaceAbove
@@ -491,6 +613,8 @@ function _getLineSke(lineType: LineType, paragraphIndex: number): IDocumentSkele
         divideLen: 0, // divideLen 被对象分割为多少块
         st: -1, // startIndex 文本开始索引
         ed: -1, // endIndex 文本结束索引
+        isBehindTable: false, // isBehindTable 是否在表格后面
+        tableId: '', // tableId 表格id
         lineIndex: 0, // lineIndex 行号
         paragraphStart: false,
     };

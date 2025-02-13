@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-import type { IPageElement } from '@univerjs/core';
-import { LocaleService, PageElementType } from '@univerjs/core';
+import type { Injector, IPageElement } from '@univerjs/core';
+import { Inject, LocaleService, PageElementType } from '@univerjs/core';
 import type { IRichTextProps, Scene } from '@univerjs/engine-render';
 import { RichText } from '@univerjs/engine-render';
-import type { Injector } from '@wendellhu/redi';
-import { Inject } from '@wendellhu/redi';
 
 import { CanvasObjectProviderRegistry, ObjectAdaptor } from '../adaptor';
 
@@ -39,7 +37,7 @@ export class RichTextAdaptor extends ObjectAdaptor {
         return this;
     }
 
-    override convert(pageElement: IPageElement, mainScene: Scene) {
+    override convert(pageElement: IPageElement, _mainScene: Scene) {
         const {
             id,
             zIndex,
@@ -72,7 +70,6 @@ export class RichTextAdaptor extends ObjectAdaptor {
             skewY,
             flipX,
             flipY,
-            isTransformer: true,
             forceRender: true,
         };
         let isNotNull = false;

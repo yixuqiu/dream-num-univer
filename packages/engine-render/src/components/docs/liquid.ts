@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,34 +69,6 @@ export class Liquid {
         }
     }
 
-    // const {
-    //     verticalAlign = VerticalAlign.TOP,
-    //     horizontalAlign = HorizontalAlign.LEFT,
-    //     centerAngle: centerAngleDeg = 0,
-    //     vertexAngle: vertexAngleDeg = 0,
-    //     wrapStrategy = WrapStrategy.UNSPECIFIED,
-    //     isRotateNonEastAsian = BooleanNumber.FALSE,
-    // } = renderConfig;
-
-    // let paddingTop = 0;
-
-    // if (verticalAlign === VerticalAlign.MIDDLE && pageHeight !== Infinity) {
-    //     paddingTop = (pageHeight - height) / 2;
-    // } else if (verticalAlign === VerticalAlign.BOTTOM && pageHeight !== Infinity) {
-    //     paddingTop = pageHeight - height - pagePaddingBottom;
-    // } else {
-    //     paddingTop = pagePaddingTop;
-    // }
-
-    // let paddingLeft = 0;
-
-    // if (horizontalAlign === HorizontalAlign.CENTER && pageWidth !== Infinity) {
-    //     paddingLeft = (pageWidth - width) / 2;
-    // } else if (horizontalAlign === HorizontalAlign.RIGHT && pageWidth !== Infinity) {
-    //     paddingLeft = pageWidth - width - pagePaddingRight;
-    // } else {
-    //     paddingLeft = pagePaddingLeft;
-    // }
     translatePagePadding(page: IDocumentSkeletonPage) {
         const {
             marginTop: pagePaddingTop = 0,
@@ -179,7 +151,7 @@ export class Liquid {
         };
     }
 
-    translateLine(line: IDocumentSkeletonLine, isDraw = false) {
+    translateLine(line: IDocumentSkeletonLine, includeMarginTop = false, includePaddingTop = false) {
         const {
             top: lineTop,
             marginBottom: _lineMarginBottom = 0,
@@ -187,7 +159,11 @@ export class Liquid {
             paddingTop: linePaddingTop = 0,
             paddingBottom: _linePaddingBottom = 0,
         } = line;
-        const lineOffset = lineTop + (isDraw === true ? lineMarginTop : 0) + linePaddingTop;
+
+        const lineOffset = lineTop +
+            (includeMarginTop ? lineMarginTop : 0) +
+            (includePaddingTop ? linePaddingTop : 0);
+
         this.translate(0, lineOffset);
         return {
             x: 0,
@@ -206,7 +182,7 @@ export class Liquid {
         };
     }
 
-    translateSpan(glyph: IDocumentSkeletonGlyph) {
+    translateGlyph(glyph: IDocumentSkeletonGlyph) {
         const { left: spanLeft } = glyph;
         this.translate(spanLeft, 0);
 

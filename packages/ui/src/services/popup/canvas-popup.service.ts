@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,29 @@
  * limitations under the License.
  */
 
-import { Tools } from '@univerjs/core';
+import type { Nullable } from '@univerjs/core';
 import type { IBoundRectNoAngle } from '@univerjs/engine-render';
-import { createIdentifier } from '@wendellhu/redi';
 import type { Observable } from 'rxjs';
+import type { IRectPopupProps } from '../../views/components/popup/RectPopup';
+import { createIdentifier, Disposable, Tools } from '@univerjs/core';
 import { BehaviorSubject } from 'rxjs';
 
-export interface IPopup {
-    anchorRect: IBoundRectNoAngle;
+export interface IPopup extends Omit<IRectPopupProps, 'children' | 'hidden' | 'excludeRects' | 'anchorRect$'> {
     anchorRect$: Observable<IBoundRectNoAngle>;
+    anchorRect?: IBoundRectNoAngle;
+    excludeRects$?: Observable<IBoundRectNoAngle[]>;
+    excludeRects?: Nullable<IBoundRectNoAngle[]>;
     componentKey: string;
-    onClickOutside?: (e: MouseEvent) => void;
-    closeOnSelfTarget?: boolean;
-    excludeOutside?: HTMLElement[];
+
     unitId: string;
     subUnitId: string;
-    direction?: 'vertical' | 'horizontal';
+
     offset?: [number, number];
+    canvasElement: HTMLCanvasElement;
+    hideOnInvisible?: boolean;
+    hiddenType?: 'hide' | 'destroy';
+    hiddenRects$?: Observable<IBoundRectNoAngle[]>;
+
 }
 
 export interface ICanvasPopupService {
@@ -40,39 +46,64 @@ export interface ICanvasPopupService {
     popups$: Observable<[string, IPopup][]>;
 
     get popups(): [string, IPopup][];
+
+    /**
+     * which popup is under hovering now
+     */
+    get activePopupId(): Nullable<string>;
 }
 
-export const ICanvasPopupService = createIdentifier<ICanvasPopupService>('univer.popup.service');
+export const ICanvasPopupService = createIdentifier<ICanvasPopupService>('ui.popup.service');
 
-export class CanvasPopupService implements ICanvasPopupService {
-    private _popupMap = new Map<string, IPopup>();
-    private _popups$ = new BehaviorSubject<[string, IPopup][]>([]);
+export class CanvasPopupService extends Disposable implements ICanvasPopupService {
+    private readonly _popupMap = new Map<string, IPopup>();
+    private readonly _popups$ = new BehaviorSubject<[string, IPopup][]>([]);
+    readonly popups$ = this._popups$.asObservable();
+    get popups() { return Array.from(this._popupMap.entries()); }
 
-    popups$ = this._popups$.asObservable();
+    private _activePopupId: Nullable<string> = null;
 
-    get popups() {
-        return Array.from(this._popupMap.entries());
+    get activePopupId() {
+        return this._activePopupId;
     }
 
-    private _notice() {
+    private _update() {
         this._popups$.next(Array.from(this._popupMap.entries()));
+    }
+
+    override dispose(): void {
+        super.dispose();
+
+        this._popups$.next([]);
+        this._popups$.complete();
+        this._popupMap.clear();
     }
 
     addPopup(item: IPopup): string {
         const id = Tools.generateRandomId();
-        this._popupMap.set(id, item);
-        this._notice();
+        this._popupMap.set(id, {
+            ...item,
+            onPointerEnter: () => {
+                this._activePopupId = id;
+            },
+            onPointerLeave: () => {
+                if (this._activePopupId === id) {
+                    this._activePopupId = null;
+                }
+            },
+        });
+        this._update();
         return id;
     }
 
     removePopup(id: string): void {
         if (this._popupMap.delete(id)) {
-            this._notice();
+            this._update();
         }
     }
 
     removeAll(): void {
         this._popupMap.clear();
-        this._notice();
+        this._update();
     }
 }

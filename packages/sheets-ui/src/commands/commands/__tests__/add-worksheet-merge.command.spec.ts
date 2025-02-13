@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { IRange, Univer, Workbook } from '@univerjs/core';
+import type { IDisposable, Injector, IRange, Univer, Workbook } from '@univerjs/core';
 import {
     ICommandService,
     IUniverInstanceService,
@@ -28,33 +28,36 @@ import {
     AddWorksheetMergeMutation,
     InsertColAfterCommand,
     InsertColBeforeCommand,
+    InsertColByRangeCommand,
     InsertColCommand,
     InsertColMutation,
     InsertRowAfterCommand,
     InsertRowBeforeCommand,
+    InsertRowByRangeCommand,
     InsertRowCommand,
     InsertRowMutation,
     MergeCellController,
     MoveColsCommand,
     MoveColsMutation,
     MoveRangeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RefRangeService,
+    RemoveColByRangeCommand,
     RemoveColCommand,
     RemoveColMutation,
+    RemoveRowByRangeCommand,
     RemoveRowCommand,
     RemoveRowMutation,
     RemoveWorksheetMergeCommand,
     RemoveWorksheetMergeMutation,
-    SelectionManagerService,
     SetRangeValuesMutation,
     SetSelectionsOperation,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
 import { type IConfirmPartMethodOptions, IConfirmService } from '@univerjs/ui';
-import type { IDisposable, Injector } from '@wendellhu/redi';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { getClearContentMutationParamForRange } from '../../../common/utils';
 import {
     AddWorksheetMergeAllCommand,
     AddWorksheetMergeCommand,
@@ -67,7 +70,7 @@ describe('Test add worksheet merge commands', () => {
     let univer: Univer;
     let get: Injector['get'];
     let commandService: ICommandService;
-    let selectionManager: SelectionManagerService;
+    let selectionManager: SheetsSelectionsService;
 
     beforeEach(() => {
         const testBed = createCommandTestBed(undefined, [
@@ -109,6 +112,15 @@ describe('Test add worksheet merge commands', () => {
         commandService.registerCommand(RemoveWorksheetMergeMutation);
 
         [
+            RemoveColByRangeCommand,
+            RemoveRowByRangeCommand,
+            InsertRowByRangeCommand,
+            InsertColByRangeCommand,
+        ].forEach((command) => {
+            commandService.registerCommand(command);
+        });
+
+        [
             InsertRowCommand,
             InsertRowBeforeCommand,
             InsertRowAfterCommand,
@@ -132,12 +144,7 @@ describe('Test add worksheet merge commands', () => {
         get(LocaleService).load({});
         get(MergeCellController);
 
-        selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
+        selectionManager = get(SheetsSelectionsService);
     });
 
     afterEach(() => {
@@ -147,13 +154,8 @@ describe('Test add worksheet merge commands', () => {
     describe('add merge all', () => {
         describe('correct situations', () => {
             it('will merge all cells of the selected range when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -170,7 +172,8 @@ describe('Test add worksheet merge commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 expect(getMerge()?.length).toBe(0);
@@ -198,13 +201,8 @@ describe('Test add worksheet merge commands', () => {
     describe('add merge vertical', () => {
         describe('correct situations', () => {
             it('will merge all vertical cells of the selected range when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -221,7 +219,8 @@ describe('Test add worksheet merge commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 expect(getMerge()?.length).toBe(0);
@@ -247,13 +246,8 @@ describe('Test add worksheet merge commands', () => {
     describe('add merge horizontal', () => {
         describe('correct situations', () => {
             it('will merge all horizontal cells of the selected range when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -270,7 +264,8 @@ describe('Test add worksheet merge commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 expect(getMerge()?.length).toBe(0);
@@ -286,18 +281,66 @@ describe('Test add worksheet merge commands', () => {
                 expect(result).toBeFalsy();
             });
         });
+
+        describe('horizontal with other merge cell', () => {
+            it('test only the upper left conner has a value', async () => {
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
+                    {
+                        range: { startRow: 10, startColumn: 2, endColumn: 2, endRow: 12, rangeType: RANGE_TYPE.NORMAL },
+                        primary: null,
+                        style: null,
+                    },
+                ]);
+
+                function getMerge(): IRange[] | undefined {
+                    return get(IUniverInstanceService)
+                        .getUniverSheetInstance('test')
+                        ?.getSheetBySheetId('sheet1')
+                        ?.getConfig()
+                        .mergeData;
+                }
+
+                expect(getMerge()?.length).toBe(0);
+                expect(await commandService.executeCommand(AddWorksheetMergeAllCommand.id)).toBeTruthy();
+                expect(getMerge()?.length).toBe(1);
+                commandService.executeCommand(SetRangeValuesMutation.id, {
+                    unitId: 'test',
+                    subUnitId: 'sheet1',
+                    cellValue: {
+                        10: {
+                            2: {
+                                v: 1234,
+                            },
+                        },
+                    },
+                });
+
+                selectionManager.clear();
+                selectionManager.addSelections([
+                    {
+                        range: { startRow: 10, startColumn: 1, endColumn: 2, endRow: 12, rangeType: RANGE_TYPE.NORMAL },
+                        primary: null,
+                        style: null,
+                    },
+                ]);
+                expect(await commandService.executeCommand(AddWorksheetMergeHorizontalCommand.id)).toBeTruthy();
+                expect(getMerge()?.length).toBe(3);
+
+                const worksheet = get(IUniverInstanceService).getUnit<Workbook>('test')?.getSheetBySheetId('sheet1');
+                if (worksheet) {
+                    expect(worksheet.getCellMatrix().getValue(10, 1)?.v).toBe(1234);
+                    expect(worksheet.getCellMatrix().getValue(10, 2)?.v).toBeUndefined();
+                }
+            });
+        });
     });
 
     describe('cancel merge', () => {
         describe('correct situations', () => {
             it('will cancel the merge of the selected range when there is a selected range', async () => {
-                const selectionManager = get(SelectionManagerService);
-                selectionManager.setCurrentSelection({
-                    pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                    unitId: 'test',
-                    sheetId: 'sheet1',
-                });
-                selectionManager.add([
+                const selectionManager = get(SheetsSelectionsService);
+                selectionManager.addSelections([
                     {
                         range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                         primary: null,
@@ -309,7 +352,8 @@ describe('Test add worksheet merge commands', () => {
                     return get(IUniverInstanceService)
                         .getUniverSheetInstance('test')
                         ?.getSheetBySheetId('sheet1')
-                        ?.getConfig().mergeData;
+                        ?.getConfig()
+                        .mergeData;
                 }
 
                 expect(getMerge()?.length).toBe(0);
@@ -333,10 +377,100 @@ describe('Test add worksheet merge commands', () => {
         });
     });
 
+    describe('merge cell with set cell data', () => {
+        it('test clear util', () => {
+            const commandService = get(ICommandService);
+            const univerInstanceService = get(IUniverInstanceService);
+            const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
+            const worksheet = workbook.getActiveSheet();
+            if (!worksheet) throw new Error('No active sheet found');
+
+            commandService.executeCommand(SetRangeValuesMutation.id, {
+                unitId: workbook.getUnitId(),
+                subUnitId: worksheet.getSheetId(),
+                cellValue: {
+                    2: {
+                        2: {
+                            p: {
+                                id: '__INTERNAL_EDITOR__DOCS_NORMAL',
+                                documentStyle: {
+                                    pageSize: {
+                                        width: 82.20805358886719,
+                                        height: null,
+                                    },
+                                    marginTop: 0,
+                                    marginBottom: 1,
+                                    marginRight: 2,
+                                    marginLeft: 2,
+                                    renderConfig: {
+                                        horizontalAlign: 0,
+                                        verticalAlign: 0,
+                                        centerAngle: 0,
+                                        vertexAngle: 0,
+                                        wrapStrategy: 0,
+                                    },
+                                },
+                                body: {
+                                    dataStream: 'hahaha\r\n',
+                                    textRuns: [
+                                        {
+                                            st: 3,
+                                            ed: 5,
+                                            ts: {
+                                                fs: 28,
+                                            },
+                                        },
+                                    ],
+                                    paragraphs: [
+                                        {
+                                            startIndex: 6,
+                                            paragraphStyle: {
+                                                horizontalAlign: 0,
+                                            },
+                                        },
+                                    ],
+                                    sectionBreaks: [
+                                        {
+                                            startIndex: 7,
+                                        },
+                                    ],
+                                    customRanges: [],
+                                    customDecorations: [],
+                                },
+                                drawings: {},
+                                drawingsOrder: [],
+                                settings: {
+                                    zoomRatio: 1,
+                                },
+                                resources: [
+                                    {
+                                        name: 'SHEET_THREAD_COMMENT_PLUGIN',
+                                        data: '{}',
+                                    },
+                                    {
+                                        name: 'SHEET_AuthzIoMockService_PLUGIN',
+                                        data: '{}',
+                                    },
+                                ],
+                            },
+                            v: null,
+                            f: null,
+                            si: null,
+                            custom: {},
+                        },
+                    },
+                },
+            });
+            const res = getClearContentMutationParamForRange(worksheet, { startRow: 0, startColumn: 2, endRow: 2, endColumn: 2 });
+            expect(res.getValue(0, 2)?.p).toBeTruthy();
+            expect(res.getValue(2, 2)).toBeNull();
+        });
+    });
+
     describe('with insert or remove col', () => {
         it('will adjust the merge data when insert col and remove col', async () => {
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -352,12 +486,13 @@ describe('Test add worksheet merge commands', () => {
             const univerInstanceService = get(IUniverInstanceService);
             const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             const worksheet = workbook.getActiveSheet();
+            if (!worksheet) throw new Error('No active sheet found');
             const mergeData = worksheet.getConfig().mergeData;
             expect(mergeData.length).toBe(0);
             expect(await commandService.executeCommand(AddWorksheetMergeAllCommand.id)).toBeTruthy();
             expect(mergeData.length).toBe(2);
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: {
                         startRow: 0,
@@ -373,8 +508,8 @@ describe('Test add worksheet merge commands', () => {
             expect(await commandService.executeCommand(InsertColAfterCommand.id)).toBeTruthy();
             expect(worksheet.getMergeData().length).toBe(2);
             expect(worksheet.getMergeData()[1]).toStrictEqual({ startRow: 10, startColumn: 11, endColumn: 16, endRow: 15, rangeType: 0 });
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: {
                         startRow: 0,
@@ -391,8 +526,8 @@ describe('Test add worksheet merge commands', () => {
             expect(worksheet.getMergeData().length).toBe(2);
             expect(worksheet.getMergeData()[1]).toStrictEqual({ startRow: 10, startColumn: 11, endColumn: 18, endRow: 15, rangeType: 0 });
 
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: {
                         startRow: 0,
@@ -408,8 +543,8 @@ describe('Test add worksheet merge commands', () => {
             expect(await commandService.executeCommand(RemoveColCommand.id)).toBeTruthy();
             expect(worksheet.getMergeData().length).toBe(2);
             expect(worksheet.getMergeData()[1]).toStrictEqual({ startRow: 10, startColumn: 10, endColumn: 17, endRow: 15, rangeType: 0 });
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: {
                         startRow: 0,
@@ -430,8 +565,8 @@ describe('Test add worksheet merge commands', () => {
 
     describe('with move col', () => {
         it('will adjust the merge data when move col', async () => {
-            selectionManager.clear();
-            selectionManager.add([
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([
                 {
                     range: { startRow: 0, startColumn: 0, endColumn: 5, endRow: 5, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -447,12 +582,13 @@ describe('Test add worksheet merge commands', () => {
             const univerInstanceService = get(IUniverInstanceService);
             const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
             const worksheet = workbook.getActiveSheet();
+            if (!worksheet) throw new Error('No active sheet found');
             const mergeData = worksheet.getConfig().mergeData;
             expect(mergeData.length).toBe(0);
             expect(await commandService.executeCommand(AddWorksheetMergeAllCommand.id)).toBeTruthy();
             expect(mergeData.length).toBe(2);
-            selectionManager.clear();
-            selectionManager.add([{
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([{
                 primary: null,
                 style: null,
                 range: {
@@ -482,8 +618,8 @@ describe('Test add worksheet merge commands', () => {
             expect(worksheet.getMergeData().length).toBe(2);
             expect(worksheet.getMergeData()[1]).toStrictEqual({ startRow: 10, startColumn: 11, endColumn: 16, endRow: 15, rangeType: 0 });
 
-            selectionManager.clear();
-            selectionManager.add([{
+            selectionManager.clearCurrentSelections();
+            selectionManager.addSelections([{
                 primary: null,
                 style: null,
                 range: {

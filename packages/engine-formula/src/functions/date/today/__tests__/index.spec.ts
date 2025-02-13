@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { FUNCTION_NAMES_DATE } from '../../function-names';
 import { Today } from '../index';
-import { NumberValueObject } from '../../../../engine/value-object/primitive-object';
-import { ErrorType } from '../../../../basics/error-type';
 
 // mock new Date() use V
 const _Date = Date;
@@ -37,17 +35,12 @@ global.Date = vi.fn((...params) => {
 global.Date.UTC = _Date.UTC;
 
 describe('Test today function', () => {
-    const textFunction = new Today(FUNCTION_NAMES_DATE.TODAY);
+    const testFunction = new Today(FUNCTION_NAMES_DATE.TODAY);
 
     describe('Today', () => {
         it('Normal', () => {
-            const result = textFunction.calculate();
+            const result = testFunction.calculate();
             expect(result.getValue()).toBe(43831);
-        });
-
-        it('Set a parameter', () => {
-            const result = textFunction.calculate(NumberValueObject.create(1));
-            expect(result.getValue()).toBe(ErrorType.NA);
         });
     });
 });

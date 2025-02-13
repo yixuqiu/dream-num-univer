@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,24 @@
  * limitations under the License.
  */
 
-import { MemoryCursor } from '../../common/memory-cursor';
 import type { Nullable } from '../../shared';
-import { getDocsUpdateBody } from '../../shared';
-import { UpdateDocsAttributeType } from '../../shared/command-enum';
-import { Tools } from '../../shared/tools';
 import type {
     IDocumentBody,
     IDocumentData,
     IDocumentRenderConfig,
     IDocumentStyle,
+    IDrawings,
+    IListData,
 } from '../../types/interfaces/i-document-data';
 import type { IPaddingData } from '../../types/interfaces/i-style-data';
+import type { JSONXActions } from './json-x/json-x';
+import { BehaviorSubject } from 'rxjs';
 import { UnitModel, UniverInstanceType } from '../../common/unit';
-import { updateAttributeByDelete } from './apply-utils/delete-apply';
-import { updateAttributeByInsert } from './apply-utils/insert-apply';
-import { updateAttribute } from './apply-utils/update-apply';
-import { type TextXAction, TextXActionType } from './action-types';
-import { getBodySlice } from './text-x/utils';
+import { Tools } from '../../shared/tools';
 import { getEmptySnapshot } from './empty-snapshot';
+import { JSONX } from './json-x/json-x';
+import { PRESET_LIST_TYPE } from './preset-list-type';
+import { getBodySlice, SliceBodyType } from './text-x/utils';
 
 export const DEFAULT_DOC = {
     id: 'default_doc',
@@ -53,12 +52,33 @@ class DocumentDataModelSimple extends UnitModel<IDocumentData, UniverInstanceTyp
         throw new Error('Method not implemented.');
     }
 
-    snapshot: IDocumentData;
+    protected readonly _name$ = new BehaviorSubject<string>('');
+    override name$ = this._name$.asObservable();
+
+    protected snapshot: IDocumentData;
 
     constructor(snapshot: Partial<IDocumentData>) {
         super();
 
         this.snapshot = { ...DEFAULT_DOC, ...snapshot };
+        this._name$.next(this.snapshot.title ?? 'No Title');
+    }
+
+    override getRev(): number {
+        return this.snapshot.rev ?? 1;
+    }
+
+    override incrementRev(): void {
+        this.snapshot.rev = this.getRev() + 1;
+    }
+
+    override setRev(rev: number): void {
+        this.snapshot.rev = rev;
+    }
+
+    setName(name: string) {
+        this.snapshot.title = name;
+        this._name$.next(name);
     }
 
     get drawings() {
@@ -73,37 +93,31 @@ class DocumentDataModelSimple extends UnitModel<IDocumentData, UniverInstanceTyp
         return this.snapshot.lists;
     }
 
-    /**
-     * @deprecated use getBody to instead.
-     */
-    get body() {
-        return this.snapshot.body;
-    }
-
     get zoomRatio() {
         return this.snapshot.settings?.zoomRatio || 1;
+    }
+
+    resetDrawing(drawings: IDrawings, drawingsOrder: string[]) {
+        this.snapshot.drawings = drawings;
+        this.snapshot.drawingsOrder = drawingsOrder;
     }
 
     getBody() {
         return this.snapshot.body;
     }
 
-    getShouldRenderLoopImmediately() {
-        const should = this.snapshot.shouldStartRenderingImmediately;
-
-        return should !== false;
-    }
-
-    getContainer() {
-        return this.snapshot.container;
-    }
-
-    getParentRenderUnitId() {
-        return this.snapshot.parentRenderUnitId;
-    }
-
     getSnapshot() {
         return this.snapshot;
+    }
+
+    getBulletPresetList() {
+        const customLists = this.snapshot.lists ?? {};
+        const lists: Record<string, IListData> = {
+            ...PRESET_LIST_TYPE,
+            ...customLists,
+        };
+
+        return lists;
     }
 
     updateDocumentId(unitId: string) {
@@ -188,7 +202,7 @@ class DocumentDataModelSimple extends UnitModel<IDocumentData, UniverInstanceTyp
             return;
         }
 
-        const objectTransform = drawing.objectTransform;
+        const objectTransform = drawing.docTransform;
 
         objectTransform.size.width = width;
         objectTransform.size.height = height;
@@ -214,6 +228,7 @@ export class DocumentDataModel extends DocumentDataModelSimple {
     headerModelMap: Map<string, DocumentDataModel> = new Map();
 
     footerModelMap: Map<string, DocumentDataModel> = new Map();
+    change$ = new BehaviorSubject<number>(0);
 
     constructor(snapshot: Partial<IDocumentData>) {
         super(Tools.isEmptyObject(snapshot) ? getEmptySnapshot() : snapshot);
@@ -223,9 +238,11 @@ export class DocumentDataModel extends DocumentDataModelSimple {
         this._unitId = this.snapshot.id ?? Tools.generateRandomId(UNIT_ID_LENGTH);
 
         this._initializeHeaderFooterModel();
+        this._name$.next(this.snapshot.title ?? '');
     }
 
     override dispose() {
+        super.dispose();
         this.headerModelMap.forEach((header) => {
             header.dispose();
         });
@@ -233,14 +250,24 @@ export class DocumentDataModel extends DocumentDataModelSimple {
         this.footerModelMap.forEach((footer) => {
             footer.dispose();
         });
+
+        this._name$.complete();
     }
 
-    getRev(): number {
-        return this.snapshot.rev ?? 1;
+    getDrawings() {
+        return this.snapshot.drawings;
     }
 
-    incrementRev(): void {
-        this.snapshot.rev = this.getRev() + 1;
+    getDrawingsOrder() {
+        return this.snapshot.drawingsOrder;
+    }
+
+    getCustomRanges() {
+        return this.snapshot.body?.customRanges;
+    }
+
+    getCustomDecorations() {
+        return this.snapshot.body?.customDecorations;
     }
 
     getSettings() {
@@ -255,6 +282,7 @@ export class DocumentDataModel extends DocumentDataModelSimple {
 
         this.snapshot = { ...DEFAULT_DOC, ...snapshot };
         this._initializeHeaderFooterModel();
+        this.change$.next(this.change$.value + 1);
     }
 
     getSelfOrHeaderFooterModel(segmentId?: string) {
@@ -271,133 +299,36 @@ export class DocumentDataModel extends DocumentDataModelSimple {
         return this as DocumentDataModel;
     }
 
-    override getUnitId(): string {
+    override getUnitId() {
         return this._unitId;
     }
 
-    apply(actions: TextXAction[]) {
-        const undoMutations: TextXAction[] = [];
+    apply(actions: JSONXActions) {
+        if (JSONX.isNoop(actions)) {
+            return;
+        }
 
-        const memoryCursor = new MemoryCursor();
+        this.snapshot = JSONX.apply(this.snapshot, actions) as unknown as IDocumentData;
 
-        memoryCursor.reset();
+        // FIXME: @JOCS, ANY better solution to find action that create or delete header/footer?
+        if (actions?.some((a) => Array.isArray(a) && (a?.[0] === 'headers' || a?.[0] === 'footers'))) {
+            this.headerModelMap.clear();
+            this.footerModelMap.clear();
+            this._initializeHeaderFooterModel();
+        }
 
-        actions.forEach((action) => {
-            // FIXME: @JOCS Since updateApply modifies the action(used in undo/redo),
-            // so make a deep copy here, does updateApply need to
-            // be modified to have no side effects in the future?
-            action = Tools.deepClone(action);
-
-            if (action.t === TextXActionType.RETAIN) {
-                const { coverType, body, len, segmentId } = action;
-
-                if (body != null) {
-                    const documentBody = this._updateApply(body, len, memoryCursor.cursor, coverType, segmentId);
-
-                    undoMutations.push({
-                        ...action,
-                        t: TextXActionType.RETAIN,
-                        coverType: UpdateDocsAttributeType.REPLACE,
-                        body: documentBody,
-                    });
-                } else {
-                    undoMutations.push({
-                        ...action,
-                        t: TextXActionType.RETAIN,
-                    });
-                }
-
-                memoryCursor.moveCursor(len);
-            } else if (action.t === TextXActionType.INSERT) {
-                const { body, len, segmentId, line } = action;
-
-                this._insertApply(body!, len, memoryCursor.cursor, segmentId);
-                memoryCursor.moveCursor(len);
-                undoMutations.push({
-                    t: TextXActionType.DELETE,
-                    len,
-                    line,
-                    segmentId,
-                });
-            } else if (action.t === TextXActionType.DELETE) {
-                const { len, segmentId } = action;
-                const documentBody = this._deleteApply(len, memoryCursor.cursor, segmentId);
-
-                undoMutations.push({
-                    ...action,
-                    t: TextXActionType.INSERT,
-                    body: documentBody,
-                });
-            } else {
-                throw new Error(`Unknown action type for action: ${action}.`);
-            }
-        });
-
-        return undoMutations;
+        this.change$.next(this.change$.value + 1);
+        return this.snapshot;
     }
 
-    sliceBody(startOffset: number, endOffset: number): Nullable<IDocumentBody> {
+    sliceBody(startOffset: number, endOffset: number, type = SliceBodyType.copy): Nullable<IDocumentBody> {
         const body = this.getBody();
 
         if (body == null) {
             return;
         }
 
-        return getBodySlice(body, startOffset, endOffset);
-    }
-
-    private _updateApply(
-        updateBody: Nullable<IDocumentBody>,
-        textLength: number,
-        currentIndex: number,
-        coverType = UpdateDocsAttributeType.COVER,
-        segmentId?: string
-    ): IDocumentBody {
-        if (updateBody == null) {
-            throw new Error('updateBody is none');
-        }
-
-        const doc = this.snapshot;
-
-        const body = getDocsUpdateBody(doc, segmentId);
-
-        if (body == null) {
-            throw new Error('no body has changed');
-        }
-
-        return updateAttribute(body, updateBody, textLength, currentIndex, coverType);
-    }
-
-    private _deleteApply(textLength: number, currentIndex: number, segmentId?: string): IDocumentBody {
-        const doc = this.snapshot;
-
-        const body = getDocsUpdateBody(doc, segmentId);
-
-        if (body == null) {
-            throw new Error('no body has changed');
-        }
-
-        if (textLength <= 0) {
-            return { dataStream: '' };
-        }
-
-        return updateAttributeByDelete(body, textLength, currentIndex);
-    }
-
-    private _insertApply(insertBody: IDocumentBody, textLength: number, currentIndex: number, segmentId?: string) {
-        const doc = this.snapshot;
-
-        const body = getDocsUpdateBody(doc, segmentId);
-
-        if (textLength === 0) {
-            return;
-        }
-
-        if (body == null) {
-            throw new Error('no body has changed');
-        }
-
-        updateAttributeByInsert(body, insertBody, textLength, currentIndex);
+        return getBodySlice(body, startOffset, endOffset, false, type);
     }
 
     private _initializeHeaderFooterModel() {
@@ -407,6 +338,7 @@ export class DocumentDataModel extends DocumentDataModelSimple {
             for (const headerId in headers) {
                 const header = headers[headerId];
                 this.headerModelMap.set(headerId, new DocumentDataModel(header));
+                this.headerModelMap.get(headerId)!.updateDocumentId(this.getUnitId());
             }
         }
 
@@ -414,6 +346,7 @@ export class DocumentDataModel extends DocumentDataModelSimple {
             for (const footerId in footers) {
                 const footer = footers[footerId];
                 this.footerModelMap.set(footerId, new DocumentDataModel(footer));
+                this.footerModelMap.get(footerId)!.updateDocumentId(this.getUnitId());
             }
         }
     }

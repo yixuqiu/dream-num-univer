@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from 'vitest';
+import type { IDocumentBody } from '../../../types/interfaces';
 
+import { describe, expect, it } from 'vitest';
 import { BooleanNumber } from '../../../types/enum/text-style';
 import { replaceInDocumentBody } from '../replacement';
 
@@ -64,17 +65,17 @@ function getTestDocumentBody() {
             {
                 startIndex: 4,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             },
             {
                 startIndex: 11,
                 paragraphStyle: {
-                    spaceAbove: 10,
+                    spaceAbove: { v: 10 },
                     lineSpacing: 2,
-                    spaceBelow: 0,
+                    spaceBelow: { v: 0 },
                 },
             },
         ],
@@ -83,7 +84,7 @@ function getTestDocumentBody() {
                 startIndex: 12,
             },
         ],
-    };
+    } as IDocumentBody;
 
     return documentBody;
 }
@@ -92,6 +93,9 @@ describe('test case in replaceInDocumentBody utils', () => {
     it('Should replace all `query` to `target`', () => {
         const documentBody = getTestDocumentBody();
         const expectedBody = {
+            customRanges: [],
+            customDecorations: [],
+            customBlocks: [],
             dataStream: '荷塘Jocs\r作者：朱Jocs\r\n',
             textRuns: [
                 {
@@ -123,17 +127,17 @@ describe('test case in replaceInDocumentBody utils', () => {
                 {
                     startIndex: 6,
                     paragraphStyle: {
-                        spaceAbove: 10,
+                        spaceAbove: { v: 10 },
                         lineSpacing: 2,
-                        spaceBelow: 0,
+                        spaceBelow: { v: 0 },
                     },
                 },
                 {
                     startIndex: 15,
                     paragraphStyle: {
-                        spaceAbove: 10,
+                        spaceAbove: { v: 10 },
                         lineSpacing: 2,
-                        spaceBelow: 0,
+                        spaceBelow: { v: 0 },
                     },
                 },
             ],
@@ -142,15 +146,16 @@ describe('test case in replaceInDocumentBody utils', () => {
                     startIndex: 16,
                 },
             ],
-        };
+        } as IDocumentBody;
 
-        expect(replaceInDocumentBody(documentBody, '月色', 'Jocs')).toEqual(expectedBody);
+        expect(replaceInDocumentBody(documentBody, '月色', 'Jocs', true)).toEqual(expectedBody);
     });
 
     it('Should replace all `query` to `target` when `target` is empty', () => {
         const documentBody = getTestDocumentBody();
         const expectedBody = {
             dataStream: '荷塘\r作者：朱\r\n',
+            customBlocks: [],
             textRuns: [
                 {
                     st: 0,
@@ -181,17 +186,17 @@ describe('test case in replaceInDocumentBody utils', () => {
                 {
                     startIndex: 2,
                     paragraphStyle: {
-                        spaceAbove: 10,
+                        spaceAbove: { v: 10 },
                         lineSpacing: 2,
-                        spaceBelow: 0,
+                        spaceBelow: { v: 0 },
                     },
                 },
                 {
                     startIndex: 7,
                     paragraphStyle: {
-                        spaceAbove: 10,
+                        spaceAbove: { v: 10 },
                         lineSpacing: 2,
-                        spaceBelow: 0,
+                        spaceBelow: { v: 0 },
                     },
                 },
             ],
@@ -200,14 +205,14 @@ describe('test case in replaceInDocumentBody utils', () => {
                     startIndex: 8,
                 },
             ],
-        };
+        } as IDocumentBody;
 
-        expect(replaceInDocumentBody(documentBody, '月色', '')).toEqual(expectedBody);
+        expect(replaceInDocumentBody(documentBody, '月色', '', true)).toEqual(expectedBody);
     });
 
     it('Should return the origin body when the query is empty', () => {
         const documentBody = getTestDocumentBody();
 
-        expect(replaceInDocumentBody(documentBody, '', 'Jocs')).toEqual(documentBody);
+        expect(replaceInDocumentBody(documentBody, '', 'Jocs', true)).toEqual(documentBody);
     });
 });

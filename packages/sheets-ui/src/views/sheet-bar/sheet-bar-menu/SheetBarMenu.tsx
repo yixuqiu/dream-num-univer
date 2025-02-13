@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 import type { ICommandInfo, Workbook } from '@univerjs/core';
 import { BooleanNumber, DisposableCollection, ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
-import { Dropdown } from '@univerjs/design';
+import { DropdownLegacy } from '@univerjs/design';
 import { CheckMarkSingle, ConvertSingle, EyelashSingle } from '@univerjs/icons';
 import {
     InsertSheetMutation,
@@ -27,17 +27,17 @@ import {
     SetWorksheetNameMutation,
     SetWorksheetOrderMutation,
     SetWorksheetShowCommand,
+    WorksheetProtectionRuleModel,
 } from '@univerjs/sheets';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { useDependency, useObservable } from '@univerjs/ui';
 import React, { useCallback, useEffect, useState } from 'react';
-import { useObservable } from '@univerjs/ui';
 
 import { ISheetBarService } from '../../../services/sheet-bar/sheet-bar.service';
 import { SheetBarButton } from '../sheet-bar-button/SheetBarButton';
 import styles from './index.module.less';
 
 export interface ISheetBarMenuItem {
-    label?: string;
+    label?: React.ReactNode;
     hidden?: boolean;
     selected?: boolean;
     index?: string;
@@ -51,12 +51,14 @@ export interface ISheetBarMenuProps {
 
 export function SheetBarMenu(props: ISheetBarMenuProps) {
     const { style } = props;
+
     const [menu, setMenu] = useState<ISheetBarMenuItem[]>([]);
     const [visible, setVisible] = useState(false);
 
     const univerInstanceService = useDependency(IUniverInstanceService);
     const commandService = useDependency(ICommandService);
     const sheetBarService = useDependency(ISheetBarService);
+    const worksheetProtectionRuleModel = useDependency(WorksheetProtectionRuleModel);
     const workbook = useObservable(() => univerInstanceService.getCurrentTypeOfUnit$<Workbook>(UniverInstanceType.UNIVER_SHEET), null, false, []);
 
     const handleClick = (item: ISheetBarMenuItem) => {
@@ -65,6 +67,8 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
 
         if (item.hidden) {
             commandService.executeCommand(SetWorksheetShowCommand.id, {
+                unitId: workbook.getUnitId(),
+                subUnitId: sheetId,
                 value: sheetId,
             });
         } else if (!item.selected) {
@@ -82,16 +86,19 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
 
         const sheets = workbook.getSheets();
         const activeSheet = workbook.getActiveSheet();
-        const worksheetMenuItems = sheets.map((sheet, index) => ({
-            label: sheet.getName(),
-            index: `${index}`,
-            sheetId: sheet.getSheetId(),
-            hidden: sheet.isSheetHidden() === BooleanNumber.TRUE,
-            selected: activeSheet === sheet,
-        }));
+        const worksheetMenuItems = sheets.map((sheet, index) => {
+            return {
+                label: sheet.getName(),
+                index: `${index}`,
+                sheetId: sheet.getSheetId(),
+                hidden: sheet.isSheetHidden() === BooleanNumber.TRUE,
+                selected: activeSheet === sheet,
+            };
+        });
 
         setMenu(worksheetMenuItems);
-    }, [workbook]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [workbook, worksheetProtectionRuleModel]);
 
     const setupStatusUpdate = useCallback(() =>
         commandService.onCommandExecuted((commandInfo: ICommandInfo) => {
@@ -128,7 +135,7 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
     }, [setupStatusUpdate, sheetBarService, statusInit, workbook]);
 
     return (
-        <Dropdown
+        <DropdownLegacy
             placement="topLeft"
             trigger={['click']}
             overlay={(
@@ -138,9 +145,15 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
                             key={item.index}
                             onClick={() => handleClick(item)}
                             className={item.selected
-                                ? `${styles.sheetBarMenuItem} ${styles.sheetBarMenuItemSelect}`
+                                ? `
+                                  ${styles.sheetBarMenuItem}
+                                  ${styles.sheetBarMenuItemSelect}
+                                `
                                 : item.hidden
-                                    ? `${styles.sheetBarMenuItem} ${styles.sheetBarMenuItemHide}`
+                                    ? `
+                                      ${styles.sheetBarMenuItem}
+                                      ${styles.sheetBarMenuItemHide}
+                                    `
                                     : styles.sheetBarMenuItem}
                         >
                             <span className={styles.sheetBarMenuItemIcon}>
@@ -150,7 +163,7 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
                                         ? <EyelashSingle />
                                         : <CheckMarkSingle />}
                             </span>
-                            <span className={styles.sheetBarMenuItemLabel}>{item.label}</span>
+                            <div className={styles.sheetBarMenuItemLabel}>{item.label}</div>
                         </li>
                     ))}
                 </ul>
@@ -158,9 +171,11 @@ export function SheetBarMenu(props: ISheetBarMenuProps) {
             visible={visible}
             onVisibleChange={onVisibleChange}
         >
-            <SheetBarButton>
-                <ConvertSingle />
-            </SheetBarButton>
-        </Dropdown>
+            <div>
+                <SheetBarButton>
+                    <ConvertSingle />
+                </SheetBarButton>
+            </div>
+        </DropdownLegacy>
     );
 }

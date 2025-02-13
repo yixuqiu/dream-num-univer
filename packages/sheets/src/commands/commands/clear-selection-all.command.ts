@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,27 @@
  * limitations under the License.
  */
 
-import type { ICellData, ICommand, IMutationInfo, IObjectMatrixPrimitiveType, IRange, Nullable, Workbook } from '@univerjs/core';
+import type { IAccessor, ICommand, IMutationInfo, IRange, Workbook } from '@univerjs/core';
+import type { ISetRangeValuesMutationParams } from '../mutations/set-range-values.mutation';
+
 import {
     CommandType,
     ICommandService,
     IUndoRedoService,
     IUniverInstanceService,
-    ObjectMatrix,
     sequenceExecute,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import { SelectionManagerService } from '../../services/selection-manager.service';
+import { generateNullCell } from '../../basics/utils';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
 import { SheetInterceptorService } from '../../services/sheet-interceptor/sheet-interceptor.service';
-import type { ISetRangeValuesMutationParams } from '../mutations/set-range-values.mutation';
 import { SetRangeValuesMutation, SetRangeValuesUndoMutationFactory } from '../mutations/set-range-values.mutation';
+
+interface IClearSelectionAllCommandParams {
+    unitId?: string;
+    subUnitId?: string;
+    ranges?: IRange[];
+}
 
 /**
  * The command to clear all in current selected ranges.
@@ -37,20 +42,22 @@ import { SetRangeValuesMutation, SetRangeValuesUndoMutationFactory } from '../mu
 export const ClearSelectionAllCommand: ICommand = {
     id: 'sheet.command.clear-selection-all',
     type: CommandType.COMMAND,
-    handler: async (accessor: IAccessor) => {
+    handler: (accessor: IAccessor, params: IClearSelectionAllCommandParams) => {
         const univerInstanceService = accessor.get(IUniverInstanceService);
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const sheetInterceptorService = accessor.get(SheetInterceptorService);
 
         const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
         if (!workbook) return false;
 
-        const unitId = workbook.getUnitId();
+        const unitId = params?.unitId || workbook.getUnitId();
         const worksheet = workbook.getActiveSheet();
-        const subUnitId = worksheet.getSheetId();
-        const selections = selectionManagerService.getSelectionRanges();
+        if (!worksheet) return false;
+
+        const subUnitId = params?.subUnitId || worksheet.getSheetId();
+        const selections = params?.ranges || selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!selections?.length) {
             return false;
         }
@@ -62,7 +69,7 @@ export const ClearSelectionAllCommand: ICommand = {
         const clearMutationParams: ISetRangeValuesMutationParams = {
             subUnitId,
             unitId,
-            cellValue: generateNullCellValue(selections),
+            cellValue: generateNullCell(selections),
         };
         const undoClearMutationParams: ISetRangeValuesMutationParams = SetRangeValuesUndoMutationFactory(
             accessor,
@@ -99,18 +106,3 @@ export const ClearSelectionAllCommand: ICommand = {
         return false;
     },
 };
-
-// Generate cellValue from range and set null
-function generateNullCellValue(range: IRange[]): IObjectMatrixPrimitiveType<Nullable<ICellData>> {
-    const cellValue = new ObjectMatrix<Nullable<ICellData>>();
-    range.forEach((range: IRange) => {
-        const { startRow, startColumn, endRow, endColumn } = range;
-        for (let i = startRow; i <= endRow; i++) {
-            for (let j = startColumn; j <= endColumn; j++) {
-                cellValue.setValue(i, j, null);
-            }
-        }
-    });
-
-    return cellValue.getData();
-}

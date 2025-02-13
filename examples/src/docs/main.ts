@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,47 +14,48 @@
  * limitations under the License.
  */
 
-/* eslint-disable node/prefer-global/process */
-import { LocaleType, Univer } from '@univerjs/core';
+import { LocaleType, LogLevel, Univer, UniverInstanceType, UserManagerService } from '@univerjs/core';
+import { FUniver } from '@univerjs/core/facade';
+import { UniverDebuggerPlugin } from '@univerjs/debugger';
 import { defaultTheme } from '@univerjs/design';
 import { UniverDocsPlugin } from '@univerjs/docs';
+import { UniverDocsDrawingUIPlugin } from '@univerjs/docs-drawing-ui';
+import { UniverDocsHyperLinkUIPlugin } from '@univerjs/docs-hyper-link-ui';
+import { UniverDocsMentionUIPlugin } from '@univerjs/docs-mention-ui';
+import { UniverDocsThreadCommentUIPlugin } from '@univerjs/docs-thread-comment-ui';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
-import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
-import { UniverUIPlugin } from '@univerjs/ui';
-import { UniverImagePlugin } from '@univerjs/image';
-
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
+import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
+import { DEFAULT_DOCUMENT_DATA_SIMPLE } from '@univerjs/mockdata';
+import { UniverUIPlugin } from '@univerjs/ui';
+import { enUS, faIR, ruRU, zhCN } from '../locales';
 
-import { DEFAULT_DOCUMENT_DATA_CN } from '../data';
+import '../global.css';
 
-import { DebuggerPlugin } from '../plugins/debugger';
-
-import { locales } from './locales';
-
-// package info
-// eslint-disable-next-line no-console
-console.table({
-    NODE_ENV: process.env.NODE_ENV,
-    GIT_COMMIT_HASH: process.env.GIT_COMMIT_HASH,
-    GIT_REF_NAME: process.env.GIT_REF_NAME,
-    BUILD_TIME: process.env.BUILD_TIME,
-});
+/* eslint-disable node/prefer-global/process */
+const IS_E2E: boolean = !!process.env.IS_E2E;
 
 // univer
 const univer = new Univer({
     theme: defaultTheme,
     locale: LocaleType.ZH_CN,
-    locales,
+    locales: {
+        [LocaleType.ZH_CN]: zhCN,
+        [LocaleType.EN_US]: enUS,
+        [LocaleType.RU_RU]: ruRU,
+        [LocaleType.FA_IR]: faIR,
+    },
+    logLevel: LogLevel.VERBOSE,
 });
 
 // core plugins
 univer.registerPlugin(UniverRenderEnginePlugin);
 univer.registerPlugin(UniverFormulaEnginePlugin);
-univer.registerPlugin(DebuggerPlugin);
+univer.registerPlugin(UniverDebuggerPlugin);
 univer.registerPlugin(UniverUIPlugin, {
     container: 'app',
-    header: true,
 });
+
 univer.registerPlugin(UniverDocsPlugin);
 univer.registerPlugin(UniverDocsUIPlugin, {
     container: 'univerdoc',
@@ -65,9 +66,14 @@ univer.registerPlugin(UniverDocsUIPlugin, {
     },
 });
 
-univer.registerPlugin(UniverImagePlugin);
+univer.registerPlugin(UniverDocsDrawingUIPlugin);
+univer.registerPlugin(UniverDocsThreadCommentUIPlugin);
+univer.registerPlugin(UniverDocsHyperLinkUIPlugin);
+univer.registerPlugin(UniverDocsMentionUIPlugin);
 
-univer.createUniverDoc(DEFAULT_DOCUMENT_DATA_CN);
+if (!IS_E2E) {
+    univer.createUnit(UniverInstanceType.UNIVER_DOC, DEFAULT_DOCUMENT_DATA_SIMPLE);
+}
 
 // use for console test
 declare global {
@@ -78,3 +84,15 @@ declare global {
 }
 
 window.univer = univer;
+const injector = univer.__getInjector();
+const userManagerService = injector.get(UserManagerService);
+
+const mockUser = {
+    userID: 'Owner_qxVnhPbQ',
+    name: 'Owner',
+    avatar: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAInSURBVHgBtZU9TxtBEIbfWRzFSIdkikhBSqRQkJqkCKTCFkqVInSUSaT0wC8w/gXxD4gU2nRJkXQWhAZowDUUWKIwEgWWbEEB3mVmx3dn4DA2nB/ppNuPeWd29mMIPXDr+RxwtgRHeW6+guNPRxogqnL7Dwz9psJ27S4NShaeZTH3kwXy6I81dlRKcmRui88swdq9AcSFL7Buz1Vmlns64MiLsCjzwnIYHLH57tbfFbs7KRaXyEU8FVZofqccOfA5l7Q8LPIkGrwnb2RPNEXWFVMUF3L+kDCk0btDDAMzOm5YfAHDwp4tG74wnzAsiOYMnJ3GoDybA7IT98/jm5+JNnfiIzAS6LlqHQBN/i6b2t/cV1Hh6BfwYlHnHP4AXi5q/8kmMMpOs8+BixZw/Fd6xUEHEbnkgclvQP2fGp7uShRKnQ3G32rkjV1th8JhIGG7tR/JyjGteSOZELwGMmNqIIigRCLRh2OZIE6BjItdd7pCW6Uhm1zzkUtungSxwEUzNpQ+GQumtH1ej1MqgmNT6vwmhCq5yuwq56EYTbgeQUz3yvrpV1b4ok3nYJ+eYhgYmjRUqErx2EDq0Fr8FhG++iqVGqxlUJI/70Ar0UgJaWHj6hYVHJrfKssAHot1JfqwE9WVWzXZVd5z2Ws/4PnmtEjkXeKJDvxUecLbWOXH/DP6QQ4J72NS0adedp1aseBfXP8odlZFfPvBF7SN/8hky1TYuPOAXAEipMx15u5ToAAAAABJRU5ErkJggg==',
+    anonymous: false,
+    canBindAnonymous: false,
+};
+userManagerService.setCurrentUser(mockUser);
+window.univerAPI = FUniver.newAPI(univer);

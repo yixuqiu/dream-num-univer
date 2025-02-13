@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,28 @@
  * limitations under the License.
  */
 
-import { Disposable, toDisposable } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-import { Subject } from 'rxjs';
-
+import type { IDisposable } from '@univerjs/core';
 import type { IDialogPartMethodOptions } from '../../views/components/dialog-part/interface';
 import type { IDialogService } from './dialog.service';
 
+import { Disposable, Inject, Injector, toDisposable } from '@univerjs/core';
+import { Subject } from 'rxjs';
+import { connectInjector } from '../../utils/di';
+import { DialogPart } from '../../views/components/dialog-part/DialogPart';
+import { BuiltInUIPart, IUIPartsService } from '../parts/parts.service';
+
 export class DesktopDialogService extends Disposable implements IDialogService {
-    private _dialogOptions: IDialogPartMethodOptions[] = [];
-    private readonly _dialogOptions$ = new Subject<IDialogPartMethodOptions[]>();
+    protected _dialogOptions: IDialogPartMethodOptions[] = [];
+    protected readonly _dialogOptions$ = new Subject<IDialogPartMethodOptions[]>();
+
+    constructor(
+        @Inject(Injector) protected readonly _injector: Injector,
+        @IUIPartsService protected readonly _uiPartsService: IUIPartsService
+    ) {
+        super();
+
+        this._initUIPart();
+    }
 
     override dispose(): void {
         super.dispose();
@@ -35,7 +47,7 @@ export class DesktopDialogService extends Disposable implements IDialogService {
         if (this._dialogOptions.find((item) => item.id === option.id)) {
             this._dialogOptions = this._dialogOptions.map((item) => ({
                 ...(item.id === option.id ? option : item),
-                visible: true,
+                visible: item.id === option.id ? true : item.visible,
             }));
         } else {
             this._dialogOptions.push({
@@ -61,7 +73,22 @@ export class DesktopDialogService extends Disposable implements IDialogService {
         this._dialogOptions$.next([...this._dialogOptions]);
     }
 
+    closeAll(expectIds?: string[]): void {
+        const expectIdSet = new Set(expectIds);
+        this._dialogOptions = this._dialogOptions.map((item) => ({
+            ...item,
+            visible: expectIdSet.has(item.id) ? item.visible : false,
+        }));
+        this._dialogOptions$.next([...this._dialogOptions]);
+    }
+
     getDialogs$() {
-        return this._dialogOptions$;
+        return this._dialogOptions$.asObservable();
+    }
+
+    protected _initUIPart(): void {
+        this.disposeWithMe(
+            this._uiPartsService.registerComponent(BuiltInUIPart.GLOBAL, () => connectInjector(DialogPart, this._injector))
+        );
     }
 }

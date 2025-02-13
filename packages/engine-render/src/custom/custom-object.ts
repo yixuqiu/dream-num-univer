@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-import { BaseObject } from '../base-object';
-import type { IViewportBound, Vector2 } from '../basics/vector2';
+import type { IViewportInfo, Vector2 } from '../basics/vector2';
 import type { UniverRenderingContext } from '../context';
+import { BaseObject } from '../base-object';
 
 export class CustomObject extends BaseObject {
     constructor(
         key?: string,
-        private _render = (mainCtx: UniverRenderingContext) => {},
+        private _render = (mainCtx: UniverRenderingContext) => { /* empty */ },
         private _isHitCustom?: (coord: Vector2) => boolean
     ) {
         super(key);
@@ -33,7 +33,7 @@ export class CustomObject extends BaseObject {
         };
     }
 
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,11 +69,8 @@ export function isLastGlyph(glyph: Nullable<IDocumentSkeletonGlyph>) {
 
 export function isFirstGlyph(glyph: Nullable<IDocumentSkeletonGlyph>) {
     const divide = glyph?.parent;
-
     const line = divide?.parent;
-
     const glyphGroup = divide?.glyphGroup;
-
     const divides = line?.divides;
 
     if (glyphGroup && glyph && divides && divide) {
@@ -103,9 +100,15 @@ export function getParagraphByGlyph(glyph: Nullable<IDocumentSkeletonGlyph>, bod
         return;
     }
 
-    for (const paragraph of paragraphs) {
+    for (let i = 0; i < paragraphs.length; i++) {
+        const paragraph = paragraphs[i];
+        const prevParagraph = paragraphs[i - 1];
         if (paragraph.startIndex === line.paragraphIndex) {
-            return paragraph;
+            return {
+                ...paragraph,
+                paragraphStart: (prevParagraph?.startIndex ?? -1) + 1,
+                paragraphEnd: paragraph.startIndex,
+            };
         }
     }
 }

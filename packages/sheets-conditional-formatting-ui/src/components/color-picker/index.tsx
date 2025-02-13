@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import { Dropdown, ColorPicker as OriginColorPicker } from '@univerjs/design';
 import { ColorKit } from '@univerjs/core';
-import { ComponentManager } from '@univerjs/ui';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import React, { useMemo } from 'react';
+import { DropdownLegacy, ColorPicker as OriginColorPicker } from '@univerjs/design';
 import { MoreDownSingle } from '@univerjs/icons';
+import { ComponentManager, useDependency } from '@univerjs/ui';
+import React, { useMemo } from 'react';
 
 import styles from './index.module.less';
 
@@ -41,18 +40,26 @@ export const ColorPicker = (props: IColorPickerProps) => {
 
     return Icon && (!disable
         ? (
-            <Dropdown overlay={(
-                <div className={`${styles.cfColorPicker} `}>
-                    <OriginColorPicker color={color} onChange={onChange} />
-                </div>
-            )}
+            <DropdownLegacy
+                overlay={(
+                    <div className={`
+                      ${styles.cfColorPicker}
+                    `}
+                    >
+                        <OriginColorPicker value={color} onChange={onChange} />
+                    </div>
+                )}
             >
-                <span className={`${styles.cfColorPickerIcon} ${className}`}>
+                <span className={`
+                  ${styles.cfColorPickerIcon}
+                  ${className}
+                `}
+                >
                     <Icon extend={{ colorChannel1: colorKit.isValid ? color : 'rgb(var(--primary-color))' }} />
                     {isNeedDropdownIcon && <MoreDownSingle className={styles.iconDropdown} />}
                 </span>
 
-            </Dropdown>
+            </DropdownLegacy>
         )
         : <Icon className={className} extend={{ colorChannel1: colorKit.isValid ? color : 'rgb(var(--primary-color))' }} />);
 };

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { ICellData, IMutationInfo, IObjectMatrixPrimitiveType, IRange, Nullable } from '@univerjs/core';
+import type { IAccessor, ICellData, IMutationInfo, IObjectMatrixPrimitiveType, IRange, Nullable } from '@univerjs/core';
 import { Dimension, getArrayLength, IUniverInstanceService, ObjectMatrix, Tools } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
 
 import type {
     IDeleteRangeMutationParams,
@@ -31,6 +30,7 @@ import {
     SetRangeValuesUndoMutationFactory,
 } from '../mutations/set-range-values.mutation';
 import { getSheetMutationTarget } from '../commands/utils/target-util';
+import { generateNullCell } from '../../basics/utils';
 
 /**
  * Generate undo mutation of a `InsertRangeMutation`
@@ -179,6 +179,7 @@ export function getInsertRangeMutations(accessor: IAccessor, params: IInsertRang
     };
 }
 
+// eslint-disable-next-line max-lines-per-function
 export function getRemoveRangeMutations(accessor: IAccessor, params: IDeleteRangeMutationParams) {
     const redo: IMutationInfo[] = [];
     const undo: IMutationInfo[] = [];
@@ -195,7 +196,7 @@ export function getRemoveRangeMutations(accessor: IAccessor, params: IDeleteRang
         const setRangeValuesMutationParams: ISetRangeValuesMutationParams = {
             subUnitId,
             unitId,
-            cellValue: generateNullCellValue([range]),
+            cellValue: generateNullCell([range]),
         };
         const undoSetRangeValuesMutationParams: ISetRangeValuesMutationParams = SetRangeValuesUndoMutationFactory(
             accessor,
@@ -434,18 +435,4 @@ export function handleDeleteRangeMutation<T>(
             }
         }
     }
-}
-
-export function generateNullCellValue(range: IRange[]): IObjectMatrixPrimitiveType<Nullable<ICellData>> {
-    const cellValue = new ObjectMatrix<Nullable<ICellData>>();
-    range.forEach((range: IRange) => {
-        const { startRow, startColumn, endRow, endColumn } = range;
-        for (let i = startRow; i <= endRow; i++) {
-            for (let j = startColumn; j <= endColumn; j++) {
-                cellValue.setValue(i, j, null);
-            }
-        }
-    });
-
-    return cellValue.getData();
 }

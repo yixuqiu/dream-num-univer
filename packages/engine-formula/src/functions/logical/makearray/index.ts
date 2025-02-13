@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +17,18 @@
 import { ErrorType } from '../../../basics/error-type';
 import type { AsyncObject } from '../../../engine/reference-object/base-reference-object';
 import { AsyncArrayObject } from '../../../engine/reference-object/base-reference-object';
+import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
 import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import type { LambdaValueObjectObject } from '../../../engine/value-object/lambda-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Makearray extends BaseFunction {
-    override calculate(...variants: BaseValueObject[]) {
-        if (variants.length !== 3) {
-            return ErrorValueObject.create(ErrorType.VALUE);
-        }
+    override minParams = 3;
 
+    override maxParams = 3;
+
+    override calculate(...variants: BaseValueObject[]) {
         const row = this.getIndexNumValue(variants[0]);
 
         if (typeof row !== 'number') {
@@ -53,7 +54,11 @@ export class Makearray extends BaseFunction {
                 result[r] = [];
             }
             for (let c = 0; c < column; c++) {
-                const value = lambda.execute(NumberValueObject.create(r + 1), NumberValueObject.create(c + 1));
+                let value = lambda.execute(NumberValueObject.create(r + 1), NumberValueObject.create(c + 1));
+
+                if (value.isArray()) {
+                    value = (value as ArrayValueObject).get(0, 0) as BaseValueObject;
+                }
 
                 result[r][c] = value;
             }

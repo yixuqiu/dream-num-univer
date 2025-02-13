@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-import React, { useCallback, useMemo } from 'react';
-import { Button, type ISegmentedProps, Segmented } from '@univerjs/design';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import { useObservable } from '@univerjs/ui';
-import { ICommandService, LocaleService } from '@univerjs/core';
-
-import { of } from 'rxjs';
+import type { ISegmentedProps } from '@univerjs/design';
 import type { ByConditionsModel, ByValuesModel } from '../../services/sheets-filter-panel.service';
+import { ICommandService, LocaleService } from '@univerjs/core';
+import { Button, Segmented } from '@univerjs/design';
+import { SheetsFilterService } from '@univerjs/sheets-filter';
+import { SheetsUIPart } from '@univerjs/sheets-ui';
+
+import { ComponentContainer, useComponentsOfPart, useDependency, useObservable } from '@univerjs/ui';
+import React, { useCallback, useMemo } from 'react';
+import { of } from 'rxjs';
+import { ChangeFilterByOperation, CloseFilterPanelOperation } from '../../commands/operations/sheets-filter.operation';
 import { FilterBy, SheetsFilterPanelService } from '../../services/sheets-filter-panel.service';
-import { ChangeFilterByOperation, CloseFilterPanelOperation } from '../../commands/sheets-filter.operation';
 import styles from './index.module.less';
 import { FilterByCondition } from './SheetsFilterByConditionsPanel';
 import { FilterByValue } from './SheetsFilterByValuesPanel';
@@ -64,12 +66,21 @@ export function FilterPanel() {
         commandService.executeCommand(CloseFilterPanelOperation.id);
     }, [filterByModel, commandService]);
 
+    const filterService = useDependency(SheetsFilterService);
+    const range = filterService.activeFilterModel?.getRange();
+    const colIndex = sheetsFilterPanelService.col;
+    const FilterPanelEmbedPointPart = useComponentsOfPart(SheetsUIPart.FILTER_PANEL_EMBED_POINT);
+
     return (
         <div className={styles.sheetsFilterPanel}>
+            <ComponentContainer
+                components={FilterPanelEmbedPointPart}
+                sharedProps={{ range, colIndex, onClose: onCancel }}
+            />
             <div className={styles.sheetsFilterPanelHeader}>
-                <Segmented value={filterBy} options={options} onChange={(value) => onFilterByTypeChange(value as FilterBy)}></Segmented>
+                <Segmented value={filterBy} options={options} onChange={(value) => onFilterByTypeChange(value as FilterBy)} />
             </div>
-            { filterByModel
+            {filterByModel
                 ? (
                     <div className={styles.sheetsFilterPanelContent}>
                         {filterBy === FilterBy.VALUES
@@ -77,7 +88,9 @@ export function FilterPanel() {
                             : <FilterByCondition model={filterByModel as ByConditionsModel} />}
                     </div>
                 )
-                : null }
+                : (
+                    <div style={{ flex: 1 }} />
+                )}
             <div className={styles.sheetsFilterPanelFooter}>
                 <Button type="link" onClick={onClearCriteria} disabled={clearFilterDisabled}>{localeService.t('sheets-filter.panel.clear-filter')}</Button>
                 <span className={styles.sheetsFilterPanelFooterPrimaryButtons}>
@@ -94,7 +107,7 @@ function useFilterByOptions(localeService: LocaleService): ISegmentedProps['opti
     return useMemo(() => [
         { label: localeService.t('sheets-filter.panel.by-values'), value: FilterBy.VALUES },
         { label: localeService.t('sheets-filter.panel.by-conditions'), value: FilterBy.CONDITIONS },
-    ]
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    , [locale, localeService]);
+    ],
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale, localeService]);
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,11 @@
  */
 
 import type { IScale } from '@univerjs/core';
-import { getColorStyle } from '@univerjs/core';
-
 import type { IDocumentSkeletonGlyph } from '../../../basics/i-document-skeleton-cached';
-import { Vector2 } from '../../../basics/vector2';
+
 import type { UniverRenderingContext } from '../../../context';
+import { getColorStyle } from '@univerjs/core';
+import { Vector2 } from '../../../basics/vector2';
 import { DocumentsSpanAndLineExtensionRegistry } from '../../extension';
 import { docExtension } from '../doc-extension';
 
@@ -36,31 +36,27 @@ export class Background extends docExtension {
 
     override draw(ctx: UniverRenderingContext, parentScale: IScale, span: IDocumentSkeletonGlyph) {
         const line = span.parent?.parent;
-        if (!line) {
+        if (line == null) {
             return;
         }
 
         const { contentHeight = 0 } = line;
-        const { ts: textStyle, width } = span;
-        if (!textStyle) {
+        const { ts: textStyle, width, content } = span;
+        if (textStyle?.bg == null) {
             return;
         }
 
         const { bg } = textStyle;
 
-        if (!bg) {
-            return;
-        }
-
         const background = getColorStyle(bg);
 
         const { spanStartPoint = Vector2.create(0, 0) } = this.extensionOffset;
 
-        const DELTA = 1.5;
+        const DELTA = 1;
 
-        if (background) {
+        if (background && content !== '\r') {
             ctx.fillStyle = background;
-            ctx.fillRectByPrecision(spanStartPoint.x - 0.5, spanStartPoint.y - 1, width + 1, contentHeight + 2 * DELTA);
+            ctx.fillRect(spanStartPoint.x - 0.5, spanStartPoint.y + 1, width + 1, contentHeight + 2 * DELTA);
         }
     }
 

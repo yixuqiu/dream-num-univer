@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
-import { BooleanNumber, CommandType, ICommandService, IUndoRedoService, IUniverInstanceService } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
+import type { IAccessor, ICommand, Workbook } from '@univerjs/core';
 import type { ISetWorksheetHideMutationParams } from '../mutations/set-worksheet-hide.mutation';
-import { SetWorksheetHideMutation, SetWorksheetHideMutationFactory } from '../mutations/set-worksheet-hide.mutation';
+
 import type { ISetWorksheetActiveOperationParams } from '../operations/set-worksheet-active.operation';
+import { BooleanNumber, CommandType, ICommandService, IUndoRedoService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+import { SetWorksheetHideMutation, SetWorksheetHideMutationFactory } from '../mutations/set-worksheet-hide.mutation';
 import {
     SetWorksheetActiveOperation,
     // SetWorksheetUnActivateMutationFactory,
@@ -28,14 +27,17 @@ import {
 import { getSheetCommandTarget } from './utils/target-util';
 
 export interface ISetWorksheetShowCommandParams {
-    value?: string;
+    unitId: string;
+    subUnitId: string;
 }
 
 export const SetWorksheetShowCommand: ICommand = {
     type: CommandType.COMMAND,
     id: 'sheet.command.set-worksheet-show',
 
-    handler: async (accessor: IAccessor, params?: ISetWorksheetShowCommandParams) => {
+    handler: (accessor: IAccessor, params: ISetWorksheetShowCommandParams) => {
+        const { unitId, subUnitId } = params;
+
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
@@ -43,8 +45,7 @@ export const SetWorksheetShowCommand: ICommand = {
         const target = getSheetCommandTarget(accessor.get(IUniverInstanceService));
         if (!target) return false;
 
-        const { unitId, subUnitId } = target;
-        const workbook = univerInstanceService.getUniverSheetInstance(unitId);
+        const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
         if (!workbook) return false;
         const worksheet = workbook.getSheetBySheetId(subUnitId);
         if (!worksheet) return false;

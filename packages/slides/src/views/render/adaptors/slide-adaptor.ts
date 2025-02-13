@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import type { IColorStyle, IPageElement, ISlidePage } from '@univerjs/core';
-import { getColorStyle, PageElementType, SlideDataModel } from '@univerjs/core';
-import type { Engine } from '@univerjs/engine-render';
+import { getColorStyle, Inject, Injector, PageElementType, SlideDataModel } from '@univerjs/core';
 import { Rect, Scene, Slide, Viewport } from '@univerjs/engine-render';
-import { Inject, Injector } from '@wendellhu/redi';
+import type { IColorStyle, IPageElement, ISlidePage } from '@univerjs/core';
+import type { Engine } from '@univerjs/engine-render';
 
 import { CanvasObjectProviderRegistry, ObjectAdaptor } from '../adaptor';
 import { ObjectProvider } from '../object-provider';
@@ -88,7 +87,6 @@ export class SlideAdaptor extends ObjectAdaptor {
             skewY,
             flipX,
             flipY,
-            isTransformer: false,
             forceRender: true,
         });
 
@@ -109,7 +107,7 @@ export class SlideAdaptor extends ObjectAdaptor {
         for (let i = 0, len = pageOrder.length; i < len; i++) {
             const page = pages[pageOrder[i]];
             const { id } = page;
-            slideComponent.addPage(this._createScene(id, slideComponent, page, mainScene, model));
+            slideComponent.addPageScene(this._createScene(id, slideComponent, page, mainScene, model));
         }
 
         slideComponent.activeFirstPage();
@@ -130,6 +128,8 @@ export class SlideAdaptor extends ObjectAdaptor {
             top: 0,
             bottom: 0,
             right: 0,
+            explicitViewportWidthSet: false,
+            explicitViewportHeightSet: false,
         });
 
         viewMain.closeClip();
@@ -138,11 +138,13 @@ export class SlideAdaptor extends ObjectAdaptor {
 
         const objects = this._ObjectProvider?.convertToRenderObjects(pageElements, mainScene);
 
-        scene.openTransformer();
-
         this._addBackgroundRect(scene, pageBackgroundFill, model);
 
         scene.addObjects(objects!);
+
+        objects?.forEach((object) => {
+            scene.attachTransformerTo(object);
+        });
 
         return scene;
     }

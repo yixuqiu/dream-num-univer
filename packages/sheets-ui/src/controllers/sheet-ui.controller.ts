@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle, UniverInstanceType } from '@univerjs/core';
+import type { IUniverSheetsUIConfig } from './config.schema';
+import { Disposable, ICommandService, IConfigService, Inject, Injector, UniverInstanceType } from '@univerjs/core';
+import { DocSelectionRenderService } from '@univerjs/docs-ui';
+import { IRenderManagerService } from '@univerjs/engine-render';
+
+import { HideGridlines } from '@univerjs/icons';
 import {
     SetBoldCommand,
     SetFontFamilyCommand,
@@ -23,22 +28,20 @@ import {
     SetStrikeThroughCommand,
     SetUnderlineCommand,
 } from '@univerjs/sheets';
-import type { IDesktopUIController, IMenuItemFactory } from '@univerjs/ui';
-import { ComponentManager, DesktopUIPart, ILayoutService, IMenuService, IShortcutService, IUIController } from '@univerjs/ui';
-import { Inject, Injector } from '@wendellhu/redi';
-import { connectInjector } from '@wendellhu/redi/react-bindings';
-
-import { ITextSelectionRenderManager } from '@univerjs/engine-render';
+import { BuiltInUIPart, ComponentManager, connectInjector, ILayoutService, IMenuManagerService, IShortcutService, IUIPartsService } from '@univerjs/ui';
 import {
     AddWorksheetMergeAllCommand,
     AddWorksheetMergeCommand,
     AddWorksheetMergeHorizontalCommand,
     AddWorksheetMergeVerticalCommand,
 } from '../commands/commands/add-worksheet-merge.command';
-import { DeleteRangeMoveLeftConfirmCommand } from '../commands/commands/delete-range-move-left-confirm.command ';
+import { AutoClearContentCommand, AutoFillCommand } from '../commands/commands/auto-fill.command';
+import { DeleteRangeMoveLeftConfirmCommand } from '../commands/commands/delete-range-move-left-confirm.command';
 import { DeleteRangeMoveUpConfirmCommand } from '../commands/commands/delete-range-move-up-confirm.command';
+import { SetColumnHeaderHeightCommand, SetRowHeaderWidthCommand } from '../commands/commands/headersize-changed.command';
 import { HideColConfirmCommand, HideRowConfirmCommand } from '../commands/commands/hide-row-col-confirm.command';
 import {
+    ResetRangeTextColorCommand,
     SetRangeBoldCommand,
     SetRangeFontFamilyCommand,
     SetRangeFontSizeCommand,
@@ -51,6 +54,7 @@ import {
 } from '../commands/commands/inline-format.command';
 import { InsertRangeMoveDownConfirmCommand } from '../commands/commands/insert-range-move-down-confirm.command';
 import { InsertRangeMoveRightConfirmCommand } from '../commands/commands/insert-range-move-right-confirm.command';
+import { AddRangeProtectionFromContextMenuCommand, AddRangeProtectionFromSheetBarCommand, AddRangeProtectionFromToolbarCommand, DeleteRangeProtectionFromContextMenuCommand, SetRangeProtectionFromContextMenuCommand, ViewSheetPermissionFromContextMenuCommand, ViewSheetPermissionFromSheetBarCommand } from '../commands/commands/range-protection.command';
 import { RefillCommand } from '../commands/commands/refill.command';
 import { RemoveColConfirmCommand, RemoveRowConfirmCommand } from '../commands/commands/remove-row-col-confirm.command';
 import { RemoveSheetConfirmCommand } from '../commands/commands/remove-sheet-confirm.command';
@@ -60,7 +64,6 @@ import {
     SetOnceFormatPainterCommand,
 } from '../commands/commands/set-format-painter.command';
 import {
-    CancelFrozenCommand,
     SetColumnFrozenCommand,
     SetRowFrozenCommand,
     SetSelectionFrozenCommand,
@@ -72,8 +75,10 @@ import {
     MoveSelectionEnterAndTabCommand,
     SelectAllCommand,
 } from '../commands/commands/set-selection.command';
+import { SetWorksheetColAutoWidthCommand } from '../commands/commands/set-worksheet-auto-col-width.command';
 import { ChangeZoomRatioCommand, SetZoomRatioCommand } from '../commands/commands/set-zoom-ratio.command';
 import { ShowMenuListCommand } from '../commands/commands/unhide.command';
+import { ChangeSheetProtectionFromSheetBarCommand, DeleteWorksheetProtectionFormSheetBarCommand } from '../commands/commands/worksheet-protection.command';
 import { SetActivateCellEditOperation } from '../commands/operations/activate-cell-edit.operation';
 import {
     SetCellEditVisibleArrowOperation,
@@ -81,9 +86,14 @@ import {
     SetCellEditVisibleWithF2Operation,
 } from '../commands/operations/cell-edit.operation';
 import { RenameSheetOperation } from '../commands/operations/rename-sheet.operation';
+import { ScrollToRangeOperation } from '../commands/operations/scroll-to-range.operation';
 import { SetScrollOperation } from '../commands/operations/scroll.operation';
 import { SetFormatPainterOperation } from '../commands/operations/set-format-painter.operation';
 import { SetZoomRatioOperation } from '../commands/operations/set-zoom-ratio.operation';
+import { SheetPermissionOpenDialogOperation } from '../commands/operations/sheet-permission-open-dialog.operation';
+import { SheetPermissionOpenPanelOperation } from '../commands/operations/sheet-permission-open-panel.operation';
+import { SidebarDefinedNameOperation } from '../commands/operations/sidebar-defined-name.operation';
+
 import { BorderPanel } from '../components/border-panel/BorderPanel';
 import { BORDER_PANEL_COMPONENT } from '../components/border-panel/interface';
 import { COLOR_PICKER_COMPONENT, ColorPicker } from '../components/color-picker';
@@ -95,87 +105,11 @@ import {
 } from '../components/font-family';
 import { FONT_SIZE_COMPONENT, FontSize } from '../components/font-size';
 import { MENU_ITEM_INPUT_COMPONENT, MenuItemInput } from '../components/menu-item-input';
-import { RenderSheetContent, RenderSheetFooter, RenderSheetHeader } from '../views/sheet-container/SheetContainer';
 import { DEFINED_NAME_CONTAINER } from '../views/defined-name/component-name';
 import { DefinedNameContainer } from '../views/defined-name/DefinedNameContainer';
-import { SidebarDefinedNameOperation } from '../commands/operations/sidebar-defined-name.operation';
-import { CellBorderSelectorMenuItemFactory } from './menu/border.menu';
-import {
-    ClearSelectionAllMenuItemFactory,
-    ClearSelectionContentMenuItemFactory,
-    ClearSelectionFormatMenuItemFactory,
-    ClearSelectionMenuItemFactory,
-} from './menu/clear.menu';
-import {
-    DeleteRangeMenuItemFactory,
-    DeleteRangeMoveLeftMenuItemFactory,
-    DeleteRangeMoveUpMenuItemFactory,
-    RemoveColMenuItemFactory,
-    RemoveRowMenuItemFactory,
-} from './menu/delete.menu';
-import {
-    CellInsertMenuItemFactory,
-    ColInsertMenuItemFactory,
-    InsertColAfterMenuItemFactory,
-    InsertColBeforeMenuItemFactory,
-    InsertRangeMoveDownMenuItemFactory,
-    InsertRangeMoveRightMenuItemFactory,
-    InsertRowAfterMenuItemFactory,
-    InsertRowBeforeMenuItemFactory,
-    RowInsertMenuItemFactory,
-} from './menu/insert.menu';
-import {
-    BackgroundColorSelectorMenuItemFactory,
-    BoldMenuItemFactory,
-    CancelFrozenMenuItemFactory,
-    CopyMenuItemFactory,
-    FitContentMenuItemFactory,
-    FontFamilySelectorMenuItemFactory,
-    FontSizeSelectorMenuItemFactory,
-    FormatPainterMenuItemFactory,
-    FrozenColMenuItemFactory,
-    FrozenMenuItemFactory,
-    FrozenRowMenuItemFactory,
-    HideColMenuItemFactory,
-    HideRowMenuItemFactory,
-    HorizontalAlignMenuItemFactory,
-    ItalicMenuItemFactory,
-    PasteBesidesBorderMenuItemFactory,
-    PasteColWidthMenuItemFactory,
-    PasteFormatMenuItemFactory,
-    PasteMenuItemFactory,
-    PasteSpacialMenuItemFactory,
-    PasteValueMenuItemFactory,
-    ResetBackgroundColorMenuItemFactory,
-    ResetTextColorMenuItemFactory,
-    SetColWidthMenuItemFactory,
-    SetRowHeightMenuItemFactory,
-    SheetFrozenHeaderMenuItemFactory,
-    SheetFrozenMenuItemFactory,
-    ShowColMenuItemFactory,
-    ShowRowMenuItemFactory,
-    StrikeThroughMenuItemFactory,
-    TextColorSelectorMenuItemFactory,
-    TextRotateMenuItemFactory,
-    UnderlineMenuItemFactory,
-    VerticalAlignMenuItemFactory,
-    WrapTextMenuItemFactory,
-} from './menu/menu';
-import {
-    CellMergeAllMenuItemFactory,
-    CellMergeCancelMenuItemFactory,
-    CellMergeHorizontalMenuItemFactory,
-    CellMergeMenuItemFactory,
-    CellMergeVerticalMenuItemFactory,
-} from './menu/merge.menu';
-import {
-    ChangeColorSheetMenuItemFactory,
-    CopySheetMenuItemFactory,
-    DeleteSheetMenuItemFactory,
-    HideSheetMenuItemFactory,
-    RenameSheetMenuItemFactory,
-    ShowMenuItemFactory,
-} from './menu/sheet.menu';
+import { RenderSheetContent, RenderSheetFooter, RenderSheetHeader } from '../views/sheet-container/SheetContainer';
+import { SHEETS_UI_PLUGIN_CONFIG_KEY } from './config.schema';
+import { menuSchema } from './menu.schema';
 import {
     EditorBreakLineShortcut,
     EditorCursorEnterShortcut,
@@ -227,16 +161,16 @@ import {
     ZoomOutShortcutItem,
 } from './shortcuts/view.shortcut';
 
-@OnLifecycle(LifecycleStages.Ready, SheetUIController)
 export class SheetUIController extends Disposable {
     constructor(
-        @Inject(Injector) private readonly _injector: Injector,
-        @Inject(ComponentManager) private readonly _componentManager: ComponentManager,
-        @ILayoutService private readonly _layoutService: ILayoutService,
-        @ICommandService private readonly _commandService: ICommandService,
-        @IShortcutService private readonly _shortcutService: IShortcutService,
-        @IMenuService private readonly _menuService: IMenuService,
-        @IUIController private readonly _uiController: IDesktopUIController
+        @Inject(Injector) protected readonly _injector: Injector,
+        @Inject(ComponentManager) protected readonly _componentManager: ComponentManager,
+        @ILayoutService protected readonly _layoutService: ILayoutService,
+        @ICommandService protected readonly _commandService: ICommandService,
+        @IShortcutService protected readonly _shortcutService: IShortcutService,
+        @IMenuManagerService protected readonly _menuManagerService: IMenuManagerService,
+        @IUIPartsService protected readonly _uiPartsService: IUIPartsService,
+        @IConfigService protected readonly _configService: IConfigService
     ) {
         super();
 
@@ -244,7 +178,7 @@ export class SheetUIController extends Disposable {
     }
 
     private _init(): void {
-        this._initCustomComponents();
+        this._initComponents();
         this._initCommands();
         this._initMenus();
         this._initShortcuts();
@@ -252,8 +186,10 @@ export class SheetUIController extends Disposable {
         this._initFocusHandler();
     }
 
-    private _initCustomComponents(): void {
+    private _initComponents(): void {
         const componentManager = this._componentManager;
+
+        // init custom components
         this.disposeWithMe(componentManager.register(MENU_ITEM_INPUT_COMPONENT, MenuItemInput));
         this.disposeWithMe(componentManager.register(BORDER_PANEL_COMPONENT, BorderPanel));
         this.disposeWithMe(componentManager.register(COLOR_PICKER_COMPONENT, ColorPicker));
@@ -261,6 +197,9 @@ export class SheetUIController extends Disposable {
         this.disposeWithMe(componentManager.register(FONT_FAMILY_ITEM_COMPONENT, FontFamilyItem));
         this.disposeWithMe(componentManager.register(FONT_SIZE_COMPONENT, FontSize));
         this.disposeWithMe(componentManager.register(DEFINED_NAME_CONTAINER, DefinedNameContainer));
+
+        // init icons
+        this.disposeWithMe(componentManager.register('HideGridlines', HideGridlines));
     }
 
     private _initCommands(): void {
@@ -296,6 +235,7 @@ export class SheetUIController extends Disposable {
             SetRangeFontSizeCommand,
             SetRangeFontFamilyCommand,
             SetRangeTextColorCommand,
+            ResetRangeTextColorCommand,
             SetItalicCommand,
             SetStrikeThroughCommand,
             SetFontFamilyCommand,
@@ -309,7 +249,7 @@ export class SheetUIController extends Disposable {
             SetSelectionFrozenCommand,
             SetRowFrozenCommand,
             SetColumnFrozenCommand,
-            CancelFrozenCommand,
+            ScrollToRangeOperation,
             SetUnderlineCommand,
             SetZoomRatioCommand,
             SetZoomRatioOperation,
@@ -320,88 +260,31 @@ export class SheetUIController extends Disposable {
             InsertRangeMoveRightConfirmCommand,
             DeleteRangeMoveLeftConfirmCommand,
             SidebarDefinedNameOperation,
+            AutoFillCommand,
+            AutoClearContentCommand,
+
+            // permission
+            SheetPermissionOpenPanelOperation,
+            SheetPermissionOpenDialogOperation,
+            AddRangeProtectionFromToolbarCommand,
+            AddRangeProtectionFromContextMenuCommand,
+            ViewSheetPermissionFromContextMenuCommand,
+            AddRangeProtectionFromSheetBarCommand,
+            ViewSheetPermissionFromSheetBarCommand,
+            ChangeSheetProtectionFromSheetBarCommand,
+            DeleteRangeProtectionFromContextMenuCommand,
+            SetRangeProtectionFromContextMenuCommand,
+            DeleteWorksheetProtectionFormSheetBarCommand,
+            SetWorksheetColAutoWidthCommand,
+            SetRowHeaderWidthCommand,
+            SetColumnHeaderHeightCommand,
         ].forEach((c) => {
             this.disposeWithMe(this._commandService.registerCommand(c));
         });
     }
 
     private _initMenus(): void {
-        (
-            [
-                // context menu
-                CopyMenuItemFactory,
-                PasteMenuItemFactory,
-                PasteSpacialMenuItemFactory,
-                PasteValueMenuItemFactory,
-                PasteFormatMenuItemFactory,
-                PasteColWidthMenuItemFactory,
-                PasteBesidesBorderMenuItemFactory,
-                ClearSelectionContentMenuItemFactory,
-                ClearSelectionFormatMenuItemFactory,
-                ClearSelectionAllMenuItemFactory,
-                ClearSelectionMenuItemFactory,
-                ColInsertMenuItemFactory,
-                RowInsertMenuItemFactory,
-                CellInsertMenuItemFactory,
-                InsertRowBeforeMenuItemFactory,
-                InsertRowAfterMenuItemFactory,
-                InsertColBeforeMenuItemFactory,
-                InsertColAfterMenuItemFactory,
-                RemoveRowMenuItemFactory,
-                HideRowMenuItemFactory,
-                ShowRowMenuItemFactory,
-                HideColMenuItemFactory,
-                ShowColMenuItemFactory,
-                RemoveColMenuItemFactory,
-                SetRowHeightMenuItemFactory,
-                FitContentMenuItemFactory,
-                SetColWidthMenuItemFactory,
-                DeleteRangeMenuItemFactory,
-                DeleteRangeMoveLeftMenuItemFactory,
-                DeleteRangeMoveUpMenuItemFactory,
-                InsertRangeMoveRightMenuItemFactory,
-                InsertRangeMoveDownMenuItemFactory,
-                FrozenMenuItemFactory,
-                FrozenRowMenuItemFactory,
-                FrozenColMenuItemFactory,
-                CancelFrozenMenuItemFactory,
-                SheetFrozenMenuItemFactory,
-                SheetFrozenHeaderMenuItemFactory,
-
-                // toolbar
-                FormatPainterMenuItemFactory,
-                BoldMenuItemFactory,
-                ItalicMenuItemFactory,
-                UnderlineMenuItemFactory,
-                StrikeThroughMenuItemFactory,
-                FontFamilySelectorMenuItemFactory,
-                FontSizeSelectorMenuItemFactory,
-                ResetTextColorMenuItemFactory,
-                TextColorSelectorMenuItemFactory,
-                ResetBackgroundColorMenuItemFactory,
-                BackgroundColorSelectorMenuItemFactory,
-                CellBorderSelectorMenuItemFactory,
-                CellMergeMenuItemFactory,
-                CellMergeAllMenuItemFactory,
-                CellMergeVerticalMenuItemFactory,
-                CellMergeHorizontalMenuItemFactory,
-                CellMergeCancelMenuItemFactory,
-                HorizontalAlignMenuItemFactory,
-                VerticalAlignMenuItemFactory,
-                WrapTextMenuItemFactory,
-                TextRotateMenuItemFactory,
-
-                // sheetbar
-                DeleteSheetMenuItemFactory,
-                CopySheetMenuItemFactory,
-                RenameSheetMenuItemFactory,
-                ChangeColorSheetMenuItemFactory,
-                HideSheetMenuItemFactory,
-                ShowMenuItemFactory,
-            ] as IMenuItemFactory[]
-        ).forEach((factory) => {
-            this.disposeWithMe(this._menuService.addMenuItem(this._injector.invoke(factory)));
-        });
+        this._menuManagerService.mergeMenu(menuSchema);
     }
 
     private _initShortcuts(): void {
@@ -463,21 +346,28 @@ export class SheetUIController extends Disposable {
         });
     }
 
-    private _initWorkbenchParts(): void {
-        const uiController = this._uiController;
+    protected _initWorkbenchParts(): void {
+        const uiController = this._uiPartsService;
         const injector = this._injector;
 
-        this.disposeWithMe(uiController.registerComponent(DesktopUIPart.HEADER, () => connectInjector(RenderSheetHeader, injector)));
-        this.disposeWithMe(uiController.registerComponent(DesktopUIPart.FOOTER, () => connectInjector(RenderSheetFooter, injector)));
-        this.disposeWithMe(uiController.registerComponent(DesktopUIPart.CONTENT, () => connectInjector(RenderSheetContent, injector)));
+        const config = this._configService.getConfig<IUniverSheetsUIConfig>(SHEETS_UI_PLUGIN_CONFIG_KEY);
+        if (config?.formulaBar !== false) {
+            this.disposeWithMe(uiController.registerComponent(BuiltInUIPart.HEADER, () => connectInjector(RenderSheetHeader, injector)));
+        }
+        this.disposeWithMe(uiController.registerComponent(BuiltInUIPart.FOOTER, () => connectInjector(RenderSheetFooter, injector)));
+        this.disposeWithMe(uiController.registerComponent(BuiltInUIPart.CONTENT, () => connectInjector(RenderSheetContent, injector)));
     }
 
-    private _initFocusHandler(): void {
+    protected _initFocusHandler(): void {
         this.disposeWithMe(
             this._layoutService.registerFocusHandler(UniverInstanceType.UNIVER_SHEET, (_unitId: string) => {
                 // DEBT: `_unitId` is not used hence we cannot support Univer mode now
-                const textSelectionManagerService = this._injector.get(ITextSelectionRenderManager);
-                textSelectionManagerService.focus();
+                const renderManagerService = this._injector.get(IRenderManagerService);
+
+                const currentEditorRender = renderManagerService.getCurrentTypeOfRenderer(UniverInstanceType.UNIVER_DOC);
+                const docSelectionRenderService = currentEditorRender?.with(DocSelectionRenderService);
+
+                docSelectionRenderService?.focus();
             })
         );
     }

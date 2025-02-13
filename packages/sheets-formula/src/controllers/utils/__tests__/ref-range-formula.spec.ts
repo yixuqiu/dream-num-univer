@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IFormulaDataItem } from '@univerjs/engine-formula';
-import { formulaDataItemToCellData, isFormulaDataItem } from '../ref-range-formula';
+import { formulaDataItemToCellData, formulaDataToCellData, isFormulaDataItem } from '../ref-range-formula';
 
 describe('Ref range formula test', () => {
     describe('Util function', () => {
@@ -30,6 +30,7 @@ describe('Ref range formula test', () => {
 
             expect(result).toStrictEqual({
                 f: '=SUM(1)',
+                si: null,
             });
 
             formulaDataItem = {
@@ -41,6 +42,7 @@ describe('Ref range formula test', () => {
 
             expect(result).toStrictEqual({
                 si: 'id1',
+                f: null,
             });
 
             formulaDataItem = {
@@ -80,6 +82,7 @@ describe('Ref range formula test', () => {
 
             expect(result).toStrictEqual({
                 si: 'id1',
+                f: null,
             });
 
             formulaDataItem = {
@@ -92,6 +95,44 @@ describe('Ref range formula test', () => {
             result = formulaDataItemToCellData(formulaDataItem);
 
             expect(result).toStrictEqual({ f: null, si: null });
+        });
+
+        it('Function formulaDataToCellData', () => {
+            const formulaData = {
+                0: {
+                    0: {
+                        f: '=SUM(1)',
+                    },
+                    1: {
+                        f: '',
+                        si: 'id1',
+                    },
+                    2: {
+                        f: '=SUM(1)',
+                        si: 'id2',
+                        x: 0,
+                        y: 1,
+                    },
+                },
+            };
+
+            const cellData = {
+                0: {
+                    0: {
+                        f: '=SUM(1)',
+                        si: null,
+                    },
+                    1: {
+                        f: null,
+                        si: 'id1',
+                    },
+                    2: {
+                        f: null,
+                        si: 'id2',
+                    },
+                },
+            };
+            expect(formulaDataToCellData(formulaData)).toStrictEqual(cellData);
         });
 
         it('isFormulaDataItem', () => {

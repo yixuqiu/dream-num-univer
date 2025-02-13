@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { IDocumentBody, ITextStyle } from '@univerjs/core';
+import type { IDocumentData, ITextStyle } from '@univerjs/core';
 
 export interface IStyleRule {
     filter: string | string[] | ((node: HTMLElement) => boolean);
@@ -23,7 +23,7 @@ export interface IStyleRule {
 
 export interface IAfterProcessRule {
     filter: string | string[] | ((node: HTMLElement) => boolean);
-    handler(doc: IDocumentBody, node: HTMLElement): void;
+    handler(doc: Partial<IDocumentData>, node: HTMLElement): void;
 }
 
 export interface IPastePlugin {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { IDocumentBody } from '@univerjs/core';
+import type { IDocumentData } from '@univerjs/core';
 import { LRUMap, Tools } from '@univerjs/core';
 
 const COPY_CONTENT_CACHE_LIMIT = 10;
@@ -35,9 +35,9 @@ export function extractId(html: string) {
 }
 
 export class CopyContentCache {
-    private _cache = new LRUMap<string, IDocumentBody>(COPY_CONTENT_CACHE_LIMIT);
+    private _cache = new LRUMap<string, Partial<IDocumentData>>(COPY_CONTENT_CACHE_LIMIT);
 
-    set(id: string, clipboardData: IDocumentBody) {
+    set(id: string, clipboardData: Partial<IDocumentData>) {
         this._cache.set(id, clipboardData);
     }
 

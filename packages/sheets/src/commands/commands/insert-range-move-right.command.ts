@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import type { ICellData, ICommand, IMutationInfo, IObjectMatrixPrimitiveType, IRange } from '@univerjs/core';
+import type { IAccessor, ICellData, ICommand, IMutationInfo, IObjectMatrixPrimitiveType, IRange } from '@univerjs/core';
+import type {
+    IInsertColMutationParams,
+    IInsertRangeMutationParams,
+    IRemoveColMutationParams,
+} from '../../basics/interfaces/mutation-interface';
+
 import {
     BooleanNumber,
     CommandType,
@@ -27,14 +33,7 @@ import {
     Range,
     sequenceExecute,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import type {
-    IInsertColMutationParams,
-    IInsertRangeMutationParams,
-    IRemoveColMutationParams,
-} from '../../basics/interfaces/mutation-interface';
-import { SelectionManagerService } from '../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
 import { SheetInterceptorService } from '../../services/sheet-interceptor/sheet-interceptor.service';
 import { InsertColMutation, InsertColMutationUndoFactory } from '../mutations/insert-row-col.mutation';
 import { RemoveColMutation } from '../mutations/remove-row-col.mutation';
@@ -53,11 +52,12 @@ export const InsertRangeMoveRightCommand: ICommand = {
     type: CommandType.COMMAND,
     id: InsertRangeMoveRightCommandId,
 
+    // eslint-disable-next-line max-lines-per-function
     handler: async (accessor: IAccessor, params?: InsertRangeMoveRightCommandParams) => {
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const sheetInterceptorService = accessor.get(SheetInterceptorService);
         const errorService = accessor.get(ErrorService);
         const localeService = accessor.get(LocaleService);
@@ -74,7 +74,7 @@ export const InsertRangeMoveRightCommand: ICommand = {
 
         let range = params?.range;
         if (!range) {
-            range = selectionManagerService.getLast()?.range;
+            range = selectionManagerService.getCurrentLastSelection()?.range;
         }
         if (!range) return false;
 
@@ -174,6 +174,6 @@ export const InsertRangeMoveRightCommand: ICommand = {
 
         return false;
     },
-    // all subsequent mutations should succeed inorder to make the whole process succeed
+    // all subsequent mutations should succeed in order to make the whole process succeed
     // Promise.all([]).then(() => true),
 };

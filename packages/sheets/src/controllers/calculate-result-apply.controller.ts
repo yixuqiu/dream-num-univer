@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,12 @@
  */
 
 import type { ICellData, ICommandInfo, IObjectMatrixPrimitiveType, Nullable } from '@univerjs/core';
-import { Disposable, ICommandService, IUniverInstanceService, LifecycleStages, ObjectMatrix, OnLifecycle } from '@univerjs/core';
 import type { ISetFormulaCalculationResultMutation } from '@univerjs/engine-formula';
-import { SetFormulaCalculationResultMutation } from '@univerjs/engine-formula';
+import { Disposable, ICommandService, Inject, IUniverInstanceService, ObjectMatrix } from '@univerjs/core';
+import { handleNumfmtInCell, SetFormulaCalculationResultMutation } from '@univerjs/engine-formula';
 
-import { Inject } from '@wendellhu/redi';
 import { SetRangeValuesMutation } from '../commands/mutations/set-range-values.mutation';
-import { handleNumfmtInCell } from '../basics/numfmt-kit';
 
-@OnLifecycle(LifecycleStages.Ready, CalculateResultApplyController)
 export class CalculateResultApplyController extends Disposable {
     constructor(
         @Inject(IUniverInstanceService) private _univerInstanceService: IUniverInstanceService,
@@ -35,10 +32,6 @@ export class CalculateResultApplyController extends Disposable {
     }
 
     private _initialize(): void {
-        this._commandExecutedListener();
-    }
-
-    private _commandExecutedListener() {
         this.disposeWithMe(
             this._commandService.onCommandExecuted((command: ICommandInfo) => {
                 if (command.id !== SetFormulaCalculationResultMutation.id) {
@@ -54,22 +47,22 @@ export class CalculateResultApplyController extends Disposable {
                 // Update each calculated value, possibly involving all cells
                 const redoMutationsInfo: ICommandInfo[] = [];
 
-                unitIds.forEach((unitId) => {
+                for (let i = 0; i < unitIds.length; i++) {
+                    const unitId = unitIds[i];
                     const sheetData = unitData[unitId];
 
                     if (sheetData == null) {
-                        return true;
+                        continue;
                     }
 
                     const sheetIds = Object.keys(sheetData);
 
-                    sheetIds.forEach((sheetId) => {
+                    for (let j = 0; j < sheetIds.length; j++) {
+                        const sheetId = sheetIds[j];
                         const cellData = sheetData[sheetId];
 
-                        // const arrayFormula = arrayFormulaRange[unitId][sheetId];
-
                         if (cellData == null) {
-                            return true;
+                            continue;
                         }
 
                         const cellValue = this._getMergedCellData(unitId, sheetId, cellData);
@@ -84,8 +77,8 @@ export class CalculateResultApplyController extends Disposable {
                             id: SetRangeValuesMutation.id,
                             params: setRangeValuesMutation,
                         });
-                    });
-                });
+                    }
+                }
 
                 const result = redoMutationsInfo.every((m) =>
                     this._commandService.executeCommand(m.id, m.params, {
@@ -118,6 +111,6 @@ export class CalculateResultApplyController extends Disposable {
             cellDataMatrix.setValue(row, col, newCell);
         });
 
-        return cellDataMatrix.clone();
+        return cellDataMatrix.getMatrix();
     }
 }

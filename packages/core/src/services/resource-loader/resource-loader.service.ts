@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import { Inject } from '@wendellhu/redi';
+import type { DocumentDataModel } from '../../docs';
 import type { Workbook } from '../../sheets/workbook';
-import type { IWorkbookData } from '../../types/interfaces';
 import type { IResourceHook } from '../resource-manager/type';
-import { IResourceManagerService } from '../resource-manager/type';
-import { IUniverInstanceService } from '../instance/instance.service';
-import { Disposable, toDisposable } from '../../shared/lifecycle';
-import { UniverInstanceType } from '../../common/unit';
 import type { IResourceLoaderService } from './type';
-
+import { isInternalEditorID } from '../../common/const';
+import { Inject } from '../../common/di';
+import { UniverInstanceType } from '../../common/unit';
+import { Tools } from '../../shared';
+import { Disposable } from '../../shared/lifecycle';
+import { IUniverInstanceService } from '../instance/instance.service';
+import { IResourceManagerService } from '../resource-manager/type';
 
 export class ResourceLoaderService extends Disposable implements IResourceLoaderService {
     constructor(
@@ -42,7 +43,18 @@ export class ResourceLoaderService extends Disposable implements IResourceLoader
                     case UniverInstanceType.UNIVER_UNKNOWN:
                     case UniverInstanceType.UNIVER_SLIDE:
                     case UniverInstanceType.UNIVER_DOC: {
-                        // TODO@gggpound: wait to support.
+                        this._univerInstanceService.getAllUnitsForType<DocumentDataModel>(UniverInstanceType.UNIVER_DOC).forEach((doc) => {
+                            const snapshotResource = doc.getSnapshot().resources || [];
+                            const plugin = snapshotResource.find((r) => r.name === hook.pluginName);
+                            if (plugin) {
+                                try {
+                                    const data = hook.parseJson(plugin.data);
+                                    hook.onLoad(doc.getUnitId(), data);
+                                } catch (err) {
+                                    console.error(`Load Document{${doc.getUnitId()}} Resources{${hook.pluginName}} Data Error.`);
+                                }
+                            }
+                        });
                         break;
                     }
                     case UniverInstanceType.UNIVER_SHEET: {
@@ -64,36 +76,47 @@ export class ResourceLoaderService extends Disposable implements IResourceLoader
         };
 
         const allResourceHooks = this._resourceManagerService.getAllResourceHooks();
-        allResourceHooks.forEach((hook) => {
-            handleHookAdd(hook);
-        });
+        allResourceHooks.forEach((hook) => handleHookAdd(hook));
 
-        this.disposeWithMe(this._resourceManagerService.register$.subscribe((hook) => {
-            handleHookAdd(hook);
-        }));
+        this.disposeWithMe(this._resourceManagerService.register$.subscribe((hook) => handleHookAdd(hook)));
 
         this.disposeWithMe(
-            toDisposable(
-                this._univerInstanceService.getTypeOfUnitAdded$<Workbook>(UniverInstanceType.UNIVER_SHEET).subscribe((workbook) => {
-                    this._resourceManagerService.loadResources(workbook.getUnitId(), workbook.getSnapshot().resources);
-                })
-            )
+            this._univerInstanceService.getTypeOfUnitAdded$<Workbook>(UniverInstanceType.UNIVER_SHEET).subscribe((workbook) => {
+                this._resourceManagerService.loadResources(workbook.getUnitId(), workbook.getSnapshot().resources);
+            })
+        );
+        this.disposeWithMe(
+            this._univerInstanceService.getTypeOfUnitAdded$<DocumentDataModel>(UniverInstanceType.UNIVER_DOC).subscribe((doc) => {
+                const unitId = doc.getUnitId();
+                if (!isInternalEditorID(unitId)) {
+                    this._resourceManagerService.loadResources(doc.getUnitId(), doc.getSnapshot().resources);
+                }
+            })
+        );
+
+        // TODO: add slides in the future
+
+        this.disposeWithMe(
+            this._univerInstanceService.getTypeOfUnitDisposed$<Workbook>(UniverInstanceType.UNIVER_SHEET).subscribe((workbook) => {
+                this._resourceManagerService.unloadResources(workbook.getUnitId());
+            })
         );
 
         this.disposeWithMe(
-            toDisposable(
-                this._univerInstanceService.getTypeOfUnitDisposed$<Workbook>(UniverInstanceType.UNIVER_SHEET).subscribe((workbook) => {
-                    this._resourceManagerService.unloadResources(workbook.getUnitId());
-                })
-            )
+            this._univerInstanceService.getTypeOfUnitDisposed$<DocumentDataModel>(UniverInstanceType.UNIVER_DOC).subscribe((doc) => {
+                this._resourceManagerService.unloadResources(doc.getUnitId());
+            })
         );
     }
 
-    saveWorkbook: (workbook: Workbook) => IWorkbookData = (workbook) => {
-        const unitId = workbook.getUnitId();
-        const resources = this._resourceManagerService.getResources(unitId) || [];
-        const snapshot = workbook.getSnapshot();
+    saveUnit<T = object>(unitId: string) {
+        const unit = this._univerInstanceService.getUnit(unitId);
+        if (!unit) {
+            return null;
+        }
+        const resources = this._resourceManagerService.getResources(unitId, unit.type);
+        const snapshot = Tools.deepClone(unit.getSnapshot()) as { resources: typeof resources } & T;
         snapshot.resources = resources;
         return snapshot;
-    };
+    }
 }

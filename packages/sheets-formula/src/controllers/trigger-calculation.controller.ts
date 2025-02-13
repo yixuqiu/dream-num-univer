@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,81 +14,159 @@
  * limitations under the License.
  */
 
-import type { ICommandInfo, IUnitRange } from '@univerjs/core';
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle, throttle } from '@univerjs/core';
+import type { ICommandInfo, IUnitRange, Nullable } from '@univerjs/core';
 import type {
     IDirtyUnitFeatureMap,
     IDirtyUnitOtherFormulaMap,
     IDirtyUnitSheetNameMap,
+    IExecutionInProgressParams,
+    IFormulaDirtyData,
     ISetFormulaCalculationNotificationMutation,
+    ISetFormulaCalculationStartMutation,
 } from '@univerjs/engine-formula';
+import type { ISetRangeValuesMutationParams } from '@univerjs/sheets';
+import type { IUniverSheetsFormulaBaseConfig } from './config.schema';
+import { Disposable, ICommandService, IConfigService, ILogService, Inject, LocaleService } from '@univerjs/core';
 import {
+    ENGINE_FORMULA_CYCLE_REFERENCE_COUNT,
     FormulaDataModel,
     FormulaExecutedStateType,
     FormulaExecuteStageType,
     IActiveDirtyManagerService,
     SetFormulaCalculationNotificationMutation,
     SetFormulaCalculationStartMutation,
+    SetFormulaCalculationStopMutation,
 } from '@univerjs/engine-formula';
-import type { ISetRangeValuesMutationParams } from '@univerjs/sheets';
 import {
     ClearSelectionFormatCommand,
-    INumfmtService,
     SetBorderCommand,
     SetRangeValuesMutation,
     SetStyleCommand,
 } from '@univerjs/sheets';
-import { IProgressService } from '@univerjs/ui';
+import { BehaviorSubject } from 'rxjs';
+import { RegisterOtherFormulaService } from '../services/register-other-formula.service';
+import { CalculationMode, PLUGIN_CONFIG_KEY_BASE } from './config.schema';
 
-import { Inject } from '@wendellhu/redi';
+/**
+ * This interface is for the progress bar to display the calculation progress.
+ */
+export interface ICalculationProgress {
+    /** Task that already completed. */
+    done: number;
+    /** The total number of formulas need to calculate. */
+    count: number;
+    /** The label of the calculation progress. */
+    label?: string;
+}
 
-@OnLifecycle(LifecycleStages.Ready, TriggerCalculationController)
+const NilProgress: ICalculationProgress = { done: 0, count: 0 };
+
+const lo = { onlyLocal: true };
+
 export class TriggerCalculationController extends Disposable {
     private _waitingCommandQueue: ICommandInfo[] = [];
 
-    private _executingCommandQueue: ICommandInfo[] = [];
+    private _executingDirtyData: IFormulaDirtyData = {
+        forceCalculation: false,
+        dirtyRanges: [],
+        dirtyNameMap: {},
+        dirtyDefinedNameMap: {},
+        dirtyUnitFeatureMap: {},
+        dirtyUnitOtherFormulaMap: {},
+        clearDependencyTreeCache: {},
+    };
 
     private _setTimeoutKey: NodeJS.Timeout | number = -1;
 
     private _startExecutionTime: number = 0;
 
-    private _formulaCalculationDoneCount: number = 0;
+    private _totalCalculationTaskCount: number = 0;
+
+    private _doneCalculationTaskCount: number = 0;
+
+    private _executionInProgressParams: Nullable<IExecutionInProgressParams> = null;
+
+    private _restartCalculation = false;
+
+    private _calculationMode: CalculationMode = CalculationMode.WHEN_EMPTY;
+
+    /**
+     * The mark of forced calculation. If a new mutation triggers dirty area calculation during the forced calculation process, forced calculation is still required.
+     */
+    private _forceCalculating = false;
+
+    private readonly _progress$ = new BehaviorSubject<ICalculationProgress>(NilProgress);
+
+    readonly progress$ = this._progress$.asObservable();
+
+    private _emitProgress(label?: string): void {
+        this._progress$.next({ done: this._doneCalculationTaskCount, count: this._totalCalculationTaskCount, label });
+    }
+
+    private _startProgress(): void {
+        this._doneCalculationTaskCount = 0;
+        this._totalCalculationTaskCount = 1;
+
+        const analyzing = this._localeService.t('formula.progress.analyzing');
+        this._emitProgress(analyzing);
+    }
+
+    private _calculateProgress(label: string): void {
+        if (this._executionInProgressParams) {
+            const { totalFormulasToCalculate, completedFormulasCount, totalArrayFormulasToCalculate, completedArrayFormulasCount } = this._executionInProgressParams;
+            this._doneCalculationTaskCount = completedFormulasCount + completedArrayFormulasCount;
+            this._totalCalculationTaskCount = totalFormulasToCalculate + totalArrayFormulasToCalculate;
+
+            if (this._totalCalculationTaskCount === 0) {
+                return;
+            }
+
+            this._emitProgress(label);
+        }
+    }
+
+    private _completeProgress(): void {
+        this._doneCalculationTaskCount = this._totalCalculationTaskCount = 1;
+
+        const done = this._localeService.t('formula.progress.done');
+        this._emitProgress(done);
+    }
+
+    clearProgress(): void {
+        this._doneCalculationTaskCount = 0;
+        this._totalCalculationTaskCount = 0;
+        this._emitProgress();
+    }
 
     constructor(
         @ICommandService private readonly _commandService: ICommandService,
         @IActiveDirtyManagerService private readonly _activeDirtyManagerService: IActiveDirtyManagerService,
-        @Inject(INumfmtService) private readonly _numfmtService: INumfmtService,
+        @ILogService private readonly _logService: ILogService,
+        @IConfigService private readonly _configService: IConfigService,
         @Inject(FormulaDataModel) private readonly _formulaDataModel: FormulaDataModel,
-        @Inject(IProgressService) private readonly _progressService: IProgressService
+        @Inject(LocaleService) private readonly _localeService: LocaleService,
+        @Inject(RegisterOtherFormulaService) private readonly _registerOtherFormulaService: RegisterOtherFormulaService
     ) {
         super();
 
-        this._initialize();
-    }
+        const config = this._configService.getConfig<IUniverSheetsFormulaBaseConfig>(PLUGIN_CONFIG_KEY_BASE);
+        this._calculationMode = config?.initialFormulaComputing ?? CalculationMode.WHEN_EMPTY;
 
-    private _initialize(): void {
         this._commandExecutedListener();
-
         this._initialExecuteFormulaProcessListener();
-
         this._initialExecuteFormula();
     }
 
-    private _commandExecutedListener() {
-        // const updateCommandList = [
-        //     SetRangeValuesMutation.id,
-        //     MoveRangeMutation.id,
-        //     MoveRowsMutation.id,
-        //     MoveColsMutation.id,
-        //     DeleteRangeMutation.id,
-        //     InsertRangeMutation.id,
-        //     RemoveRowMutation.id,
-        //     RemoveColMutation.id,
-        //     RemoveSheetMutation.id,
-        //     // SetWorksheetNameMutation.id,
-        //     InsertSheetMutation.id,
-        // ];
+    override dispose(): void {
+        super.dispose();
 
+        this._progress$.next(NilProgress);
+        this._progress$.complete();
+        // clear timer when disposed
+        clearTimeout(this._setTimeoutKey);
+    }
+
+    private _commandExecutedListener() {
         this.disposeWithMe(
             this._commandService.onCommandExecuted((command: ICommandInfo, options) => {
                 if (!this._activeDirtyManagerService.get(command.id)) {
@@ -113,19 +191,15 @@ export class TriggerCalculationController extends Disposable {
                 clearTimeout(this._setTimeoutKey);
 
                 this._setTimeoutKey = setTimeout(() => {
-                    this._commandService.executeCommand(
-                        SetFormulaCalculationStartMutation.id,
-                        {
-                            ...this._generateDirty(this._waitingCommandQueue),
-                        },
-                        {
-                            onlyLocal: true,
-                        }
-                    );
+                    const dirtyData = this._generateDirty(this._waitingCommandQueue);
+                    this._executingDirtyData = this._mergeDirty(this._executingDirtyData, dirtyData);
 
-                    this._startExecutionTime = performance.now();
-
-                    this._executingCommandQueue = this._waitingCommandQueue;
+                    if (this._executionInProgressParams == null) {
+                        this._commandService.executeCommand(SetFormulaCalculationStartMutation.id, { ...this._executingDirtyData }, lo);
+                    } else {
+                        this._restartCalculation = true;
+                        this._commandService.executeCommand(SetFormulaCalculationStopMutation.id, {});
+                    }
 
                     this._waitingCommandQueue = [];
                 }, 100);
@@ -139,6 +213,7 @@ export class TriggerCalculationController extends Disposable {
         const allDirtyDefinedNameMap: IDirtyUnitSheetNameMap = {};
         const allDirtyUnitFeatureMap: IDirtyUnitFeatureMap = {};
         const allDirtyUnitOtherFormulaMap: IDirtyUnitOtherFormulaMap = {};
+        const allClearDependencyTreeCache: IDirtyUnitSheetNameMap = {};
 
         // const numfmtItemMap: INumfmtItemMap = Tools.deepClone(this._formulaDataModel.getNumfmtItemMap());
 
@@ -151,10 +226,10 @@ export class TriggerCalculationController extends Disposable {
 
             const params = conversion.getDirtyData(command);
 
-            const { dirtyRanges, dirtyNameMap, dirtyDefinedNameMap, dirtyUnitFeatureMap, dirtyUnitOtherFormulaMap } = params;
+            const { dirtyRanges, dirtyNameMap, dirtyDefinedNameMap, dirtyUnitFeatureMap, dirtyUnitOtherFormulaMap, clearDependencyTreeCache } = params;
 
             if (dirtyRanges != null) {
-                allDirtyRanges.push(...dirtyRanges);
+                this._mergeDirtyRanges(allDirtyRanges, dirtyRanges);
             }
 
             if (dirtyNameMap != null) {
@@ -172,6 +247,10 @@ export class TriggerCalculationController extends Disposable {
             if (dirtyUnitOtherFormulaMap != null) {
                 this._mergeDirtyUnitFeatureOrOtherFormulaMap(allDirtyUnitOtherFormulaMap, dirtyUnitOtherFormulaMap);
             }
+
+            if (clearDependencyTreeCache != null) {
+                this._mergeDirtyNameMap(allClearDependencyTreeCache, clearDependencyTreeCache);
+            }
         }
 
         return {
@@ -180,8 +259,70 @@ export class TriggerCalculationController extends Disposable {
             dirtyDefinedNameMap: allDirtyDefinedNameMap,
             dirtyUnitFeatureMap: allDirtyUnitFeatureMap,
             dirtyUnitOtherFormulaMap: allDirtyUnitOtherFormulaMap,
+            forceCalculation: false,
+            clearDependencyTreeCache: allClearDependencyTreeCache,
+            maxIteration: (this._configService.getConfig(ENGINE_FORMULA_CYCLE_REFERENCE_COUNT)) as number | undefined,
             // numfmtItemMap,
         };
+    }
+
+    private _mergeDirty(dirtyData1: IFormulaDirtyData, dirtyData2: IFormulaDirtyData) {
+        const allDirtyRanges: IUnitRange[] = [...dirtyData1.dirtyRanges, ...dirtyData2.dirtyRanges];
+        const allDirtyNameMap: IDirtyUnitSheetNameMap = { ...dirtyData1.dirtyNameMap };
+        const allDirtyDefinedNameMap: IDirtyUnitSheetNameMap = { ...dirtyData1.dirtyDefinedNameMap };
+        const allDirtyUnitFeatureMap: IDirtyUnitFeatureMap = { ...dirtyData1.dirtyUnitFeatureMap };
+        const allDirtyUnitOtherFormulaMap: IDirtyUnitOtherFormulaMap = { ...dirtyData1.dirtyUnitOtherFormulaMap };
+        const allClearDependencyTreeCache: IDirtyUnitSheetNameMap = { ...dirtyData1.clearDependencyTreeCache };
+
+        this._mergeDirtyNameMap(allDirtyNameMap, dirtyData2.dirtyNameMap);
+        this._mergeDirtyNameMap(allDirtyDefinedNameMap, dirtyData2.dirtyDefinedNameMap);
+        this._mergeDirtyUnitFeatureOrOtherFormulaMap(allDirtyUnitFeatureMap, dirtyData2.dirtyUnitFeatureMap);
+        this._mergeDirtyUnitFeatureOrOtherFormulaMap(allDirtyUnitOtherFormulaMap, dirtyData2.dirtyUnitOtherFormulaMap);
+        this._mergeDirtyNameMap(allClearDependencyTreeCache, dirtyData2.clearDependencyTreeCache);
+
+        const maxIteration = dirtyData1.maxIteration || dirtyData2.maxIteration;
+
+        return {
+            dirtyRanges: allDirtyRanges,
+            dirtyNameMap: allDirtyNameMap,
+            dirtyDefinedNameMap: allDirtyDefinedNameMap,
+            dirtyUnitFeatureMap: allDirtyUnitFeatureMap,
+            dirtyUnitOtherFormulaMap: allDirtyUnitOtherFormulaMap,
+            forceCalculation: !!this._forceCalculating,
+            clearDependencyTreeCache: allClearDependencyTreeCache,
+            maxIteration,
+        };
+    }
+
+    /**
+     * dirtyRanges may overlap with the ranges in allDirtyRanges and need to be deduplicated
+     * @param allDirtyRanges
+     * @param dirtyRanges
+     */
+    private _mergeDirtyRanges(allDirtyRanges: IUnitRange[], dirtyRanges: IUnitRange[]) {
+        for (const range of dirtyRanges) {
+            let isDuplicate = false;
+            for (const existingRange of allDirtyRanges) {
+                // Check if the ranges are in the same unit and sheet
+                if (range.unitId === existingRange.unitId && range.sheetId === existingRange.sheetId) {
+                    // Check if the ranges overlap
+                    const { startRow, startColumn, endRow, endColumn } = range.range;
+                    const { startRow: existingStartRow, startColumn: existingStartColumn, endRow: existingEndRow, endColumn: existingEndColumn } = existingRange.range;
+                    if (
+                        startRow === existingStartRow &&
+                        startColumn === existingStartColumn &&
+                        endRow === existingEndRow &&
+                        endColumn === existingEndColumn
+                    ) {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+            }
+            if (!isDuplicate) {
+                allDirtyRanges.push(range);
+            }
+        }
     }
 
     private _mergeDirtyNameMap(allDirtyNameMap: IDirtyUnitSheetNameMap, dirtyNameMap: IDirtyUnitSheetNameMap) {
@@ -192,9 +333,6 @@ export class TriggerCalculationController extends Disposable {
 
             Object.keys(dirtyNameMap[unitId]!).forEach((sheetId) => {
                 if (dirtyNameMap[unitId]?.[sheetId]) {
-                    if (allDirtyNameMap[unitId] == null) {
-                        allDirtyNameMap[unitId] = {};
-                    }
                     allDirtyNameMap[unitId]![sheetId] = dirtyNameMap[unitId]![sheetId];
                 }
             });
@@ -221,18 +359,26 @@ export class TriggerCalculationController extends Disposable {
         });
     }
 
+    // eslint-disable-next-line max-lines-per-function
     private _initialExecuteFormulaProcessListener() {
-        /**
-         * Assignment operation after formula calculation.
-         */
-        const debouncedPushTask = throttle(this._pushTask.bind(this), 300);
+        // Assignment operation after formula calculation.
         let startDependencyTimer: NodeJS.Timeout | null = null;
-        let needStartProgress = false;
-        let formulaInsertTaskCount = false;
-        let arrayFormulaInsertTaskCount = false;
+        let calculationProcessCount = 0; // Multiple calculations are performed in parallel, but only one progress bar is displayed, and the progress is only closed after the last calculation is completed.
 
         this.disposeWithMe(
+
+            // eslint-disable-next-line max-lines-per-function, complexity
             this._commandService.onCommandExecuted((command: ICommandInfo) => {
+                if (command.id === SetFormulaCalculationStartMutation.id) {
+                    const { forceCalculation = false } = command.params as ISetFormulaCalculationStartMutation;
+
+                    if (forceCalculation) {
+                        this._forceCalculating = true;
+                    }
+                } else if (command.id === SetFormulaCalculationStopMutation.id) {
+                    this.clearProgress();
+                }
+
                 if (command.id !== SetFormulaCalculationNotificationMutation.id) {
                     return;
                 }
@@ -241,123 +387,165 @@ export class TriggerCalculationController extends Disposable {
 
                 if (params.stageInfo != null) {
                     const {
-                        totalFormulasToCalculate,
-                        completedFormulasCount,
-                        totalArrayFormulasToCalculate,
-                        completedArrayFormulasCount,
                         stage,
                     } = params.stageInfo;
 
-                    if (stage === FormulaExecuteStageType.START_DEPENDENCY) {
+                    if (stage === FormulaExecuteStageType.START) {
+                        // In NO_CALCULATION mode, the following processes will not be triggered, so there is no need to start
+                        if (this._calculationMode === CalculationMode.NO_CALCULATION) {
+                            return;
+                        }
+
+                        // When calculations are started multiple times in succession, only the first time is recognized
+                        if (calculationProcessCount === 0) {
+                            this._startExecutionTime = performance.now();
+                        }
+
+                        // Increment the calculation process count and assign a new ID
+                        calculationProcessCount++;
+
                         // Clear any existing timer to prevent duplicate executions
                         if (startDependencyTimer !== null) {
                             clearTimeout(startDependencyTimer);
                             startDependencyTimer = null;
                         }
 
-                        // If the total calculation time exceeds 1s, a progress bar is displayed. The first progress shows 5%
+                        // If the total calculation time exceeds 1s, a progress bar is displayed.
                         startDependencyTimer = setTimeout(() => {
-                            // Ignore progress deviations, and finally the complete method ensures the correct completion of the progress
-                            this._progressService.insertTaskCount(100);
-                            this._progressService.pushTask({ count: 5 });
-                            needStartProgress = true;
-
                             startDependencyTimer = null;
+                            this._startProgress();
                         }, 1000);
                     } else if (stage === FormulaExecuteStageType.CURRENTLY_CALCULATING) {
-                        if (!formulaInsertTaskCount && needStartProgress) {
-                            formulaInsertTaskCount = true;
-                            this._progressService.insertTaskCount(totalFormulasToCalculate);
+                        this._executionInProgressParams = params.stageInfo;
+
+                        if (startDependencyTimer === null) {
+                            const calculating = this._localeService.t('formula.progress.calculating');
+                            this._calculateProgress(calculating);
                         }
-                        debouncedPushTask(completedFormulasCount);
+                    } else if (stage === FormulaExecuteStageType.START_DEPENDENCY_ARRAY_FORMULA) {
+                        this._executionInProgressParams = params.stageInfo;
+
+                        if (startDependencyTimer === null) {
+                            const arrayAnalysis = this._localeService.t('formula.progress.array-analysis');
+                            this._calculateProgress(arrayAnalysis);
+                        }
                     } else if (stage === FormulaExecuteStageType.CURRENTLY_CALCULATING_ARRAY_FORMULA) {
-                        if (!arrayFormulaInsertTaskCount && needStartProgress) {
-                            arrayFormulaInsertTaskCount = true;
-                            this._progressService.insertTaskCount(totalArrayFormulasToCalculate);
+                        this._executionInProgressParams = params.stageInfo;
+
+                        if (startDependencyTimer === null) {
+                            const arrayCalculation = this._localeService.t('formula.progress.array-calculation');
+                            this._calculateProgress(arrayCalculation);
                         }
-                        debouncedPushTask(completedArrayFormulasCount);
                     }
-
-
-                    // if (totalArrayFormulasToCalculate > 0) {
-                    // console.warn(
-                    //     `Stage ${stage} Array formula.There are ${totalArrayFormulasToCalculate} functions to be executed, ${completedArrayFormulasCount} complete.`
-                    // );
-                    // } else {
-                    // console.warn(
-                    //     `Stage ${stage} .There are ${totalFormulasToCalculate} functions to be executed, ${completedFormulasCount} complete.`
-                    // );
-                    // }
                 } else {
                     const state = params.functionsExecutedState;
                     let result = '';
+
+                    // Decrement the calculation process count
+                    calculationProcessCount--;
+
                     switch (state) {
                         case FormulaExecutedStateType.NOT_EXECUTED:
                             result = 'No tasks are being executed anymore';
-                            // this._waitingCommandQueue.unshift(...this._executingCommandQueue);
-                            this._executingCommandQueue = [];
+                            this._resetExecutingDirtyData();
                             break;
                         case FormulaExecutedStateType.STOP_EXECUTION:
                             result = 'The execution of the formula has been stopped';
-                            this._waitingCommandQueue.unshift(...this._executingCommandQueue);
-                            this._executingCommandQueue = [];
+                            calculationProcessCount = 0;
                             break;
                         case FormulaExecutedStateType.SUCCESS:
-                            result = `Formula calculation succeeded, Total time consumed: ${performance.now() - this._startExecutionTime
-                            } ms`;
-                            this._executingCommandQueue = [];
+                            result = 'Formula calculation succeeded';
+
+                            // When the calculation is stopped and then a successful calculation is triggered, the value is -1
+                            if (calculationProcessCount === 0 || calculationProcessCount === -1) {
+                                result += `. Total time consumed: ${performance.now() - this._startExecutionTime} ms`;
+                            }
+
+                            this._resetExecutingDirtyData();
                             break;
                         case FormulaExecutedStateType.INITIAL:
                             result = 'Waiting for calculation';
-                            this._executingCommandQueue = [];
+                            this._resetExecutingDirtyData();
                             break;
                     }
 
-                    if (startDependencyTimer) {
-                        // The total calculation time does not exceed 1s, and the progress bar is not displayed.
-                        clearTimeout(startDependencyTimer);
-                        startDependencyTimer = null;
-                    } else {
-                        //  Manually hide the progress bar to prevent the progress bar from not being hidden due to pushTask statistical errors
-                        if (state === FormulaExecutedStateType.SUCCESS) {
-                            this._progressService.complete();
-                        } else if (state === FormulaExecutedStateType.STOP_EXECUTION) {
-                            this._progressService.stop();
+                    // When the calculation is stopped and then a successful calculation is triggered, the value is -1
+                    if (calculationProcessCount === 0 || calculationProcessCount === -1) {
+                        if (startDependencyTimer) {
+                            // The total calculation time does not exceed 1s, and the progress bar is not displayed.
+                            clearTimeout(startDependencyTimer);
+                            startDependencyTimer = null;
+                            this.clearProgress();
+                        } else {
+                            // Manually hide the progress bar only if no other calculations are in process
+                            this._completeProgress();
                         }
 
-                        formulaInsertTaskCount = false;
-                        arrayFormulaInsertTaskCount = false;
-                        needStartProgress = false;
-                        this._formulaCalculationDoneCount = 0;
+                        calculationProcessCount = 0;
+                        this._doneCalculationTaskCount = 0;
+                        this._totalCalculationTaskCount = 0;
+                        this._forceCalculating = false;
                     }
 
+                    if (state === FormulaExecutedStateType.STOP_EXECUTION && this._restartCalculation) {
+                        this._restartCalculation = false;
+                        this._commandService.executeCommand(
+                            SetFormulaCalculationStartMutation.id,
+                            {
+                                ...this._executingDirtyData,
+                            },
+                            lo
+                        );
+                    } else {
+                        this._executionInProgressParams = null;
+                    }
 
-                    console.warn(`execution result${result}`);
+                    this._logService.debug('[TriggerCalculationController]', result);
                 }
             })
         );
     }
 
-    private _initialExecuteFormula() {
-        this._commandService.executeCommand(
-            SetFormulaCalculationStartMutation.id,
-            {
-                commands: [],
-                forceCalculation: true,
-            },
-            {
-                onlyLocal: true,
-            }
-        );
+    private _resetExecutingDirtyData() {
+        this._executingDirtyData = {
+            dirtyRanges: [],
+            dirtyNameMap: {},
+            dirtyDefinedNameMap: {},
+            dirtyUnitFeatureMap: {},
+            dirtyUnitOtherFormulaMap: {},
+            forceCalculation: false,
+            clearDependencyTreeCache: {},
+        };
     }
 
-    /**
-     * Update progress by completed count
-     * @param completedCount
-     */
-    private _pushTask(completedCount: number) {
-        const count = completedCount - this._formulaCalculationDoneCount;
-        this._formulaCalculationDoneCount = completedCount;
-        this._progressService.pushTask({ count });
+    private _initialExecuteFormula() {
+        const params = this._getDirtyDataByCalculationMode(this._calculationMode);
+        this._commandService.executeCommand(SetFormulaCalculationStartMutation.id, params, lo);
+
+        this._registerOtherFormulaService.calculateStarted$.next(true);
+    }
+
+    private _getDirtyDataByCalculationMode(calculationMode: CalculationMode): IFormulaDirtyData {
+        const forceCalculation = calculationMode === CalculationMode.FORCED;
+
+        // loop all sheets cell data, and get the dirty data
+        const dirtyRanges: IUnitRange[] = calculationMode === CalculationMode.WHEN_EMPTY ? this._formulaDataModel.getFormulaDirtyRanges() : [];
+
+        const dirtyNameMap: IDirtyUnitSheetNameMap = {};
+        const dirtyDefinedNameMap: IDirtyUnitSheetNameMap = {};
+        const dirtyUnitFeatureMap: IDirtyUnitFeatureMap = {};
+        const dirtyUnitOtherFormulaMap: IDirtyUnitOtherFormulaMap = {};
+        const clearDependencyTreeCache: IDirtyUnitSheetNameMap = {};
+
+        return {
+            forceCalculation,
+            dirtyRanges,
+            dirtyNameMap,
+            dirtyDefinedNameMap,
+            dirtyUnitFeatureMap,
+            dirtyUnitOtherFormulaMap,
+            clearDependencyTreeCache,
+            maxIteration: this._configService.getConfig(ENGINE_FORMULA_CYCLE_REFERENCE_COUNT) as number | undefined,
+        };
     }
 }

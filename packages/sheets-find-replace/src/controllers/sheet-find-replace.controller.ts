@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,23 @@
  * limitations under the License.
  */
 
-import { ColorKit, CommandType, Disposable, EDITOR_ACTIVATED, fromCallback, groupBy, ICommandService, IContextService, IUniverInstanceService, LifecycleStages, ObjectMatrix, OnLifecycle, replaceInDocumentBody, rotate, ThemeService, Tools, UniverInstanceType } from '@univerjs/core';
-import type { ICellData, IObjectMatrixPrimitiveType, IRange, Nullable, Workbook, Worksheet } from '@univerjs/core';
-import { IRenderManagerService, RENDER_RAW_FORMULA_KEY } from '@univerjs/engine-render';
+import type { ICellData, IDisposable, IObjectMatrixPrimitiveType, IRange, Nullable, Workbook, Worksheet } from '@univerjs/core';
 import type { IFindComplete, IFindMatch, IFindMoveParams, IFindQuery, IFindReplaceProvider, IReplaceAllResult } from '@univerjs/find-replace';
-import { FindBy, FindDirection, FindModel, FindReplaceController, FindScope, IFindReplaceService } from '@univerjs/find-replace';
-import type { ISelectionWithStyle, ISetRangeValuesCommandParams, ISetSelectionsOperationParams, ISetWorksheetActivateCommandParams, ISheetCommandSharedParams } from '@univerjs/sheets';
-import { SelectionManagerService, SetRangeValuesCommand, SetSelectionsOperation, SetWorksheetActivateCommand, SetWorksheetActiveOperation } from '@univerjs/sheets';
+import type { ISelectionWithStyle, ISetRangeValuesCommandParams, ISetSelectionsOperationParams, ISetWorksheetActivateCommandParams, ISheetCommandSharedParams, WorkbookSelectionModel } from '@univerjs/sheets';
 import type { IScrollToCellCommandParams } from '@univerjs/sheets-ui';
-import { getCoordByCell, getSheetObject, ScrollToCellCommand, SheetSkeletonManagerService } from '@univerjs/sheets-ui';
-import { type IDisposable, Inject, Injector } from '@wendellhu/redi';
-import { debounceTime, filter, merge, skip, Subject, throttleTime } from 'rxjs';
-
-import type { ISheetFindReplaceHighlightShapeProps } from '../views/shapes/find-replace-highlight.shape';
-import { SheetFindReplaceHighlightShape } from '../views/shapes/find-replace-highlight.shape';
 import type { ISheetReplaceCommandParams, ISheetReplacement } from '../commands/commands/sheet-replace.command';
+import type { ISheetFindReplaceHighlightShapeProps } from '../views/shapes/find-replace-highlight.shape';
+import { ColorKit, CommandType, Disposable, EDITOR_ACTIVATED, fromCallback, groupBy, ICommandService, IContextService, Inject, Injector, IUniverInstanceService, ObjectMatrix, replaceInDocumentBody, rotate, ThemeService, Tools, UniverInstanceType } from '@univerjs/core';
+import { IRenderManagerService, RENDER_RAW_FORMULA_KEY } from '@univerjs/engine-render';
+import { FindBy, FindDirection, FindModel, FindReplaceController, FindScope, IFindReplaceService } from '@univerjs/find-replace';
+import { SetRangeValuesCommand, SetSelectionsOperation, SetWorksheetActivateCommand, SetWorksheetActiveOperation, SheetsSelectionsService } from '@univerjs/sheets';
+
+import { getCoordByCell, getSheetObject, ScrollToCellCommand, SheetSkeletonManagerService } from '@univerjs/sheets-ui';
+import { debounceTime, filter, merge, skip, Subject, throttleTime } from 'rxjs';
 import { SheetReplaceCommand } from '../commands/commands/sheet-replace.command';
+import { SheetFindReplaceHighlightShape } from '../views/shapes/find-replace-highlight.shape';
 import { isBeforePositionWithColumnPriority, isBeforePositionWithRowPriority, isBehindPositionWithColumnPriority, isBehindPositionWithRowPriority, isSamePosition, isSelectionSingleCell } from './utils';
 
-@OnLifecycle(LifecycleStages.Steady, SheetsFindReplaceController)
 export class SheetsFindReplaceController extends Disposable implements IDisposable {
     private _provider!: SheetsFindReplaceProvider;
 
@@ -52,6 +50,7 @@ export class SheetsFindReplaceController extends Disposable implements IDisposab
     override dispose(): void {
         super.dispose();
 
+        this._findReplaceController.closePanel();
         this._provider.dispose();
     }
 
@@ -62,9 +61,9 @@ export class SheetsFindReplaceController extends Disposable implements IDisposab
         this.disposeWithMe(this._findReplaceService.registerFindReplaceProvider(provider));
 
         // The find replace panel should be closed when sheet cell editor is activated, or the formula editor is focused.
-        this.disposeWithMe(
-            this._contextService.subscribeContextValue$(EDITOR_ACTIVATED).pipe(filter((v) => !!v)).subscribe(() => this._findReplaceController.closePanel())
-        );
+        this.disposeWithMe(this._contextService.subscribeContextValue$(EDITOR_ACTIVATED)
+            .pipe(filter((v) => !!v))
+            .subscribe(() => this._findReplaceController.closePanel()));
     }
 
     private _initCommands(): void {
@@ -117,17 +116,21 @@ export class SheetFindModel extends FindModel {
     get matchesPosition(): number { return this._matchesPosition; }
     get currentMatch(): Nullable<ISheetCellMatch> { return this._matchesPosition > 0 ? this._matches[this._matchesPosition - 1] : null; }
 
+    private _workbookSelections: WorkbookSelectionModel;
+
     constructor(
         private readonly _workbook: Workbook,
+        private readonly _sheetSkeletonManagerService: SheetSkeletonManagerService,
         @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
         @IRenderManagerService private readonly _renderManagerService: IRenderManagerService,
         @ICommandService private readonly _commandService: ICommandService,
         @IContextService private readonly _contextService: IContextService,
         @Inject(ThemeService) private readonly _themeService: ThemeService,
-        @Inject(SheetSkeletonManagerService) private readonly _sheetSkeletonManagerService: SheetSkeletonManagerService,
-        @Inject(SelectionManagerService) private readonly _selectionManagerService: SelectionManagerService
+        @Inject(SheetsSelectionsService) _selectionManagerService: SheetsSelectionsService
     ) {
         super();
+
+        this._workbookSelections = _selectionManagerService.getWorkbookSelections(this.unitId);
     }
 
     override dispose(): void {
@@ -210,12 +213,14 @@ export class SheetFindModel extends FindModel {
         }));
 
         this.disposeWithMe(
-            fromCallback(this._commandService.onCommandExecuted)
-                .pipe(
-                    filter(([command, options]) => command.id === SetWorksheetActiveOperation.id && !options?.fromFindReplace)
-                )
+            fromCallback(this._commandService.onCommandExecuted.bind(this._commandService))
+                .pipe(filter(([command, options]) => command.id === SetWorksheetActiveOperation.id && !options?.fromFindReplace))
                 .subscribe(() => {
                     const activeSheet = this._workbook.getActiveSheet();
+                    if (!activeSheet) {
+                        return;
+                    }
+
                     const activeSheetId = activeSheet.getSheetId();
                     if (!this._matchesByWorksheet.has(activeSheetId)) {
                         return;
@@ -227,7 +232,7 @@ export class SheetFindModel extends FindModel {
 
         // When the sheet model changes, we should re-search.
         this.disposeWithMe(
-            fromCallback(this._commandService.onCommandExecuted)
+            fromCallback(this._commandService.onCommandExecuted.bind(this._commandService))
                 .pipe(
                     filter(([command]) => command.type === CommandType.MUTATION
                         && (command.params as ISheetCommandSharedParams).unitId === this._workbook.getUnitId()
@@ -251,7 +256,7 @@ export class SheetFindModel extends FindModel {
         let globalIndex = 0;
 
         const matchesByWorksheet = this._matchesByWorksheet.get(activeSheet.getSheetId())!;
-        const selections = this._selectionManagerService.getSelections();
+        const selections = this._workbookSelections.getCurrentSelections();
         if (!selections?.length) {
             match = matchesByWorksheet[0];
             index = 0;
@@ -279,7 +284,8 @@ export class SheetFindModel extends FindModel {
 
         const checkShouldFindInSelections = (): boolean => {
             const currentWorksheet = this._workbook.getActiveSheet();
-            const currentSelections = this._selectionManagerService.getSelections();
+            if (!currentWorksheet) return false;
+            const currentSelections = this._workbookSelections.getCurrentSelections();
             const shouldFindInSelections = currentSelections?.some((selection) => !isSelectionSingleCell(selection, currentWorksheet)) ?? false;
             return shouldFindInSelections;
         };
@@ -290,10 +296,12 @@ export class SheetFindModel extends FindModel {
 
         const performFindInWorksheet = (): IFindComplete => {
             const currentWorksheet = this._workbook.getActiveSheet();
+            if (!currentWorksheet) return { results: [] };
+
             const lastMatch = this.currentMatch; // temporarily store the last match to restore the position after the model changes
 
             findBySelections = checkShouldFindInSelections();
-            const currentSelections = this._selectionManagerService.getSelections();
+            const currentSelections = this._workbookSelections.getCurrentSelections();
             const newComplete = findBySelections
                 ? this._findInSelections(currentWorksheet, currentSelections as ISelectionWithStyle[], query, unitId)
                 : this._findInWorksheet(currentWorksheet, query, unitId);
@@ -317,7 +325,7 @@ export class SheetFindModel extends FindModel {
 
         this.disposeWithMe(
             merge(
-                fromCallback(this._commandService.onCommandExecuted).pipe(
+                fromCallback(this._commandService.onCommandExecuted.bind(this._commandService)).pipe(
                     filter(([command]) => {
                         // If there mutations happens on this unit, we should re-search.
                         if (command.type === CommandType.MUTATION && (command.params as ISheetCommandSharedParams).unitId === this._workbook.getUnitId()) {
@@ -365,6 +373,7 @@ export class SheetFindModel extends FindModel {
 
         for (const value of iter) {
             const { row, col, colSpan, rowSpan, value: cellData } = value;
+
             if (dedupeFn?.(row, col) || !cellData) {
                 continue;
             };
@@ -434,8 +443,8 @@ export class SheetFindModel extends FindModel {
 
     private _disposeHighlights(): void {
         this._highlightShapes.forEach((shape) => {
+            shape.getScene()?.makeDirty();
             shape.dispose();
-            shape.getScene().makeDirty();
         });
 
         this._highlightShapes = [];
@@ -452,16 +461,6 @@ export class SheetFindModel extends FindModel {
             return;
         }
 
-        const sheetObjects = this._getSheetObject();
-        if (!sheetObjects) {
-            return;
-        }
-
-        const currentUnitId = this._univerInstanceService.getFocusedUnit()?.getUnitId();
-        if (currentUnitId !== this._workbook.getUnitId()) {
-            return;
-        }
-
         const unitId = this._workbook.getUnitId();
         const currentRender = this._renderManagerService.getRenderById(unitId);
         if (currentRender == null) {
@@ -474,6 +473,10 @@ export class SheetFindModel extends FindModel {
         const searchBackgroundColor = this._themeService.getCurrentTheme().gold400;
         const color = new ColorKit(searchBackgroundColor).toRgb();
         const worksheet = this._workbook.getActiveSheet();
+        if (!worksheet) {
+            return;
+        }
+
         const activeSheetId = worksheet.getSheetId();
         const highlightShapes = matches.filter((match) => match.range.subUnitId === activeSheetId).map((find, index) => {
             const { startColumn, startRow, endColumn, endRow } = find.range.range;
@@ -497,12 +500,13 @@ export class SheetFindModel extends FindModel {
                 height,
                 evented: false,
                 inHiddenRange,
+                zIndex: FIND_REPLACE_Z_INDEX,
             };
 
             return new SheetFindReplaceHighlightShape(`find-highlight-${index}`, props);
         });
 
-        scene.addObjects(highlightShapes, FIND_REPLACE_Z_INDEX);
+        scene.addObjects(highlightShapes);
         this._highlightShapes = highlightShapes;
 
         scene.makeDirty();
@@ -530,14 +534,14 @@ export class SheetFindModel extends FindModel {
 
     private _focusMatch(match: ISheetCellMatch): void {
         const subUnitId = match.range.subUnitId;
-        if (subUnitId !== this._workbook.getActiveSheet().getSheetId()) {
-            this._commandService.syncExecuteCommand(SetWorksheetActivateCommand.id,
+        if (subUnitId !== this._workbook.getActiveSheet()?.getSheetId()) {
+            this._commandService.executeCommand(SetWorksheetActivateCommand.id,
                 { unitId: this._workbook.getUnitId(), subUnitId } as ISetWorksheetActivateCommandParams,
                 { fromFindReplace: true }
             );
         }
 
-        this._commandService.syncExecuteCommand(
+        this._commandService.executeCommand(
             ScrollToCellCommand.id,
             { range: match.range.range } as IScrollToCellCommandParams,
             { fromFindReplace: true }
@@ -569,8 +573,9 @@ export class SheetFindModel extends FindModel {
         const loop = params?.loop ?? false;
         const stayIfOnMatch = params?.stayIfOnMatch ?? false;
         const noFocus = params?.noFocus ?? false;
+        const ignoreSelection = params?.ignoreSelection ?? false;
 
-        const matchToMove = this._findNextMatch(loop, stayIfOnMatch);
+        const matchToMove = this._findNextMatch(loop, stayIfOnMatch, ignoreSelection);
         if (matchToMove) {
             const [match, index] = matchToMove;
             this._matchesPosition = index + 1;
@@ -582,7 +587,7 @@ export class SheetFindModel extends FindModel {
             }
 
             if (!noFocus) this._focusMatch(match);
-            if (this._workbook.getActiveSheet().getSheetId() === match.range.subUnitId) {
+            if (this._workbook.getActiveSheet()?.getSheetId() === match.range.subUnitId) {
                 this._updateCurrentHighlightShape(this._activeHighlightIndex);
             }
 
@@ -602,8 +607,9 @@ export class SheetFindModel extends FindModel {
         const loop = params?.loop ?? false;
         const stayIfOnMatch = params?.stayIfOnMatch ?? false;
         const noFocus = params?.noFocus ?? false;
+        const ignoreSelection = params?.ignoreSelection ?? false;
 
-        const matchToMove = this._findPreviousMatch(loop, stayIfOnMatch);
+        const matchToMove = this._findPreviousMatch(loop, stayIfOnMatch, ignoreSelection);
         if (matchToMove) {
             const [match, index] = matchToMove;
             this._matchesPosition = index + 1;
@@ -615,7 +621,7 @@ export class SheetFindModel extends FindModel {
             }
 
             if (!noFocus) this._focusMatch(match);
-            if (this._workbook.getActiveSheet().getSheetId() === match.range.subUnitId) {
+            if (this._workbook.getActiveSheet()?.getSheetId() === match.range.subUnitId) {
                 this._updateCurrentHighlightShape(this._activeHighlightIndex);
             }
 
@@ -627,7 +633,7 @@ export class SheetFindModel extends FindModel {
         return null;
     }
 
-    private _findPreviousMatch(loop = false, stayIfOnMatch = false): [ISheetCellMatch, number] | null {
+    private _findPreviousMatch(loop = false, stayIfOnMatch = false, ignoreSelection = false): [ISheetCellMatch, number] | null {
         // Technically speaking, there are eight different situations!
         // Case 1: if there is a current match and the process is very easy
         if (this.currentMatch) {
@@ -646,27 +652,33 @@ export class SheetFindModel extends FindModel {
             return [this._matches[modded], modded];
         }
 
-        // Case 2: if there is no current match, we should find the next match that is closest to the user's current selection.
+        // Case 2: ignore current selection or there is no selection
+        const lastSelection = this._workbookSelections.getCurrentLastSelection();
+        if (ignoreSelection || !lastSelection) {
+            const lastIndex = this._matches.length - 1;
+            return [this._matches[lastIndex], lastIndex];
+        }
+
+        // Case 3: if there is no current match, we should find the next match that is closest to the user's current selection.
         // Still need to handle `stayInOnMatch` here.
-        const selections = this._selectionManagerService.getSelections();
-        if (!selections?.length) {
-            return [this._matches[0], 0];
-        }
-
         if (this._query!.findScope !== FindScope.UNIT) {
-            return this._findPreviousMatchByRange(this._matches, selections[0].range);
+            return this._findPreviousMatchByRange(this._matches, lastSelection.range);
         }
 
-        const currentSheetId = this._workbook.getActiveSheet().getSheetId();
+        const currentSheetId = this._workbook.getActiveSheet()?.getSheetId();
+        if (!currentSheetId) {
+            return null;
+        }
+
         const worksheetThatHasMatch = this._findPreviousWorksheetThatHasAMatch(currentSheetId, loop);
         if (!worksheetThatHasMatch) {
             return null;
         }
 
-        return this._findPreviousMatchByRange(this._matchesByWorksheet.get(worksheetThatHasMatch)!, selections[0].range);
+        return this._findPreviousMatchByRange(this._matchesByWorksheet.get(worksheetThatHasMatch)!, lastSelection.range);
     }
 
-    private _findNextMatch(loop = false, stayIfOnMatch = false): [ISheetCellMatch, number] | null {
+    private _findNextMatch(loop = false, stayIfOnMatch = false, ignoreSelection = false): [ISheetCellMatch, number] | null {
         // Technically speaking, there are eight different situations!
         // Case 1: if there is a current match and the process is very easy
         if (this.currentMatch) {
@@ -685,24 +697,30 @@ export class SheetFindModel extends FindModel {
             return [this._matches[modded], modded];
         }
 
-        // Case 2: if there is no current match, we should find the next match that is closest to the user's current selection.
+        // Case 2:
+
+        // Case 3: if there is no current match, we should find the next match that is closest to the user's current selection.
         // Still need to handle `stayInOnMatch` here.
-        const selections = this._selectionManagerService.getSelections();
-        if (!selections?.length) {
+        const last = this._workbookSelections.getCurrentLastSelection();
+        if (ignoreSelection || !last) {
             return [this._matches[0], 0];
         }
 
         if (this._query!.findScope !== FindScope.UNIT) {
-            return this._findNextMatchByRange(this._matches, selections[0].range, stayIfOnMatch);
+            return this._findNextMatchByRange(this._matches, last.range, stayIfOnMatch);
         }
 
-        const currentSheetId = this._workbook.getActiveSheet().getSheetId();
+        const currentSheetId = this._workbook.getActiveSheet()?.getSheetId();
+        if (!currentSheetId) {
+            return null;
+        }
+
         const worksheetThatHasMatch = this._findNextWorksheetThatHasAMatch(currentSheetId, loop);
         if (!worksheetThatHasMatch) {
             return null;
         }
 
-        return this._findNextMatchByRange(this._matchesByWorksheet.get(worksheetThatHasMatch)!, selections[0].range);
+        return this._findNextMatchByRange(this._matchesByWorksheet.get(worksheetThatHasMatch)!, last.range);
     }
 
     private _findPreviousWorksheetThatHasAMatch(currentWorksheet: string, loop = false): string | null {
@@ -867,7 +885,7 @@ export class SheetFindModel extends FindModel {
         const isRichText = !!currentContent.p?.body;
         if (isRichText) {
             const clonedRichText = Tools.deepClone(currentContent.p!);
-            replaceInDocumentBody(clonedRichText.body!, findString, replaceString);
+            replaceInDocumentBody(clonedRichText.body!, findString, replaceString, this._query!.caseSensitive);
             return { p: clonedRichText };
         }
 
@@ -893,6 +911,7 @@ class SheetsFindReplaceProvider extends Disposable implements IFindReplaceProvid
 
     constructor(
         @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
+        @IRenderManagerService private readonly _renderManagerService: IRenderManagerService,
         @Inject(Injector) private readonly _injector: Injector
     ) {
         super();
@@ -901,18 +920,17 @@ class SheetsFindReplaceProvider extends Disposable implements IFindReplaceProvid
     async find(query: IFindQuery): Promise<SheetFindModel[]> {
         this._terminate();
 
-        // NOTE: If there are multi Workbook instances then we should create `SheetFindModel` for each of them.
-        // But we don't need to implement that in the foreseeable future.
-        const currentWorkbook = this._univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        if (currentWorkbook) {
-            const sheetFind = this._injector.createInstance(SheetFindModel, currentWorkbook);
-            this._findModelsByUnitId.set(currentWorkbook.getUnitId(), sheetFind);
-            const parsedQuery = this._preprocessQuery(query);
+        const allWorkbooks = this._univerInstanceService.getAllUnitsForType<Workbook>(UniverInstanceType.UNIVER_SHEET);
+        const parsedQuery = this._preprocessQuery(query);
+        const findModels = allWorkbooks.map((workbook) => {
+            const skeletonManagerService = this._renderManagerService.getRenderById(workbook.getUnitId())!.with(SheetSkeletonManagerService);
+            const sheetFind = this._injector.createInstance(SheetFindModel, workbook, skeletonManagerService);
+            this._findModelsByUnitId.set(workbook.getUnitId(), sheetFind);
             sheetFind.start(parsedQuery);
-            return [sheetFind];
-        }
+            return sheetFind;
+        });
 
-        return [];
+        return findModels;
     }
 
     terminate(): void {

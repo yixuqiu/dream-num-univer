@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,36 @@
  * limitations under the License.
  */
 
-import type { IOperation } from '@univerjs/core';
-import { CommandType } from '@univerjs/core';
-import { CanvasView } from '@univerjs/slides';
-import type { IAccessor } from '@wendellhu/redi';
+import type { IAccessor, IOperation, SlideDataModel } from '@univerjs/core';
+import { CommandType, IUniverInstanceService } from '@univerjs/core';
+import { CanvasView } from '../../controllers/canvas-view';
 
 export interface IActiveSlidePageOperationParams {
+    unitId: string;
     id: string;
 }
 export const ActivateSlidePageOperation: IOperation<IActiveSlidePageOperationParams> = {
     id: 'slide.operation.activate-slide',
     type: CommandType.OPERATION,
     handler: (accessor: IAccessor, params: IActiveSlidePageOperationParams) => {
+        const unitId = params.unitId;
         const canvasView = accessor.get(CanvasView);
-        canvasView.activePage(params.id);
+        const univerInstanceService = accessor.get(IUniverInstanceService);
+        // const model = univerInstanceService.getCurrentUnitForType<SlideDataModel>(UniverInstanceType.UNIVER_SLIDE);
+
+        const model = univerInstanceService.getUnit<SlideDataModel>(unitId);
+        const pageId = model?.getActivePage()?.id;
+
+        if (!pageId) return false;
+
+        const page = canvasView.getRenderUnitByPageId(pageId, unitId);
+        if (!page) return false;
+        const transformer = page.scene?.getTransformer();
+        if (transformer) {
+            transformer.clearControls();
+        }
+
+        canvasView.activePage(params.id, unitId);
         return true;
     },
 };

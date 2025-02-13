@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,13 @@
  */
 
 import type { ISheetDataValidationRule } from '@univerjs/core';
-import { Disposable, IResourceManagerService, IUniverInstanceService, LifecycleStages, OnLifecycle, UniverInstanceType } from '@univerjs/core';
-import { Inject } from '@wendellhu/redi';
+import { Disposable, Inject, IResourceManagerService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import { DataValidationModel } from '../models/data-validation-model';
 
 type DataValidationJSON = Record<string, ISheetDataValidationRule[]>;
 
 const DATA_VALIDATION_PLUGIN_NAME = 'SHEET_DATA_VALIDATION_PLUGIN';
 
-@OnLifecycle(LifecycleStages.Ready, DataValidationResourceController)
 export class DataValidationResourceController extends Disposable {
     constructor(
         @IResourceManagerService private readonly _resourceManagerService: IResourceManagerService,
@@ -69,7 +67,7 @@ export class DataValidationResourceController extends Disposable {
                     Object.keys(value).forEach((subunitId) => {
                         const ruleList = value[subunitId];
                         ruleList.forEach((rule) => {
-                            this._dataValidationModel.addRule(unitID, subunitId, rule);
+                            this._dataValidationModel.addRule(unitID, subunitId, rule, 'patched');
                         });
                     });
                 },

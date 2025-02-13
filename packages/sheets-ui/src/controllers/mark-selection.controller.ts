@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import type { ICommandInfo } from '@univerjs/core';
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle, toDisposable } from '@univerjs/core';
-import { Inject } from '@wendellhu/redi';
+import type { ICommandInfo, Workbook } from '@univerjs/core';
+import type { IRenderContext, IRenderModule } from '@univerjs/engine-render';
 
+import { Disposable, ICommandService, Inject } from '@univerjs/core';
 import { SetCellEditVisibleOperation } from '../commands/operations/cell-edit.operation';
 import { IMarkSelectionService } from '../services/mark-selection/mark-selection.service';
 import { SheetSkeletonManagerService } from '../services/sheet-skeleton-manager.service';
 
-@OnLifecycle(LifecycleStages.Steady, MarkSelectionController)
-export class MarkSelectionController extends Disposable {
+export class MarkSelectionRenderController extends Disposable implements IRenderModule {
     constructor(
+        private readonly _context: IRenderContext<Workbook>,
         @Inject(IMarkSelectionService) private _markSelectionService: IMarkSelectionService,
         @ICommandService private _commandService: ICommandService,
         @Inject(SheetSkeletonManagerService) private _sheetSkeletonManagerService: SheetSkeletonManagerService
@@ -57,14 +57,10 @@ export class MarkSelectionController extends Disposable {
     }
 
     private _addRefreshListener() {
-        this.disposeWithMe(
-            toDisposable(
-                this._sheetSkeletonManagerService.currentSkeleton$.subscribe((skeleton) => {
-                    if (skeleton) {
-                        this._markSelectionService.refreshShapes();
-                    }
-                })
-            )
-        );
+        this.disposeWithMe(this._sheetSkeletonManagerService.currentSkeleton$.subscribe((skeleton) => {
+            if (skeleton) {
+                this._markSelectionService.refreshShapes();
+            }
+        }));
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-import type { IRange, IWorkbookData } from '@univerjs/core';
-import { DisposableCollection, ICommandService, LocaleType, Plugin, RANGE_TYPE, Univer, UniverInstanceType } from '@univerjs/core';
-import { NORMAL_SELECTION_PLUGIN_NAME, RefRangeService, SelectionManagerService, SheetInterceptorService, SheetPermissionService } from '@univerjs/sheets';
+import type { IWorkbookData, Workbook } from '@univerjs/core';
 import type { ISetSheetsFilterCriteriaMutationParams, ISetSheetsFilterRangeMutationParams } from '@univerjs/sheets-filter';
+import { AuthzIoLocalService, DisposableCollection, IAuthzIoService, ICommandService, Inject, Injector, LocaleType, Plugin, Univer, UniverInstanceType } from '@univerjs/core';
+import { ExclusiveRangeService, IExclusiveRangeService, RangeProtectionRuleModel, RefRangeService, SetWorksheetActiveOperation, SheetInterceptorService, SheetsSelectionsService, WorkbookPermissionService, WorksheetPermissionService, WorksheetProtectionPointModel, WorksheetProtectionRuleModel } from '@univerjs/sheets';
 import { RemoveSheetsFilterMutation, SetSheetsFilterCriteriaMutation, SetSheetsFilterRangeMutation, UniverSheetsFilterPlugin } from '@univerjs/sheets-filter';
-import { DesktopMenuService, DesktopShortcutService, IMenuService, IShortcutService } from '@univerjs/ui';
-import { Injector } from '@wendellhu/redi';
+import { ClearSheetsFilterCriteriaCommand, ReCalcSheetsFilterCommand, SmartToggleSheetsFilterCommand } from '@univerjs/sheets-filter/commands/commands/sheets-filter.command.js';
+import { IMenuManagerService, IPlatformService, IShortcutService, MenuManagerService, PlatformService, ShortcutService } from '@univerjs/ui';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ClearSheetsFilterCriteriaCommand, ReCalcSheetsFilterCommand, SmartToggleSheetsFilterCommand } from '../../commands/sheets-filter.command';
-import { CloseFilterPanelOperation, OpenFilterPanelOperation } from '../../commands/sheets-filter.operation';
+import { CloseFilterPanelOperation, OpenFilterPanelOperation } from '../../commands/operations/sheets-filter.operation';
 import { ClearFilterCriteriaMenuItemFactory, ReCalcFilterMenuItemFactory, SmartToggleFilterMenuItemFactory } from '../sheets-filter.menu';
 
 const TEST_WORKBOOK_DATA_DEMO: IWorkbookData = {
@@ -56,17 +55,28 @@ function createSheetsFilterMenuTestBed() {
         static override type = UniverInstanceType.UNIVER_SHEET;
         static override pluginName = 'test-plugin';
 
-        constructor(_config: unknown, override readonly _injector: Injector) {
+        constructor(
+            _config: unknown,
+            @Inject(Injector) override readonly _injector: Injector
+        ) {
             super();
         }
 
-        override onStarting(injector: Injector): void {
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([IPlatformService, { useClass: PlatformService }]);
             injector.add([RefRangeService]);
-            injector.add([SelectionManagerService]);
-            injector.add([IShortcutService, { useClass: DesktopShortcutService }]);
-            injector.add([IMenuService, { useClass: DesktopMenuService }]);
-            injector.add([SheetPermissionService]);
+            injector.add([SheetsSelectionsService]);
+            injector.add([IShortcutService, { useClass: ShortcutService }]);
+            injector.add([IMenuManagerService, { useClass: MenuManagerService }]);
+            injector.add([WorksheetPermissionService]);
+            injector.add([WorksheetProtectionPointModel]);
+            injector.add([WorkbookPermissionService]);
+            injector.add([IAuthzIoService, { useClass: AuthzIoLocalService }]);
+            injector.add([WorksheetProtectionRuleModel]);
             injector.add([SheetInterceptorService]);
+            injector.add([RangeProtectionRuleModel]);
+            injector.add([IExclusiveRangeService, { useClass: ExclusiveRangeService, deps: [SheetsSelectionsService] }]);
 
             const commandService = injector.get(ICommandService);
             [
@@ -76,13 +86,17 @@ function createSheetsFilterMenuTestBed() {
                 OpenFilterPanelOperation,
                 CloseFilterPanelOperation,
             ].forEach((command) => commandService.registerCommand(command));
+
+            this._injector.get(SheetInterceptorService);
+            this._injector.get(WorkbookPermissionService);
+            this._injector.get(WorksheetPermissionService);
         }
     }
 
     univer.registerPlugin(TestPlugin);
     univer.registerPlugin(UniverSheetsFilterPlugin);
 
-    const sheet = univer.createUniverSheet(TEST_WORKBOOK_DATA_DEMO);
+    const sheet = univer.createUnit<IWorkbookData, Workbook>(UniverInstanceType.UNIVER_SHEET, TEST_WORKBOOK_DATA_DEMO);
 
     return { univer, get, sheet };
 }
@@ -104,6 +118,10 @@ describe('test sheet filter menu items', () => {
         disposableCollection = new DisposableCollection();
 
         commandService = get(ICommandService);
+        commandService.registerCommand(SetWorksheetActiveOperation);
+
+        // Active sheet, prevent activeSheet from being initialized to null, causing activeFilterModel$ to also transmit null.
+        expect(commandService.syncExecuteCommand(SetWorksheetActiveOperation.id, { unitId: 'test', subUnitId: 'sheet1' })).toBeTruthy();
     });
 
     afterEach(() => {
@@ -111,33 +129,6 @@ describe('test sheet filter menu items', () => {
 
         disposableCollection.dispose();
     });
-
-    function select(range: IRange) {
-        const selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
-
-        const { startColumn, startRow, endColumn, endRow } = range;
-        selectionManager.add([
-            {
-                range: { startRow, startColumn, endColumn, endRow, rangeType: RANGE_TYPE.NORMAL },
-                primary: {
-                    startRow,
-                    startColumn,
-                    endColumn,
-                    endRow,
-                    actualRow: startRow,
-                    actualColumn: startColumn,
-                    isMerged: false,
-                    isMergedMainCell: false,
-                },
-                style: null,
-            },
-        ]);
-    }
 
     it('should "SmartToggleSheetsFilterMenu" change status correctly', () => {
         let activated = false;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,24 @@
  * limitations under the License.
  */
 
-import type { DocumentDataModel, IDocumentData } from '@univerjs/core';
+import type { Dependency, DocumentDataModel, IDocumentData } from '@univerjs/core';
 import {
     ILogService,
+    Inject,
+    Injector,
     IUniverInstanceService,
     LocaleService,
     LogLevel,
     Plugin,
     Univer,
+    UniverInstanceType,
 } from '@univerjs/core';
-import {
-    enUS,
-    zhCN,
-} from '@univerjs/sheets-formula';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import { DocStateChangeManagerService, DocViewModelManagerService, IMEInputManagerService, TextSelectionManagerService } from '@univerjs/docs';
-
-import { IRenderManagerService, ITextSelectionRenderManager, RenderManagerService, TextSelectionRenderManager } from '@univerjs/engine-render';
-import { FUniver } from '../../facade';
+import { DocSelectionManagerService, DocSkeletonManagerService, DocStateEmitService } from '@univerjs/docs';
+import { DocIMEInputManagerService, DocsRenderService, DocStateChangeManagerService } from '@univerjs/docs-ui';
+import { IRenderManagerService, RenderManagerService } from '@univerjs/engine-render';
+import enUS from '@univerjs/sheets-formula-ui/locale/en-US';
+import zhCN from '@univerjs/sheets-formula-ui/locale/zh-CN';
+import { FUniver } from '../../everything';
 
 function getTestDocumentDataDemo(): IDocumentData {
     return {
@@ -73,19 +71,26 @@ export function createTestBed(documentConfig?: IDocumentData, dependencies?: Dep
             @Inject(Injector) override readonly _injector: Injector
         ) {
             super();
-
-            this._injector = _injector;
         }
 
-        override onStarting(injector: Injector): void {
+        override onStarting(): void {
+            const injector = this._injector;
             injector.add([IRenderManagerService, { useClass: RenderManagerService }]);
-            injector.add([TextSelectionManagerService]);
-            injector.add([DocViewModelManagerService]);
+            injector.add([DocSelectionManagerService]);
+            injector.add([DocStateEmitService]);
             injector.add([DocStateChangeManagerService]);
-            injector.add([IMEInputManagerService]);
-            injector.add([ITextSelectionRenderManager, { useClass: TextSelectionRenderManager }]);
+            injector.add([DocsRenderService]);
 
             dependencies?.forEach((d) => injector.add(d));
+
+            const renderManagerService = injector.get(IRenderManagerService);
+            renderManagerService.registerRenderModule(UniverInstanceType.UNIVER_DOC, [DocSkeletonManagerService] as Dependency);
+            renderManagerService.registerRenderModule(UniverInstanceType.UNIVER_DOC, [DocIMEInputManagerService] as Dependency);
+        }
+
+        override onReady(): void {
+            this._injector.get(DocStateChangeManagerService);
+            this._injector.get(DocsRenderService);
         }
     }
 
@@ -98,7 +103,7 @@ export function createTestBed(documentConfig?: IDocumentData, dependencies?: Dep
     univerInstanceService.focusUnit('test');
     const logService = injector.get(ILogService);
 
-    logService.setLogLevel(LogLevel.SILENT); // change this to `LogLevel.VERBOSE` to debug tests via logs
+    logService.setLogLevel(LogLevel.SILENT);
 
     const univerAPI = FUniver.newAPI(injector);
 

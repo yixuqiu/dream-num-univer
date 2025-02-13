@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 export enum FUNCTION_NAMES_STATISTICAL {
     AVEDEV = 'AVEDEV',
     AVERAGE = 'AVERAGE',
+    AVERAGE_WEIGHTED = 'AVERAGE.WEIGHTED',
     AVERAGEA = 'AVERAGEA',
     AVERAGEIF = 'AVERAGEIF',
     AVERAGEIFS = 'AVERAGEIFS',
@@ -73,6 +74,7 @@ export enum FUNCTION_NAMES_STATISTICAL {
     LOGEST = 'LOGEST',
     LOGNORM_DIST = 'LOGNORM.DIST',
     LOGNORM_INV = 'LOGNORM.INV',
+    MARGINOFERROR = 'MARGINOFERROR',
     MAX = 'MAX',
     MAXA = 'MAXA',
     MAXIFS = 'MAXIFS',

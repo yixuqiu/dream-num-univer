@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,32 @@
  * limitations under the License.
  */
 
-import { LocaleType, LogLevel, Univer } from '@univerjs/core';
+import { LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
 import { defaultTheme } from '@univerjs/design';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
-import { UniverUIPlugin } from '@univerjs/ui';
-import { UniverUniscriptPlugin } from '@univerjs/uniscript';
+import { DEFAULT_DOCUMENT_DATA_CN } from '@univerjs/mockdata';
+import { UniverSheetsPlugin } from '@univerjs/sheets';
 
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
-import { UniverSheetsPlugin } from '@univerjs/sheets';
-import { DEFAULT_DOCUMENT_DATA_CN } from '../data';
+import { UniverUIPlugin } from '@univerjs/ui';
+import { UniverUniscriptPlugin } from '@univerjs/uniscript';
+import { enUS, faIR, ruRU, zhCN } from '../locales';
+
+import '../global.css';
 
 // univer
 const univer = new Univer({
     theme: defaultTheme,
     locale: LocaleType.ZH_CN,
+    locales: {
+        [LocaleType.ZH_CN]: zhCN,
+        [LocaleType.EN_US]: enUS,
+        [LocaleType.RU_RU]: ruRU,
+        [LocaleType.FA_IR]: faIR,
+    },
     logLevel: LogLevel.VERBOSE,
 });
 
@@ -40,7 +49,7 @@ univer.registerPlugin(UniverRenderEnginePlugin);
 univer.registerPlugin(UniverFormulaEnginePlugin);
 univer.registerPlugin(UniverUIPlugin, {
     container: 'app',
-    header: true,
+    footer: false,
 });
 
 univer.registerPlugin(UniverDocsPlugin);
@@ -52,17 +61,18 @@ univer.registerPlugin(UniverSheetsUIPlugin);
 univer.registerPlugin(UniverUniscriptPlugin, {
     getWorkerUrl(moduleID: string, label: string) {
         if (label === 'typescript' || label === 'javascript') {
-            return './vs/language/typescript/ts.worker.js';
+            return '/vs/language/typescript/ts.worker.js';
         }
 
-        return './vs/editor/editor.worker.js';
+        return '/vs/editor/editor.worker.js';
     },
 });
 
 // create univer doc instance
-univer.createUniverDoc(DEFAULT_DOCUMENT_DATA_CN);
+univer.createUnit(UniverInstanceType.UNIVER_DOC, DEFAULT_DOCUMENT_DATA_CN);
 
 declare global {
+    // eslint-disable-next-line ts/naming-convention
     interface Window {
         univer?: Univer;
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -113,7 +113,7 @@ export interface IEvent extends Event {
      */
     inputIndex: number;
     /**
-     * Previous state of given input
+     * Previous state of given input, for what???, nobody read this value.
      */
     previousState: Nullable<number>;
     /**
@@ -298,6 +298,17 @@ export interface IPointerEvent extends IMouseEvent {
      * Type of pointer
      */
     pointerType: string;
+}
+
+/**
+ * Native friendly interface for DragEvent Object
+ */
+export interface IDragEvent extends IMouseEvent {
+    // Properties
+    /**
+     * Holds the drag operation's data
+     */
+    dataTransfer: DataTransfer;
 }
 
 /**

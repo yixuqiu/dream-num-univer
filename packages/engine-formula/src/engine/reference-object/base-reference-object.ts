@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,32 @@
  */
 
 import type { ICellData, IRange, Nullable } from '@univerjs/core';
-import { CellValueType, isNullCell, moveRangeByOffset } from '@univerjs/core';
-
-import { FormulaAstLRU } from '../../basics/cache-lru';
 import type { IRuntimeUnitDataType, IUnitData, IUnitSheetNameMap, IUnitStylesData } from '../../basics/common';
+
+import type { BaseValueObject, IArrayValueObject } from '../value-object/base-value-object';
+import { CellValueType, moveRangeByOffset } from '@univerjs/core';
+import { DEFAULT_TEXT_FORMAT } from '@univerjs/engine-numfmt';
+import { FormulaAstLRU } from '../../basics/cache-lru';
 import { ERROR_TYPE_SET, ErrorType } from '../../basics/error-type';
+import { isNullCellForFormula } from '../../basics/is-null-cell';
 import { ObjectClassType } from '../../basics/object-class-type';
+import { getCellValue } from '../utils/cell';
+import { getRuntimeFeatureCell } from '../utils/get-runtime-feature-cell';
 import { ArrayValueObject, ValueObjectFactory } from '../value-object/array-value-object';
-import { type BaseValueObject, ErrorValueObject, type IArrayValueObject } from '../value-object/base-value-object';
+import { ErrorValueObject } from '../value-object/base-value-object';
 import {
     createBooleanValueObjectByRawValue,
     createNumberValueObjectByRawValue,
-    createStringValueObjectByRawValue,
     NullValueObject,
     NumberValueObject,
+    StringValueObject,
 } from '../value-object/primitive-object';
-import { getCellValue } from '../utils/cell';
 
 export type NodeValueType = BaseValueObject | BaseReferenceObject | AsyncObject | AsyncArrayObject;
 
 export type FunctionVariantType = BaseValueObject | BaseReferenceObject;
 
-const FORMULA_CACHE_LRU_COUNT = 100000;
+const FORMULA_CACHE_LRU_COUNT = 10000;
 
 export const FORMULA_REF_TO_ARRAY_CACHE = new FormulaAstLRU<ArrayValueObject>(FORMULA_CACHE_LRU_COUNT);
 export class BaseReferenceObject extends ObjectClassType {
@@ -134,6 +138,7 @@ export class BaseReferenceObject extends ObjectClassType {
         }
 
         return {
+            ...this._rangeData,
             startRow,
             endRow,
             startColumn,
@@ -163,19 +168,23 @@ export class BaseReferenceObject extends ObjectClassType {
                     return callback(ErrorValueObject.create(ErrorType.REF), r, c);
                 }
 
-                const cell = this.getCellData(r, c);
+                const cell = this.getCellData(r, c)!;
                 let result: Nullable<boolean> = false;
-                if (isNullCell(cell)) {
+                if (isNullCellForFormula(cell)) {
                     result = callback(null, r, c);
                     continue;
                 }
 
-                const resultObjectValue = this.getCellValueObject(cell);
+                let resultObjectValue = this.getCellValueObject(cell);
 
-                // Set numfmt pattern for first cell, it does not have to be a number, the string can also be set a number format
+                // Set numfmt pattern for first cell
+                // TODO@Dushusir it does not have to be a number, the string can also be set a number format
                 if (r === startRow && c === startColumn) {
                     const pattern = this.getCellPattern(unitId, sheetId, r, c);
-                    pattern && resultObjectValue.setPattern(pattern);
+                    if (pattern && resultObjectValue.isNumber()) {
+                        const value = Number(resultObjectValue.getValue());
+                        resultObjectValue = NumberValueObject.create(value, pattern);
+                    }
                 }
 
                 result = callback(resultObjectValue, r, c);
@@ -195,13 +204,17 @@ export class BaseReferenceObject extends ObjectClassType {
             return NumberValueObject.create(0);
         }
 
-        const cellValueObject = this.getCellValueObject(cell);
+        let cellValueObject = this.getCellValueObject(cell);
 
-        // Set numfmt pattern, it does not have to be a number, the string can also be set a number format
+        // Set numfmt pattern,
+        // TODO@Dushusir it does not have to be a number, the string can also be set a number format
         const unitId = this._forcedUnitId || this._defaultUnitId;
         const sheetId = this._forcedSheetId || this._defaultSheetId;
         const pattern = this.getCellPattern(unitId, sheetId, startRow, startColumn);
-        pattern && cellValueObject.setPattern(pattern);
+        if (pattern && cellValueObject.isNumber()) {
+            const value = Number(cellValueObject.getValue());
+            cellValueObject = NumberValueObject.create(value, pattern);
+        }
 
         return cellValueObject;
     }
@@ -390,16 +403,32 @@ export class BaseReferenceObject extends ObjectClassType {
         }
 
         if (cell.t === CellValueType.NUMBER) {
-            return createNumberValueObjectByRawValue(value);
+            const pattern = this._getPatternByCell(cell);
+
+            if (pattern === DEFAULT_TEXT_FORMAT) {
+                return StringValueObject.create(value.toString());
+            }
+
+            return createNumberValueObjectByRawValue(value, pattern);
         }
         if (cell.t === CellValueType.STRING || cell.t === CellValueType.FORCE_STRING) {
-            return createStringValueObjectByRawValue(value);
+            // A1 is `"test"`, =A1 also needs to get `"test"`
+            return StringValueObject.create(value.toString());
         }
         if (cell.t === CellValueType.BOOLEAN) {
             return createBooleanValueObjectByRawValue(value);
         }
 
         return ValueObjectFactory.create(value);
+    }
+
+    private _getPatternByCell(cell: ICellData) {
+        const styles = this._unitStylesData[this.getUnitId()];
+
+        if (!styles) return '';
+
+        const style = styles.getStyleByCell(cell);
+        return style?.n?.pattern || '';
     }
 
     getCellByRow(row: number) {
@@ -449,26 +478,12 @@ export class BaseReferenceObject extends ObjectClassType {
     }
 
     getRuntimeFeatureCellValue(row: number, column: number) {
-        const featureKeys = Object.keys(this._runtimeFeatureCellData);
-
-        for (const featureId of featureKeys) {
-            const data = this._runtimeFeatureCellData[featureId];
-            const runtimeFeatureCellData = data?.[this.getUnitId()]?.[this.getSheetId()];
-            if (runtimeFeatureCellData == null) {
-                continue;
-            }
-
-            const value = runtimeFeatureCellData.getValue(row, column);
-
-            if (value == null) {
-                continue;
-            }
-
-            return value;
-        }
+        return getRuntimeFeatureCell(row, column, this.getSheetId(), this.getUnitId(), this._runtimeFeatureCellData);
     }
 
-    getCellByPosition(row?: number, column?: number) {
+    getCellByPosition(rowRaw?: number, columnRaw?: number) {
+        let row = rowRaw;
+        let column = columnRaw;
         if (!row) {
             row = this._rangeData.startRow;
         }

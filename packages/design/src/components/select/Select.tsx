@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,10 @@
  */
 
 import { MoreDownSingle } from '@univerjs/icons';
+import clsx from 'clsx';
 import RcSelect from 'rc-select';
-import React, { useContext } from 'react';
 
+import React, { useContext } from 'react';
 import type { LabelInValueType } from 'rc-select/lib/Select';
 import { ConfigContext } from '../config-provider/ConfigProvider';
 import styles from './index.module.less';
@@ -47,11 +48,18 @@ export interface ISelectProps {
 
     style?: React.CSSProperties;
 
+    /**
+     * Whether the borderless style is used
+     * @default false
+     */
+    borderless?: boolean;
+
     className?: string;
     /**
      * select mode
      */
     mode?: 'combobox' | 'multiple' | 'tags' | undefined;
+
     dropdownRender?: (
         menu: React.ReactElement<any, string | React.JSXElementConstructor<any>>
     ) => React.ReactElement<any, string | React.JSXElementConstructor<any>>;
@@ -75,6 +83,7 @@ export function Select(props: ISelectProps) {
         style,
         className,
         mode,
+        borderless = false,
         dropdownRender,
         labelRender,
         open,
@@ -83,7 +92,11 @@ export function Select(props: ISelectProps) {
         disabled,
     } = props;
 
-    const { mountContainer } = useContext(ConfigContext);
+    const { mountContainer, locale } = useContext(ConfigContext);
+
+    const _className = clsx(className, {
+        [styles.selectBorderless]: borderless,
+    });
 
     return mountContainer && (
         <RcSelect
@@ -96,12 +109,13 @@ export function Select(props: ISelectProps) {
             suffixIcon={<MoreDownSingle />}
             onChange={onChange}
             style={style}
-            className={className}
+            className={_className}
             dropdownRender={dropdownRender}
             labelRender={labelRender}
             open={open}
             dropdownStyle={dropdownStyle}
             onDropdownVisibleChange={onDropdownVisibleChange}
+            notFoundContent={locale?.Select.empty}
             disabled={disabled}
         />
     );

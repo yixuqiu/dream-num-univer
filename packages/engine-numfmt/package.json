@@ -1,6 +1,6 @@
 {
     "name": "@univerjs/engine-numfmt",
-    "version": "0.1.9",
+    "version": "0.6.0-alpha.0",
     "private": false,
     "description": "UniverSheet normal plugin UI manager",
     "author": "DreamNum <developer@univer.ai>",
@@ -24,12 +24,11 @@
         ".": "./src/index.ts",
         "./*": "./src/*"
     },
-    "main": "./lib/cjs/index.js",
-    "module": "./lib/es/index.js",
+    "main": "./src/index.ts",
     "types": "./lib/types/index.d.ts",
     "publishConfig": {
         "access": "public",
-        "main": "./lib/cjs/index.js",
+        "main": "./lib/es/index.js",
         "module": "./lib/es/index.js",
         "exports": {
             ".": {
@@ -51,25 +50,17 @@
     "files": [
         "lib"
     ],
-    "engines": {
-        "node": ">=16.0.0",
-        "npm": ">=8.0.0"
-    },
     "scripts": {
         "test": "vitest run",
         "test:watch": "vitest",
         "coverage": "vitest run --coverage",
         "lint:types": "tsc --noEmit",
-        "build": "tsc && vite build"
-    },
-    "peerDependencies": {},
-    "dependencies": {
-        "numfmt": "^2.5.2"
+        "build": "univer-cli build"
     },
     "devDependencies": {
-        "@univerjs/shared": "workspace:*",
-        "typescript": "^5.4.5",
-        "vite": "^5.2.10",
-        "vitest": "^1.5.0"
+        "@univerjs-infra/shared": "workspace:*",
+        "typescript": "^5.7.3",
+        "vite": "^6.1.0",
+        "vitest": "^3.0.5"
     }
 }

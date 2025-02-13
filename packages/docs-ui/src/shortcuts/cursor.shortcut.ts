@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { Direction, EDITOR_ACTIVATED, FOCUSING_DOC, FOCUSING_UNIVER_EDITOR } from '@univerjs/core';
 import type { IShortcutItem } from '@univerjs/ui';
+import { Direction, EDITOR_ACTIVATED, FOCUSING_DOC, FOCUSING_UNIVER_EDITOR } from '@univerjs/core';
 import { KeyCode, MetaKeys } from '@univerjs/ui';
-
-import { MoveCursorOperation, MoveSelectionOperation, SelectAllOperation } from '@univerjs/docs';
+import { DocSelectAllCommand } from '../commands/commands/doc-select-all.command';
+import { MoveCursorOperation, MoveSelectionOperation } from '../commands/operations/doc-cursor.operation';
 import { whenDocAndEditorFocused } from './utils';
 
 export const MoveCursorUpShortcut: IShortcutItem = {
@@ -94,7 +94,7 @@ export const MoveSelectionRightShortcut: IShortcutItem = {
 };
 
 export const SelectAllShortcut: IShortcutItem = {
-    id: SelectAllOperation.id,
+    id: DocSelectAllCommand.id,
     binding: KeyCode.A | MetaKeys.CTRL_COMMAND,
     preconditions: (contextService) =>
         contextService.getContextValue(FOCUSING_UNIVER_EDITOR) && (contextService.getContextValue(FOCUSING_DOC) || contextService.getContextValue(EDITOR_ACTIVATED)),

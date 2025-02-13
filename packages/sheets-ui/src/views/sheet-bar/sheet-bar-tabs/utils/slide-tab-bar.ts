@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ export interface SlideTabBarConfig {
     onChangeTab: (event: MouseEvent, id: string) => void;
     onScroll: (state: IScrollState) => void;
     onNameCheckAlert: (text: string) => boolean;
+    onNameChangeCheck: () => boolean;
 }
 
 export interface SlideTabItemAnimate {
@@ -118,6 +119,9 @@ export class SlideTabItem {
     }
 
     setEditor(callback?: (event: FocusEvent) => void): void {
+        if (!this._slideTabBar.getConfig().onNameChangeCheck()) {
+            return;
+        }
         let compositionFlag = true;
         if (this._editMode === false) {
             const input = this._slideTabItem.querySelector('span');
@@ -129,7 +133,7 @@ export class SlideTabItem {
 
                 if (input) {
                     input.removeAttribute('contentEditable');
-                    input.removeEventListener('blur', blurAction);
+                    input.removeEventListener('focusout', blurAction);
                     input.removeEventListener('compositionstart', compositionstartAction);
                     input.removeEventListener('compositionend', compositionendAction);
                     input.removeEventListener('input', inputAction);
@@ -170,7 +174,7 @@ export class SlideTabItem {
 
             const inputAction = (e: Event) => {
                 if (!input) return;
-                const maxLength = 50;
+                const maxLength = 31;
 
                 setTimeout(() => {
                     if (compositionFlag) {
@@ -185,7 +189,7 @@ export class SlideTabItem {
 
             if (input) {
                 input.setAttribute('contentEditable', 'true');
-                input.addEventListener('blur', blurAction);
+                input.addEventListener('focusout', blurAction);
                 input.addEventListener('compositionstart', compositionstartAction);
                 input.addEventListener('compositionend', compositionendAction);
                 input.addEventListener('input', inputAction);
@@ -438,6 +442,7 @@ export class SlideTabBar {
      */
     protected _rightMoveX: number = 0;
 
+    // eslint-disable-next-line max-lines-per-function
     constructor(config: Partial<SlideTabBarConfig>) {
         if (config.slideTabBarContainer == null) {
             throw new Error('not found slide-tab-bar root element');
@@ -459,10 +464,17 @@ export class SlideTabBar {
         let lastPageX = 0;
         let lastPageY = 0;
         let lastTime = 0;
+        // eslint-disable-next-line max-lines-per-function
         this._downAction = (downEvent: MouseEvent) => {
             // Waiting for the rename of the previous TAB
             if (this._activeTabItem?.isEditMode()) {
                 return;
+            }
+
+            // Clear timer
+            if (this._longPressTimer) {
+                clearTimeout(this._longPressTimer);
+                this._longPressTimer = null;
             }
 
             const slideItemId = (downEvent.target as HTMLElement)
@@ -525,9 +537,10 @@ export class SlideTabBar {
 
             // Set a timer to delay dragging for 300 milliseconds
             this._longPressTimer = setTimeout(() => {
+                if (!activeSlideItemElement || this._activeTabItem?.isEditMode()) return;
+
                 this._activeTabItem?.enableFixed();
                 this._startAutoScroll();
-                if (!activeSlideItemElement) return;
                 // Set the mouse cursor to drag
                 activeSlideItemElement.setPointerCapture((downEvent as PointerEvent).pointerId);
                 activeSlideItemElement.style.cursor = 'move';
@@ -536,6 +549,10 @@ export class SlideTabBar {
         };
 
         this._upAction = (upEvent: MouseEvent) => {
+            if (this._activeTabItem?.isEditMode()) {
+                return;
+            }
+
             // Clear timer
             if (this._longPressTimer) {
                 clearTimeout(this._longPressTimer);
@@ -543,6 +560,9 @@ export class SlideTabBar {
             }
 
             if (!this._activeTabItem) return;
+
+            // When blurring after editing the table name, _activeTabItemIndex and _compareIndex may not be equal, causing slideEnd to be triggered
+            const isFromScroll = this._autoScrollTime !== null;
 
             this._closeAutoScroll();
             this._activeTabItem.disableFixed();
@@ -558,7 +578,7 @@ export class SlideTabBar {
 
             this._activeTabItem?.removeEventListener('pointermove', this._moveAction);
             this._activeTabItem?.removeEventListener('pointerup', this._upAction);
-            if (this._config.onSlideEnd && this._activeTabItemIndex !== this._compareIndex) {
+            if (this._config.onSlideEnd && this._activeTabItemIndex !== this._compareIndex && isFromScroll) {
                 this.removeListener();
                 this._config.onSlideEnd(upEvent, this._compareIndex || 0);
             }
@@ -633,6 +653,7 @@ export class SlideTabBar {
         this._initConfig();
         this.removeListener();
         this.addListener();
+        this.scrollToItem(currentIndex);
     }
 
     primeval(): HTMLElement {
@@ -722,6 +743,24 @@ export class SlideTabBar {
         });
     }
 
+    scrollToItem(index?: number): void {
+        index = index ?? this._config.currentIndex;
+        // Check index validity
+        if (index < 0 || index >= this._slideTabItems.length) {
+            console.error('Index out of bounds');
+            return;
+        }
+
+        const right = this.calculateTabItemScrollX(index);
+        this._slideScrollbar.scrollX(this._slideScrollbar.getScrollX() + right);
+
+        // Trigger a scroll event
+        this._config.onScroll({
+            leftEnd: this.isLeftEnd(),
+            rightEnd: this.isRightEnd(),
+        });
+    }
+
     calculateLeftScrollX(shouldFlipPage?: boolean): number {
         let scrollX = 0;
         const padding = 4;
@@ -766,14 +805,67 @@ export class SlideTabBar {
         return scrollX;
     }
 
+    calculateTabItemScrollX(index: number): number {
+        let scrollX = 0;
+        const padding = 4;
+
+        const containerRect = this._slideTabBar.getBoundingClientRect();
+        const containerLeftPosition = containerRect.left;
+        const containerRightPosition = containerRect.left + containerRect.width;
+
+        const itemReact = this._slideTabItems[index].getSlideTabItem().getBoundingClientRect();
+        const itemLeft = itemReact.left;
+        const itemWidth = itemReact.width;
+
+        // Left side or part of left side
+        if (itemLeft - padding * 2 < containerLeftPosition) {
+            scrollX = itemLeft - containerLeftPosition - padding;
+        }
+
+        // Right side or part of right side
+        if (itemLeft + itemWidth + padding * 2 > containerRightPosition) {
+            scrollX = itemLeft + itemWidth - containerRightPosition + padding;
+        }
+
+        return scrollX;
+    }
+
+    calculateActiveTabItemScrollX(): number {
+        let scrollX = 0;
+        const padding = 4;
+
+        const containerRect = this._slideTabBar.getBoundingClientRect();
+        const containerLeftPosition = containerRect.left;
+        const containerRightPosition = containerRect.left + containerRect.width;
+
+        const itemReact = this._activeTabItem?.getSlideTabItem().getBoundingClientRect();
+        if (!itemReact) return 0;
+
+        const itemLeft = itemReact.left;
+        const itemWidth = itemReact.width;
+
+        // Part of left side
+        if (itemLeft - padding * 2 < containerLeftPosition && itemLeft + itemWidth > containerLeftPosition) {
+            scrollX = itemLeft - containerLeftPosition - padding;
+        }
+
+        // Part of right side
+        if (itemLeft < containerRightPosition && itemLeft + itemWidth + padding * 2 > containerRightPosition) {
+            scrollX = itemLeft + itemWidth - containerRightPosition + padding;
+        }
+
+        return scrollX;
+    }
+
     destroy() {
+        this.removeListener();
+
         this._downActionX = 0;
         this._moveActionX = 0;
         this._compareDirection = 0;
         this._compareIndex = 0;
         this._slideTabItems = [];
         this._activeTabItem = null;
-        this.removeListener();
 
         // TODO@Dushusir: If set to null, the types in other places need to be judged
         // this._slideTabBar = null;

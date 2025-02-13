@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { resolve } from 'node:path';
-import { existsSync, readdirSync } from 'node:fs';
 import type { StorybookConfig } from '@storybook/react-webpack5';
 import type { StoriesEntry } from '@storybook/types';
+import { existsSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin';
 
@@ -65,13 +65,34 @@ const config: StorybookConfig = {
             options: {
                 rules: [
                     {
-                        test: /\.(less|css)$/i,
+                        test: /\.css$/,
+                        sideEffects: true,
+                        use: [
+                            'style-loader',
+                            {
+                                loader: 'css-loader',
+                                options: {
+                                    importLoaders: 1,
+                                },
+                            },
+                            {
+                                loader: 'postcss-loader',
+                                options: {
+                                    implementation: 'postcss',
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        test: /\.less$/i,
+                        sideEffects: true,
                         use: [
                             'style-loader',
                             {
                                 loader: 'css-loader',
                                 options: {
                                     modules: {
+                                        namedExport: false,
                                         exportLocalsConvention: 'camelCaseOnly',
                                         localIdentName: 'univer-[local]',
                                     },
@@ -79,7 +100,7 @@ const config: StorybookConfig = {
                             },
                             {
                                 loader: 'less-loader',
-                                options: { implementation: require.resolve('less') },
+                                options: { implementation: 'less' },
                             },
                         ],
                     },
@@ -89,11 +110,7 @@ const config: StorybookConfig = {
     ],
     framework: {
         name: '@storybook/react-webpack5',
-        options: {
-            // builder: {
-            //     useSWC: false,
-            // },
-        },
+        options: {},
     },
     swc: () => {
         return {
@@ -102,8 +119,10 @@ const config: StorybookConfig = {
                 type: 'es6',
                 noInterop: true,
             },
-            jsc: {
+            env: {
                 target: 'es2022',
+            },
+            jsc: {
                 parser: {
                     syntax: 'typescript',
                     tsx: true,

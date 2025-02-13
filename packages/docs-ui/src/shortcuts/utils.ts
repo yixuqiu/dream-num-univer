@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,17 @@
  */
 
 import type { IContextService } from '@univerjs/core';
-import { FOCUSING_DOC, FOCUSING_UNIVER_EDITOR, FOCUSING_UNIVER_EDITOR_STANDALONE_SINGLE_MODE } from '@univerjs/core';
+import { FOCUSING_COMMON_DRAWINGS, FOCUSING_DOC, FOCUSING_UNIVER_EDITOR } from '@univerjs/core';
 
 export function whenDocAndEditorFocused(contextService: IContextService): boolean {
-    return contextService.getContextValue(FOCUSING_DOC) && contextService.getContextValue(FOCUSING_UNIVER_EDITOR);
+    return contextService.getContextValue(FOCUSING_DOC)
+        && contextService.getContextValue(FOCUSING_UNIVER_EDITOR)
+        && !contextService.getContextValue(FOCUSING_COMMON_DRAWINGS);
 }
 
 export function whenDocAndEditorFocusedWithBreakLine(contextService: IContextService): boolean {
-    return contextService.getContextValue(FOCUSING_DOC) && contextService.getContextValue(FOCUSING_UNIVER_EDITOR) && !contextService.getContextValue(FOCUSING_UNIVER_EDITOR_STANDALONE_SINGLE_MODE);
+    return contextService.getContextValue(FOCUSING_DOC)
+        && contextService.getContextValue(FOCUSING_UNIVER_EDITOR)
+        // && !contextService.getContextValue(FOCUSING_UNIVER_EDITOR_STANDALONE_SINGLE_MODE)
+        && !contextService.getContextValue(FOCUSING_COMMON_DRAWINGS);
 }

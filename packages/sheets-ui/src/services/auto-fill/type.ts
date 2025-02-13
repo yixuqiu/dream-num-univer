@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { Direction, ICellData, IMutationInfo, Nullable } from '@univerjs/core';
+import type { Direction, IAccessor, ICellData, IMutationInfo, IObjectMatrixPrimitiveType, Nullable } from '@univerjs/core';
 import type { IDiscreteRange } from '../../controllers/utils/range-tools';
 
 export enum AutoFillHookType {
@@ -33,8 +33,9 @@ export interface ISheetAutoFillHook {
     id: string;
     priority?: number;
     type?: AutoFillHookType;
+    bindUnit?: string;
     disable?: (location: IAutoFillLocation, direction: Direction, applyType: APPLY_TYPE) => boolean;
-    onBeforeFillData?(location: IAutoFillLocation, direction: Direction): boolean | void;
+    onBeforeFillData?(location: IAutoFillLocation, direction: Direction): APPLY_TYPE | void;
     onFillData?(
         location: IAutoFillLocation,
         direction: Direction,
@@ -44,6 +45,7 @@ export interface ISheetAutoFillHook {
         redos: IMutationInfo[];
     };
     onAfterFillData?(location: IAutoFillLocation, direction: Direction, applyType: APPLY_TYPE): boolean | void;
+    onBeforeSubmit?: (location: IAutoFillLocation, direction: Direction, applyType: APPLY_TYPE, cellValue: IObjectMatrixPrimitiveType<Nullable<ICellData>>) => void;
 }
 
 export enum DATA_TYPE {
@@ -71,7 +73,7 @@ export type ICopyDataInTypeIndexInfo = number[];
 
 export interface IAutoFillRule {
     type: string;
-    match: (cellData: Nullable<ICellData>) => boolean;
+    match: (cellData: Nullable<ICellData>, accessor: IAccessor) => boolean;
     isContinue: (prev: IRuleConfirmedData, cur: Nullable<ICellData>) => boolean;
     applyFunctions?: APPLY_FUNCTIONS;
     priority: number;
@@ -97,8 +99,8 @@ export type APPLY_FUNCTIONS = {
 };
 
 export enum APPLY_TYPE {
-    COPY = '0',
-    SERIES = '1',
-    ONLY_FORMAT = '2',
-    NO_FORMAT = '3',
+    COPY = 'COPY',
+    SERIES = 'SERIES',
+    ONLY_FORMAT = 'ONLY_FORMAT',
+    NO_FORMAT = 'NO_FORMAT',
 }

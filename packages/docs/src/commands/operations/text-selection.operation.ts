@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  */
 
 import type { IOperation } from '@univerjs/core';
-import { CommandType } from '@univerjs/core';
 import type { ITextRangeWithStyle, ITextSelectionStyle } from '@univerjs/engine-render';
+import { CommandType } from '@univerjs/core';
 
 export interface ISetTextSelectionsOperationParams {
     unitId: string;
@@ -33,7 +33,7 @@ export const SetTextSelectionsOperation: IOperation<ISetTextSelectionsOperationP
 
     type: CommandType.OPERATION,
 
-    handler: (_, __) => {
+    handler: () => {
         // for menu highlight use and share cursor.
         return true;
     },

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -107,5 +107,99 @@ describe('test ObjectMatrix', () => {
             1: { 1: '222', 2: '333' },
             2: { 1: '121', 2: '313' },
         });
+    });
+
+    it('test getDataRange', () => {
+        const matrix = new ObjectMatrix({});
+
+        matrix.setValue(3, 3, '444');
+        matrix.setValue(2000, 2000, '555');
+        const range = matrix.getDataRange();
+
+        const range1 = matrix.getStartEndScope();
+
+        // the getDataRange and getStartEndScope should be the same
+        expect(range.startRow).toBe(3);
+        expect(range.startColumn).toBe(3);
+        expect(range.endRow).toBe(2000);
+        expect(range.endColumn).toBe(2000);
+
+        expect(range1.startRow).toBe(3);
+        expect(range1.startColumn).toBe(3);
+        expect(range1.endRow).toBe(2000);
+        expect(range1.endColumn).toBe(2000);
+    });
+
+    it('test getDataRange compare with getStartEndScope', () => {
+        const matrix = new ObjectMatrix({});
+
+        for (let i = 0; i < 100; i++) {
+            const row = Math.floor(Math.random() * 10000);
+            const col = Math.floor(Math.random() * 10000);
+            matrix.setValue(row, col, '444');
+        }
+
+        const range = matrix.getDataRange();
+        const range1 = matrix.getStartEndScope();
+
+        expect(range.startRow).toBe(range1.startRow);
+        expect(range.startColumn).toBe(range1.startColumn);
+        expect(range.endRow).toBe(range1.endRow);
+        expect(range.endColumn).toBe(range1.endColumn);
+    });
+    it('test getDataRange bigger', () => {
+        const matrix = new ObjectMatrix({});
+
+        for (let i = 0; i < 100; i++) {
+            matrix.setValue(i, i, '444');
+        }
+        matrix.setValue(3, 3, '444');
+        matrix.setValue(2000, 2000, '555');
+
+        // console.time('getDataRange');
+        const range = matrix.getDataRange();
+        // console.timeEnd('getDataRange');
+
+        // console.time('getStartEndScope');
+        const range1 = matrix.getStartEndScope();
+        // console.timeEnd('getStartEndScope');
+
+        //compare the time
+        // 100：
+        // getDataRange: 0.763ms
+        // getStartEndScope: 0.43ms
+        // 1000：
+        // getDataRange: 14.686ms
+        // getStartEndScope: 8.129ms
+        // 10000：
+        // getDataRange: 38.232ms
+        // getStartEndScope: 21.041ms
+        // 100000：
+        // getDataRange: 46.832ms
+        // getStartEndScope: 23.482ms
+
+        // the getDataRange and getStartEndScope should be the same
+        expect(range.startRow).toBe(range1.startRow);
+        expect(range.startColumn).toBe(range1.startColumn);
+        expect(range.endRow).toBe(range1.endRow);
+        expect(range.endColumn).toBe(range1.endColumn);
+    });
+
+    it('test getDiscreteRanges', () => {
+        const matrix = new ObjectMatrix({
+            0: {
+                0: {},
+                1: { v: 2 },
+            },
+        });
+
+        const range = matrix.getDiscreteRanges();
+
+        expect(range).toStrictEqual([{
+            endColumn: 1,
+            endRow: 0,
+            startColumn: 0,
+            startRow: 0,
+        }]);
     });
 });

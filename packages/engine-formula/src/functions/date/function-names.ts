@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ export enum FUNCTION_NAMES_DATE {
     DAYS360 = 'DAYS360',
     EDATE = 'EDATE',
     EOMONTH = 'EOMONTH',
+    EPOCHTODATE = 'EPOCHTODATE',
     HOUR = 'HOUR',
     ISOWEEKNUM = 'ISOWEEKNUM',
     MINUTE = 'MINUTE',
@@ -33,6 +34,7 @@ export enum FUNCTION_NAMES_DATE {
     SECOND = 'SECOND',
     TIME = 'TIME',
     TIMEVALUE = 'TIMEVALUE',
+    TO_DATE = 'TO_DATE',
     TODAY = 'TODAY',
     WEEKDAY = 'WEEKDAY',
     WEEKNUM = 'WEEKNUM',

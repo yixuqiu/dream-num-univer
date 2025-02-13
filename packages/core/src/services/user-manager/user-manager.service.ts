@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,40 @@
  * limitations under the License.
  */
 
-import type { IUser } from '@univerjs/protocol';
-import { Subject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
+import { createDefaultUser } from './const';
 
+export interface IUser {
+    userID: string; name: string; avatar?: string;
+};
 
 export class UserManagerService {
     private _model = new Map<string, IUser>();
     private _userChange$ = new Subject<{ type: 'add' | 'delete'; user: IUser } | { type: 'clear' }>();
     public userChange$ = this._userChange$.asObservable();
+    private _currentUser$ = new BehaviorSubject<IUser>(createDefaultUser());
+    /**
+     * When the current user undergoes a switch or change
+     * @memberof UserManagerService
+     */
+    public currentUser$ = this._currentUser$.asObservable();
 
-    addUser(user: IUser) {
+    getCurrentUser<T extends IUser>() {
+        return this._currentUser$.getValue() as T;
+    }
+
+    setCurrentUser<T extends IUser>(user: T) {
+        this.addUser(user);
+        this._currentUser$.next(user);
+    }
+
+    addUser<T extends IUser>(user: T) {
         this._model.set(user.userID, user);
         this._userChange$.next({ type: 'add', user });
     }
 
-    getUser(userId: string, callBack?: () => void) {
-        const user = this._model.get(userId);
+    getUser<T extends IUser>(userId: string, callBack?: () => void) {
+        const user = this._model.get(userId) as T;
         if (user) {
             return user;
         }
@@ -45,5 +63,9 @@ export class UserManagerService {
     clear() {
         this._model.clear();
         this._userChange$.next({ type: 'clear' });
+    }
+
+    list() {
+        return Array.from(this._model.values());
     }
 }

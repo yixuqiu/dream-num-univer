@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import type { ICellData, ICommand, IObjectMatrixPrimitiveType, IRange } from '@univerjs/core';
+import type { IAccessor, ICellData, ICommand, IObjectMatrixPrimitiveType, IRange } from '@univerjs/core';
+import type { ISheetCommandSharedParams } from '../utils/interface';
+
 import {
     CommandType,
     ICommandService,
+    IPermissionService,
     isICellData,
     IUndoRedoService,
     IUniverInstanceService,
@@ -25,12 +28,11 @@ import {
     sequenceExecute,
     Tools,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import { SelectionManagerService } from '../../services/selection-manager.service';
+import { WorksheetEditPermission } from '../../services/permission/permission-point';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
 import { SheetInterceptorService } from '../../services/sheet-interceptor/sheet-interceptor.service';
 import { SetRangeValuesMutation, SetRangeValuesUndoMutationFactory } from '../mutations/set-range-values.mutation';
-import type { ISheetCommandSharedParams } from '../utils/interface';
+import { followSelectionOperation } from './utils/selection-utils';
 import { getSheetCommandTarget } from './utils/target-util';
 
 export interface ISetRangeValuesCommandParams extends Partial<ISheetCommandSharedParams> {
@@ -50,22 +52,23 @@ export interface ISetRangeValuesCommandParams extends Partial<ISheetCommandShare
 export const SetRangeValuesCommand: ICommand = {
     id: 'sheet.command.set-range-values',
     type: CommandType.COMMAND,
+
     handler: (accessor: IAccessor, params: ISetRangeValuesCommandParams) => {
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const sheetInterceptorService = accessor.get(SheetInterceptorService);
-
-        const target = getSheetCommandTarget(univerInstanceService);
+        const permissionService = accessor.get(IPermissionService);
+        const target = getSheetCommandTarget(univerInstanceService, params);
         if (!target) return false;
 
-        const { subUnitId, unitId } = target;
+        const { subUnitId, unitId, workbook, worksheet } = target;
         const { value, range } = params;
-        const currentSelections = range ? [range] : selectionManagerService.getSelectionRanges();
-        if (!currentSelections || !currentSelections.length) {
-            return false;
-        }
+        const currentSelections = range ? [range] : selectionManagerService.getCurrentSelections()?.map((s) => s.range);
+
+        if (!currentSelections || !currentSelections.length) return false;
+        if (!permissionService.getPermissionPoint(new WorksheetEditPermission(unitId, subUnitId).id)) return false;
 
         const cellValue = new ObjectMatrix<ICellData>();
         let realCellValue: IObjectMatrixPrimitiveType<ICellData> | undefined;
@@ -94,39 +97,33 @@ export const SetRangeValuesCommand: ICommand = {
             realCellValue = value as IObjectMatrixPrimitiveType<ICellData>;
         }
 
-        const setRangeValuesMutationParams = {
-            subUnitId,
-            unitId,
-            cellValue: realCellValue ?? cellValue.getMatrix(),
-        };
-        const undoSetRangeValuesMutationParams = SetRangeValuesUndoMutationFactory(accessor, setRangeValuesMutationParams);
+        const setRangeValuesMutationParams = { subUnitId, unitId, cellValue: realCellValue ?? cellValue.getMatrix() };
+        const redoParams = SetRangeValuesUndoMutationFactory(accessor, setRangeValuesMutationParams);
 
-        // if (
-        //     !sheetInterceptorService.fetchThroughInterceptors(INTERCEPTOR_POINT.PERMISSION)(null, {
-        //         id: SetRangeValuesCommand.id,
-        //         params: setRangeValuesMutationParams,
-        //     })
-        // ) {
-        //     return false;
-        // }
+        const setValueMutationResult = commandService.syncExecuteCommand(SetRangeValuesMutation.id, setRangeValuesMutationParams);
+        if (!setValueMutationResult) return false;
 
-        const setValueMutationResult = commandService.syncExecuteCommand(
-            SetRangeValuesMutation.id,
-            setRangeValuesMutationParams
-        );
-
-        // may cause performance issues
         const { undos, redos } = sheetInterceptorService.onCommandExecute({
             id: SetRangeValuesCommand.id,
             params: { ...setRangeValuesMutationParams, range: currentSelections },
         });
 
         const result = sequenceExecute([...redos], commandService);
-        if (setValueMutationResult && result.result) {
+        if (result.result) {
+            const selectionOperation = followSelectionOperation(range ?? cellValue.getRange(), workbook, worksheet);
+
             undoRedoService.pushUndoRedo({
                 unitID: unitId,
-                undoMutations: [{ id: SetRangeValuesMutation.id, params: undoSetRangeValuesMutationParams }, ...undos],
-                redoMutations: [{ id: SetRangeValuesMutation.id, params: setRangeValuesMutationParams }, ...redos],
+                undoMutations: [
+                    { id: SetRangeValuesMutation.id, params: redoParams },
+                    ...undos,
+                    selectionOperation,
+                ],
+                redoMutations: [
+                    { id: SetRangeValuesMutation.id, params: setRangeValuesMutationParams },
+                    ...redos,
+                    Tools.deepClone(selectionOperation),
+                ],
             });
 
             return true;

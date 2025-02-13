@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,18 @@
  * limitations under the License.
  */
 
-import { CheckMarkSingle, DropdownSingle } from '@univerjs/icons';
+import { DropdownSingle } from '@univerjs/icons';
 import clsx from 'clsx';
+import VirtualList from 'rc-virtual-list';
 import React, { useEffect, useMemo, useState } from 'react';
+import { Checkbox } from '../checkbox';
 
+import { Tooltip } from '../tooltip';
 import styles from './index.module.less';
+import { createCacheWithFindNodePathFromTree, isIntermediated } from './util';
 
 export enum TreeSelectionMode {
     ONLY_LEAF_NODE,
-
     ALL,
 }
 
@@ -32,144 +35,177 @@ export interface ITreeNodeProps {
     children?: ITreeNodeProps[];
 }
 
-export interface ITreeProps {
-    data?: ITreeNodeProps[];
-
-    /**
-     * Set whether to expand all nodes by default
-     * @default false
-     */
-    defaultExpandAll?: boolean;
-
-    /**
-     * Set the selection mode
-     * @default TreeSelectionMode.ALL
-     * @description
-     * - `TreeSelectionMode.ONLY_LEAF_NODE` only select leaf node
-     * - `TreeSelectionMode.ALL` select all node
-     */
-    selectionMode?: TreeSelectionMode;
-
-    /**
-     * Used for setting the currently selected value
-     */
-    value?: string | number | boolean;
-
-    /**
-     * Set the handler to handle `click` event
-     */
-    onChange?: (value: string | number | boolean) => void;
+export interface IAttachTreeProps {
+    level?: number;
+    count?: number;
 }
 
-type TreeItemProps = ITreeNodeProps & {
-    _selected?: boolean;
-    _expand?: boolean;
-};
+type ITreeItemProps = ITreeNodeProps & IAttachTreeProps;
+
+export interface ITreeProps {
+    data?: ITreeItemProps[];
+
+    defaultExpandAll?: boolean;
+
+    selectionMode?: TreeSelectionMode;
+
+    valueGroup?: string[];
+
+    onChange?: (node: ITreeNodeProps) => void;
+
+    onExpend?: (value: string) => void;
+
+    height?: number;
+
+    itemHeight?: number;
+
+    attachRender?: (node: ITreeItemProps) => React.ReactNode;
+
+    treeNodeClassName?: string;
+
+    style?: React.CSSProperties;
+
+    defaultCache?: Map<string, string[]>;
+}
+
+function flattenTree(items: ITreeItemProps[], expandedKeys: Set<string>, level = 1): ITreeItemProps[] {
+    const flatItems: ITreeItemProps[] = [];
+
+    items.forEach((item) => {
+        flatItems.push({ ...item, level });
+
+        if (item.children && expandedKeys.has(item.key)) {
+            flatItems.push(...flattenTree(item.children, expandedKeys, level + 1));
+        }
+    });
+
+    return flatItems;
+}
 
 /**
  * Tree Component
  */
 export function Tree(props: ITreeProps) {
-    const { data = [], defaultExpandAll = false, selectionMode = TreeSelectionMode.ALL, value, onChange } = props;
+    const { data = [], defaultCache, style, defaultExpandAll = false, selectionMode = TreeSelectionMode.ALL, valueGroup = [], onChange, onExpend, height = 200, itemHeight = 32, attachRender } = props;
+    const [update, forceUpdate] = useState({});
+    const expandKeySet = useMemo(() => {
+        return new Set<string>();
+    }, []);
 
-    const [expandKeys, setExpandKeys] = useState<Array<string | number | boolean>>([]);
+    const findNode = useMemo(() => createCacheWithFindNodePathFromTree(data, defaultCache), [data, defaultCache]);
+
+    const selectedNodeKeySet = useMemo(() => {
+        const set = new Set<string>();
+        valueGroup.forEach((key) => {
+            const path = findNode.findNodePathFromTreeWithCache(key);
+            path.forEach((k) => set.add(k));
+        });
+        return set;
+    }, [valueGroup, findNode]);
 
     useEffect(() => {
         function walkData(item: ITreeNodeProps) {
-            setExpandKeys((prev) => [...prev, item.key]);
-
+            expandKeySet.add(item.key);
             item.children?.forEach(walkData);
         }
         if (defaultExpandAll) {
             data.forEach(walkData);
         }
+        forceUpdate({});
     }, [defaultExpandAll, data]);
 
-    const computedData = useMemo(() => {
-        return data.map(function walkData(item): TreeItemProps {
-            const { title, key, children } = item;
+    const flatData = useMemo(() => flattenTree(data, expandKeySet), [data, update, expandKeySet]);
 
-            return {
-                title,
-                key,
-                children: children && children.map(walkData),
-                _selected: key === value,
-                _expand: expandKeys.includes(key),
-            };
-        });
-    }, [value, expandKeys]);
+    function handleChange(treeItem: ITreeItemProps) {
+        const path: string[] = findNode.findNodePathFromTreeWithCache(treeItem.key);
+    }
 
-    function handleSelectItem(treeItem: ITreeNodeProps) {
-        if (treeItem.children) {
-            setExpandKeys((prev) => {
-                const index = prev.findIndex((key) => key === treeItem.key);
-
-                if (index === -1) {
-                    return [...prev, treeItem.key];
-                }
-
-                return [...prev.slice(0, index), ...prev.slice(index + 1)];
-            });
+    function handleExpendItem(treeItem: ITreeItemProps) {
+        if (treeItem.children?.length) {
+            if (expandKeySet.has(treeItem.key)) {
+                expandKeySet.delete(treeItem.key);
+            } else {
+                expandKeySet.add(treeItem.key);
+            }
+            forceUpdate({});
         }
-
         if (selectionMode === TreeSelectionMode.ONLY_LEAF_NODE) {
             if (treeItem.children) {
                 return;
             }
         }
 
-        onChange?.(treeItem.key);
+        onExpend?.(treeItem.key);
     }
 
-    function walkTree(treeItem: TreeItemProps) {
-        const { title, key, children, _selected, _expand } = treeItem;
-
+    function renderTreeItem(treeItem: ITreeItemProps) {
+        const { title, key, level = 0 } = treeItem;
+        const treeNodeClassName = props.treeNodeClassName;
+        const expended = expandKeySet.has(key);
+        const selected = selectedNodeKeySet.has(key);
+        const intermediated = isIntermediated(selectedNodeKeySet, treeItem);
         return (
-            <li
+            <div
                 key={key}
-                className={styles.treeListItem}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectItem(treeItem);
-                }}
+                className={clsx(styles.treeListItem, treeNodeClassName)}
+                style={{ paddingLeft: `${level * 20}px` }}
             >
-                <a
+                <div
                     className={clsx(styles.treeListItemContent, {
-                        [styles.treeListItemContentSelected]: _selected,
+                        [styles.treeListItemContentSelected]: selected,
                     })}
                 >
-                    {children && children.length > 0 && (
+                    {treeItem.children && treeItem.children.length > 0 && (
                         <span
                             className={clsx(styles.treeIcon, {
-                                [styles.treeIconExpand]: _expand,
+                                [styles.treeIconExpand]: expended,
                             })}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleExpendItem(treeItem);
+                            }}
                         >
                             <DropdownSingle />
                         </span>
                     )}
-                    {_selected && (
-                        <span className={styles.treeListItemContentSelectedIcon}>
-                            <CheckMarkSingle />
+                    <Checkbox
+                        checked={selected && !intermediated}
+                        indeterminate={selected && intermediated}
+                        onChange={() => {
+                            onChange?.(treeItem);
+                        }}
+                    />
+                    <Tooltip showIfEllipsis placement="top" title={title}>
+                        <span
+                            className={styles.treeListItemTitle}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                handleExpendItem(treeItem);
+                            }}
+                        >
+                            {title}
                         </span>
-                    )}
-                    <span>{title}</span>
-                </a>
-                {children && (
-                    <ul
-                        className={clsx(styles.treeList, {
-                            [styles.treeListExpand]: _expand,
-                        })}
-                    >
-                        {children.map((item) => walkTree(item))}
-                    </ul>
-                )}
-            </li>
+                    </Tooltip>
+
+                    {attachRender && attachRender(treeItem)}
+                </div>
+            </div>
         );
     }
 
     return (
         <section className={styles.tree}>
-            <ul className={styles.treeList}>{computedData.map((item) => walkTree(item))}</ul>
+            <div className={styles.treeList} style={style}>
+                <VirtualList
+                    data={flatData}
+                    itemKey={(item) => item.key}
+                    height={height}
+                    itemHeight={itemHeight}
+                >
+                    {(item: ITreeItemProps) => renderTreeItem(item)}
+                </VirtualList>
+            </div>
+
         </section>
     );
 }

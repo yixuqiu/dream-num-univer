@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,6 @@
 
 import type { ComponentType } from 'react';
 
-import { Notification } from '../components/notification/Notification';
-import { ConfirmPart } from './components/confirm-part/ConfirmPart';
-import { ContextMenu } from './components/context-menu/ContextMenu';
-import { DialogPart } from './components/dialog-part/DialogPart';
 import { GlobalZone } from './components/global-zone/GlobalZone';
 
-export const globalComponents: Set<() => ComponentType> = new Set([
-    () => DialogPart,
-    () => ConfirmPart,
-    () => Notification,
-    () => ContextMenu,
-    () => GlobalZone,
-]);
+export const builtInGlobalComponents: Set<ComponentType> = new Set([GlobalZone]);

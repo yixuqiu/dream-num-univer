@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@
 
 import type { Nullable } from '@univerjs/core';
 
-import { ErrorType } from '../../basics/error-type';
-import { DEFAULT_TOKEN_TYPE_LAMBDA_RUNTIME_PARAMETER } from '../../basics/token-type';
 import type { BaseAstNode } from '../ast-node/base-ast-node';
 import type { LambdaParameterNode } from '../ast-node/lambda-parameter-node';
 import type { Interpreter } from '../interpreter/interpreter';
-import type { BaseReferenceObject } from '../reference-object/base-reference-object';
+import type { BaseReferenceObject, FunctionVariantType } from '../reference-object/base-reference-object';
+import type { PrimitiveValueType } from './primitive-object';
+import { ErrorType } from '../../basics/error-type';
+import { DEFAULT_TOKEN_TYPE_LAMBDA_RUNTIME_PARAMETER } from '../../basics/token-type';
 import { AsyncObject } from '../reference-object/base-reference-object';
+import { generateExecuteAstNodeData } from '../utils/ast-node-tool';
+import { ValueObjectFactory } from './array-value-object';
 import { BaseValueObject, ErrorValueObject } from './base-value-object';
 
 function getRootLexerHasValueNode(node: Nullable<BaseAstNode>): Nullable<BaseAstNode> {
@@ -55,12 +58,12 @@ export class LambdaValueObjectObject extends BaseValueObject {
         return new LambdaValueObjectObject(lambdaNode, interpreter, lambdaPrivacyVarKeys);
     }
 
-    private _lambdaPrivacyValueMap = new Map<string, BaseValueObject>();
+    private _lambdaPrivacyValueMap = new Map<string, FunctionVariantType>();
 
     constructor(
-        private _lambdaNode: BaseAstNode,
+        private _lambdaNode: Nullable<BaseAstNode>,
 
-        private _interpreter: Interpreter,
+        private _interpreter: Nullable<Interpreter>,
 
         private _lambdaPrivacyVarKeys: string[]
     ) {
@@ -68,13 +71,21 @@ export class LambdaValueObjectObject extends BaseValueObject {
         this._lambdaPrivacyValueMap.clear();
     }
 
+    override dispose(): void {
+        this._lambdaPrivacyValueMap.clear();
+        this._lambdaPrivacyValueMap = new Map();
+        this._lambdaNode = null;
+        this._interpreter = null;
+        this._lambdaPrivacyVarKeys = [];
+    }
+
     override isLambda() {
         return true;
     }
 
-    execute(...variants: BaseValueObject[]) {
+    execute(...variants: FunctionVariantType[]) {
         const paramCount = this._lambdaPrivacyVarKeys.length;
-        if (variants.length !== paramCount) {
+        if (variants.length !== paramCount || !this._interpreter || !this._lambdaNode) {
             return ErrorValueObject.create(ErrorType.VALUE);
         }
 
@@ -86,9 +97,9 @@ export class LambdaValueObjectObject extends BaseValueObject {
 
         let value: AsyncObject | BaseValueObject;
         if (this._interpreter.checkAsyncNode(this._lambdaNode)) {
-            value = new AsyncObject(this._interpreter.executeAsync(this._lambdaNode) as Promise<BaseValueObject>);
+            value = new AsyncObject(this._interpreter.executeAsync(generateExecuteAstNodeData(this._lambdaNode)) as Promise<BaseValueObject>);
         } else {
-            const o = this._interpreter.execute(this._lambdaNode);
+            const o = this._interpreter.execute(generateExecuteAstNodeData(this._lambdaNode));
             if (o.isReferenceObject()) {
                 value = (o as BaseReferenceObject).toArrayValueObject();
             } else {
@@ -101,7 +112,20 @@ export class LambdaValueObjectObject extends BaseValueObject {
         return value;
     }
 
-    private _setLambdaNodeValue(node: BaseAstNode) {
+    /**
+     * Execute custom lambda function, handle basic types
+     * @param variants
+     */
+    executeCustom(...variants: PrimitiveValueType[]) {
+        // Create base value object from primitive value, then execute
+        const baseValueObjects = variants.map((variant) => ValueObjectFactory.create(variant));
+        return this.execute(...baseValueObjects);
+    }
+
+    private _setLambdaNodeValue(node: Nullable<BaseAstNode>) {
+        if (!node) {
+            return;
+        }
         const children = node.getChildren();
         const childrenCount = children.length;
         for (let i = 0; i < childrenCount; i++) {
@@ -127,12 +151,16 @@ export class LambdaValueObjectObject extends BaseValueObject {
         }
     }
 
-    private _setLambdaPrivacyValueMap(variants: BaseValueObject[]) {
+    private _setLambdaPrivacyValueMap(variants: FunctionVariantType[]) {
         for (let i = 0; i < variants.length; i++) {
             const variant = variants[i];
             const key = this._lambdaPrivacyVarKeys[i];
 
             this._lambdaPrivacyValueMap.set(key, variant);
         }
+    }
+
+    getLambdaPrivacyVarKeys() {
+        return this._lambdaPrivacyVarKeys;
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,34 +14,40 @@
  * limitations under the License.
  */
 
-import type { IRange, Nullable } from '@univerjs/core';
-import { Disposable } from '@univerjs/core';
-
-import { ErrorType } from '../basics/error-type';
+import type { IRange, LocaleType, Nullable } from '@univerjs/core';
 import type { IFunctionNames } from '../basics/function';
-import { compareToken } from '../basics/token';
 import type { BaseReferenceObject, FunctionVariantType, NodeValueType } from '../engine/reference-object/base-reference-object';
 import type { ArrayBinarySearchType } from '../engine/utils/compare';
-import { ArrayOrderSearchType } from '../engine/utils/compare';
 import type { ArrayValueObject } from '../engine/value-object/array-value-object';
-import { type BaseValueObject, ErrorValueObject } from '../engine/value-object/base-value-object';
-import { NullValueObject, NumberValueObject, type PrimitiveValueType } from '../engine/value-object/primitive-object';
-import { convertTonNumber } from '../engine/utils/value-object';
-import { createNewArray } from '../engine/utils/array-object';
-import { serializeRangeToRefString } from '../engine/utils/reference';
-import { REFERENCE_REGEX_SINGLE_COLUMN, REFERENCE_REGEX_SINGLE_ROW, REFERENCE_SINGLE_RANGE_REGEX } from '../basics/regex';
+import type { FormulaFunctionResultValueType, FormulaFunctionValueType } from '../engine/value-object/primitive-object';
+import type { FormulaDataModel } from '../models/formula-data.model';
+import type { IDefinedNameMapItem } from '../services/defined-names.service';
+import { ErrorType } from '../basics/error-type';
+import { regexTestSingeRange, regexTestSingleColumn, regexTestSingleRow } from '../basics/regex';
+import { compareToken } from '../basics/token';
 import { CellReferenceObject } from '../engine/reference-object/cell-reference-object';
-import { RowReferenceObject } from '../engine/reference-object/row-reference-object';
 import { ColumnReferenceObject } from '../engine/reference-object/column-reference-object';
 import { RangeReferenceObject } from '../engine/reference-object/range-reference-object';
-import type { IDefinedNameMapItem } from '../services/defined-names.service';
+import { RowReferenceObject } from '../engine/reference-object/row-reference-object';
+import { createNewArray } from '../engine/utils/array-object';
+import { ArrayOrderSearchType } from '../engine/utils/compare';
+import { serializeRangeToRefString } from '../engine/utils/reference';
+import { convertTonNumber } from '../engine/utils/value-object';
+import { type BaseValueObject, ErrorValueObject } from '../engine/value-object/base-value-object';
+import { NullValueObject, NumberValueObject } from '../engine/value-object/primitive-object';
 
-export class BaseFunction extends Disposable {
+export class BaseFunction {
     private _unitId: Nullable<string>;
     private _subUnitId: Nullable<string>;
     private _row: number = -1;
     private _column: number = -1;
     private _definedNames: Nullable<IDefinedNameMapItem>;
+    private _locale: LocaleType;
+    private _sheetOrder: string[];
+    private _sheetNameMap: { [sheetId: string]: string };
+    protected _formulaDataModel: Nullable<FormulaDataModel>;
+    protected _rowCount: number = -1;
+    protected _columnCount: number = -1;
 
     /**
      * Whether the function needs to expand the parameters
@@ -54,6 +60,26 @@ export class BaseFunction extends Disposable {
     needsReferenceObject: boolean = false;
 
     /**
+     * Whether the function needs handle locale
+     */
+    needsLocale: boolean = false;
+
+    /**
+     * Whether the function needs sheets info
+     */
+    needsSheetsInfo: boolean = false;
+
+    /**
+     * Whether the function needs function methods in FormulaDataModel
+     */
+    needsFormulaDataModel: boolean = false;
+
+    /**
+     * Whether the function needs the number of rows and columns in the sheet
+     */
+    needsSheetRowColumnCount: boolean = false;
+
+    /**
      * Minimum number of parameters
      */
     minParams: number = -1;
@@ -64,7 +90,7 @@ export class BaseFunction extends Disposable {
     maxParams: number = -1;
 
     constructor(private _name: IFunctionNames) {
-        super();
+
     }
 
     get name() {
@@ -87,6 +113,10 @@ export class BaseFunction extends Disposable {
         return this._column;
     }
 
+    dispose() {
+
+    }
+
     /**
      * In Excel, to inject a defined name into a function that has positioning capabilities,
      * such as using the INDIRECT function to reference a named range,
@@ -105,6 +135,41 @@ export class BaseFunction extends Disposable {
 
     setDefinedNames(definedNames: IDefinedNameMapItem) {
         this._definedNames = definedNames;
+    }
+
+    getLocale() {
+        return this._locale;
+    }
+
+    setLocale(locale: LocaleType) {
+        this._locale = locale;
+    }
+
+    getSheetsInfo() {
+        return {
+            sheetOrder: this._sheetOrder,
+            sheetNameMap: this._sheetNameMap,
+        };
+    }
+
+    setSheetsInfo({
+        sheetOrder,
+        sheetNameMap,
+    }: {
+        sheetOrder: string[];
+        sheetNameMap: { [sheetId: string]: string };
+    }) {
+        this._sheetOrder = sheetOrder;
+        this._sheetNameMap = sheetNameMap;
+    }
+
+    setFormulaDataModel(_formulaDataModel: FormulaDataModel) {
+        this._formulaDataModel = _formulaDataModel;
+    }
+
+    setSheetRowColumnCount(rowCount: number, columnCount: number) {
+        this._rowCount = rowCount;
+        this._columnCount = columnCount;
     }
 
     isAsync() {
@@ -127,8 +192,8 @@ export class BaseFunction extends Disposable {
     }
 
     calculateCustom(
-        ...arg: Array<PrimitiveValueType | PrimitiveValueType[][]>
-    ): PrimitiveValueType | PrimitiveValueType[][] {
+        ...arg: Array<FormulaFunctionValueType>
+    ): FormulaFunctionResultValueType | Promise<FormulaFunctionResultValueType> {
         return null;
     }
 
@@ -147,26 +212,28 @@ export class BaseFunction extends Disposable {
      * @param indexNum
      */
     getIndexNumValue(indexNum: BaseValueObject, defaultValue = 1) {
-        if (indexNum.isArray()) {
-            indexNum = (indexNum as ArrayValueObject).getFirstCell();
+        let _indexNum = indexNum;
+
+        if (_indexNum.isArray()) {
+            _indexNum = (_indexNum as ArrayValueObject).getFirstCell();
         }
 
-        if (indexNum.isBoolean()) {
-            const colIndexNumV = indexNum.getValue() as boolean;
+        if (_indexNum.isBoolean()) {
+            const colIndexNumV = _indexNum.getValue() as boolean;
             if (colIndexNumV === false) {
                 return ErrorValueObject.create(ErrorType.VALUE);
             }
 
             return defaultValue;
         }
-        if (indexNum.isString()) {
-            const colIndexNumV = Number(indexNum.getValue() as string);
+        if (_indexNum.isString()) {
+            const colIndexNumV = Number(_indexNum.getValue() as string);
             if (Number.isNaN(colIndexNumV)) {
                 return ErrorValueObject.create(ErrorType.REF);
             }
             return colIndexNumV;
-        } else if (indexNum.isNumber()) {
-            const colIndexNumV = indexNum.getValue() as number;
+        } else if (_indexNum.isNumber()) {
+            const colIndexNumV = _indexNum.getValue() as number;
             return colIndexNumV;
         }
 
@@ -250,9 +317,10 @@ export class BaseFunction extends Disposable {
         value: BaseValueObject,
         searchArray: ArrayValueObject,
         resultArray: ArrayValueObject,
-        searchType?: ArrayBinarySearchType
+        searchType?: ArrayBinarySearchType,
+        matchType?: ArrayOrderSearchType
     ) {
-        const rowOrColumn = searchArray.binarySearch(value, searchType);
+        const rowOrColumn = searchArray.binarySearch(value, searchType, matchType);
 
         if (rowOrColumn == null) {
             return ErrorValueObject.create(ErrorType.NA);
@@ -267,7 +335,8 @@ export class BaseFunction extends Disposable {
         }
 
         if (resultValue.isNull()) {
-            return ErrorValueObject.create(ErrorType.NA);
+            // return ErrorValueObject.create(ErrorType.NA);
+            return NumberValueObject.create(0);
         }
 
         return resultValue;
@@ -336,9 +405,10 @@ export class BaseFunction extends Disposable {
         searchArray: ArrayValueObject,
         resultArray: ArrayValueObject,
         axis = 0,
-        searchType?: ArrayBinarySearchType
+        searchType?: ArrayBinarySearchType,
+        matchType?: ArrayOrderSearchType
     ) {
-        const rowOrColumn = searchArray.binarySearch(value, searchType);
+        const rowOrColumn = searchArray.binarySearch(value, searchType, matchType);
 
         if (rowOrColumn == null) {
             return ErrorValueObject.create(ErrorType.NA);
@@ -504,17 +574,17 @@ export class BaseFunction extends Disposable {
 
         let referenceObject: BaseReferenceObject;
 
-        if (new RegExp(REFERENCE_SINGLE_RANGE_REGEX).test(token)) {
+        if (regexTestSingeRange(token)) {
             referenceObject = new CellReferenceObject(token);
-        } else if (new RegExp(REFERENCE_REGEX_SINGLE_ROW).test(token)) {
+        } else if (regexTestSingleRow(token)) {
             referenceObject = new RowReferenceObject(token);
-        } else if (new RegExp(REFERENCE_REGEX_SINGLE_COLUMN).test(token)) {
+        } else if (regexTestSingleColumn(token)) {
             referenceObject = new ColumnReferenceObject(token);
         } else {
             referenceObject = new RangeReferenceObject(range, sheetId, unitId);
         }
 
-        return this._setReferenceDefault(reference, referenceObject); ;
+        return this._setReferenceDefault(reference, referenceObject);
     }
 
     private _setReferenceDefault(reference: BaseReferenceObject, object: BaseReferenceObject) {

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,35 +14,38 @@
  * limitations under the License.
  */
 
-import { LocaleService, Plugin, UniverInstanceType } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
+import type { Dependency } from '@univerjs/core';
+import type { IUniverSheetsZenEditorConfig } from './controllers/config.schema';
 
-import { ZenEditorController } from './controllers/zen-editor.controller';
+import { IConfigService, Inject, Injector, merge, Plugin, UniverInstanceType } from '@univerjs/core';
+import { defaultPluginConfig, SHEETS_ZEN_EDITOR_PLUGIN_CONFIG_KEY } from './controllers/config.schema';
 import { ZenEditorUIController } from './controllers/zen-editor-ui.controller';
+import { ZenEditorController } from './controllers/zen-editor.controller';
 import { IZenEditorManagerService, ZenEditorManagerService } from './services/zen-editor.service';
-import { zhCN } from './locale';
 
-export interface IUniverSheetsZenEditorPluginConfig {}
 export class UniverSheetsZenEditorPlugin extends Plugin {
-    static override pluginName = 'zen-editor';
-    static override type = UniverInstanceType.UNIVER_DOC;
+    static override pluginName = 'SHEET_ZEN_EDITOR_PLUGIN';
+    static override type = UniverInstanceType.UNIVER_SHEET;
 
     constructor(
-        _config: IUniverSheetsZenEditorPluginConfig,
+        private readonly _config: Partial<IUniverSheetsZenEditorConfig> = defaultPluginConfig,
         @Inject(Injector) override readonly _injector: Injector,
-        @Inject(LocaleService) private readonly _localeService: LocaleService
+        @IConfigService private readonly _configService: IConfigService
     ) {
         super();
 
-        this._initialize();
-        this._initializeDependencies(this._injector);
-    }
+        // Manage the plugin configuration.
+        const { menu, ...rest } = merge(
+            {},
+            defaultPluginConfig,
+            this._config
+        );
+        if (menu) {
+            this._configService.setConfig('menu', menu, { merge: true });
+        }
+        this._configService.setConfig(SHEETS_ZEN_EDITOR_PLUGIN_CONFIG_KEY, rest);
 
-    private _initialize(): void {
-        this._localeService.load({
-            zhCN,
-        });
+        this._initializeDependencies(this._injector);
     }
 
     private _initializeDependencies(injector: Injector) {
@@ -53,5 +56,13 @@ export class UniverSheetsZenEditorPlugin extends Plugin {
         ];
 
         dependencies.forEach((dependency) => injector.add(dependency));
+    }
+
+    override onReady(): void {
+        this._injector.get(ZenEditorUIController);
+    }
+
+    override onSteady(): void {
+        this._injector.get(ZenEditorController);
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,10 @@
  */
 
 import type { ICellData, ICommandInfo, IObjectMatrixPrimitiveType, IRange, IUnitRange, Nullable } from '@univerjs/core';
-import {
-    Dimension,
-    Disposable,
-    IUniverInstanceService,
-    LifecycleStages,
-    ObjectMatrix,
-    OnLifecycle,
-} from '@univerjs/core';
 import type { IDirtyUnitSheetDefinedNameMap, IDirtyUnitSheetNameMap, ISetDefinedNameMutationParam } from '@univerjs/engine-formula';
-import { FormulaDataModel, IActiveDirtyManagerService, IDefinedNamesService, RemoveDefinedNameMutation, SetDefinedNameMutation } from '@univerjs/engine-formula';
 import type {
-    IDeleteRangeMutationParams,
+    IInsertColMutationParams,
+    IInsertRowMutationParams,
     IInsertSheetMutationParams,
     IMoveColumnsMutationParams,
     IMoveRangeMutationParams,
@@ -34,10 +26,19 @@ import type {
     IRemoveColMutationParams,
     IRemoveRowsMutationParams,
     IRemoveSheetMutationParams,
-    ISetDefinedNameCommandParams,
+    IReorderRangeMutationParams,
     ISetRangeValuesMutationParams,
 } from '@univerjs/sheets';
 import {
+    Disposable,
+    Inject,
+    IUniverInstanceService,
+    ObjectMatrix,
+} from '@univerjs/core';
+import { FormulaDataModel, IActiveDirtyManagerService, RemoveDefinedNameMutation, SetDefinedNameMutation } from '@univerjs/engine-formula';
+import {
+    InsertColMutation,
+    InsertRowMutation,
     InsertSheetMutation,
     MoveColsMutation,
     MoveRangeMutation,
@@ -45,20 +46,16 @@ import {
     RemoveColMutation,
     RemoveRowMutation,
     RemoveSheetMutation,
-    SetDefinedNameCommand,
+    ReorderRangeMutation,
     SetRangeValuesMutation,
     SetStyleCommand,
 } from '@univerjs/sheets';
-import { Inject } from '@wendellhu/redi';
 
-@OnLifecycle(LifecycleStages.Ready, ActiveDirtyController)
 export class ActiveDirtyController extends Disposable {
     constructor(
         @IActiveDirtyManagerService private readonly _activeDirtyManagerService: IActiveDirtyManagerService,
         @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
-        @Inject(FormulaDataModel) private readonly _formulaDataModel: FormulaDataModel,
-        @IDefinedNamesService private readonly _definedNamesService: IDefinedNamesService
-
+        @Inject(FormulaDataModel) private readonly _formulaDataModel: FormulaDataModel
     ) {
         super();
 
@@ -70,20 +67,6 @@ export class ActiveDirtyController extends Disposable {
     }
 
     private _initialConversion() {
-        // const updateCommandList = [
-        //     SetRangeValuesMutation.id,
-        //     MoveRangeMutation.id,
-        //     MoveRowsMutation.id,
-        //     MoveColsMutation.id,
-        //     DeleteRangeMutation.id,
-        //     InsertRangeMutation.id,
-        //     RemoveRowMutation.id,
-        //     RemoveColMutation.id,
-        //     RemoveSheetMutation.id,
-        //     InsertSheetMutation.id,
-        //     // SetWorksheetNameMutation.id,
-        // ];
-
         this._activeDirtyManagerService.register(SetRangeValuesMutation.id, {
             commandId: SetRangeValuesMutation.id,
             getDirtyData: (command: ICommandInfo) => {
@@ -109,17 +92,6 @@ export class ActiveDirtyController extends Disposable {
         this._initialSheet();
 
         this._initialDefinedName();
-
-        /**
-         * Changing the name of a sheet triggers an adjustment of the formula references, but does not trigger formula calculation; therefore, this logic has been removed.
-         */
-        // this._activeDirtyManagerService.register(SetWorksheetNameMutation.id, {
-        //     commandId: SetWorksheetNameMutation.id,
-        //     getDirtyData: (command: ICommandInfo) => {
-        //         const params = command.params as ISetWorksheetNameMutationParams;
-        //         return { dirtyNameMap: this._getRemoveSheetMutation(params, params.name) };
-        //     },
-        // });
     }
 
     private _initialMove() {
@@ -129,6 +101,12 @@ export class ActiveDirtyController extends Disposable {
                 const params = command.params as IMoveRangeMutationParams;
                 return {
                     dirtyRanges: this._getMoveRangeMutationDirtyRange(params),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.to.subUnitId]: '1',
+                            [params.from.subUnitId]: '1',
+                        },
+                    },
                 };
             },
         });
@@ -139,6 +117,11 @@ export class ActiveDirtyController extends Disposable {
                 const params = command.params as IMoveRowsMutationParams;
                 return {
                     dirtyRanges: this._getMoveRowsMutationDirtyRange(params),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
                 };
             },
         });
@@ -149,6 +132,26 @@ export class ActiveDirtyController extends Disposable {
                 const params = command.params as IMoveColumnsMutationParams;
                 return {
                     dirtyRanges: this._getMoveRowsMutationDirtyRange(params),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
+                };
+            },
+        });
+
+        this._activeDirtyManagerService.register(ReorderRangeMutation.id, {
+            commandId: ReorderRangeMutation.id,
+            getDirtyData: (command: ICommandInfo) => {
+                const params = command.params as IReorderRangeMutationParams;
+                return {
+                    dirtyRanges: this._getReorderRangeMutationDirtyRange(params),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
                 };
             },
         });
@@ -161,6 +164,11 @@ export class ActiveDirtyController extends Disposable {
                 const params = command.params as IRemoveRowsMutationParams;
                 return {
                     dirtyRanges: this._getRemoveRowOrColumnMutation(params, true),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
                 };
             },
         });
@@ -171,18 +179,57 @@ export class ActiveDirtyController extends Disposable {
                 const params = command.params as IRemoveColMutationParams;
                 return {
                     dirtyRanges: this._getRemoveRowOrColumnMutation(params, false),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
+                };
+            },
+        });
+
+        this._activeDirtyManagerService.register(InsertColMutation.id, {
+            commandId: InsertColMutation.id,
+            getDirtyData: (command: ICommandInfo) => {
+                const params = command.params as IInsertColMutationParams;
+                return {
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
+                };
+            },
+        });
+
+        this._activeDirtyManagerService.register(InsertRowMutation.id, {
+            commandId: InsertRowMutation.id,
+            getDirtyData: (command: ICommandInfo) => {
+                const params = command.params as IInsertRowMutationParams;
+                return {
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
                 };
             },
         });
     }
-
 
     private _initialSheet() {
         this._activeDirtyManagerService.register(RemoveSheetMutation.id, {
             commandId: RemoveSheetMutation.id,
             getDirtyData: (command: ICommandInfo) => {
                 const params = command.params as IRemoveSheetMutationParams;
-                return { dirtyNameMap: this._getRemoveSheetMutation(params) };
+                return {
+                    dirtyNameMap: this._getRemoveSheetMutation(params),
+                    clearDependencyTreeCache: {
+                        [params.unitId]: {
+                            [params.subUnitId]: '1',
+                        },
+                    },
+                };
             },
         });
 
@@ -190,7 +237,9 @@ export class ActiveDirtyController extends Disposable {
             commandId: InsertSheetMutation.id,
             getDirtyData: (command: ICommandInfo) => {
                 const params = command.params as IInsertSheetMutationParams;
-                return { dirtyNameMap: this._getInsertSheetMutation(params) };
+                return {
+                    dirtyNameMap: this._getInsertSheetMutation(params),
+                };
             },
         });
     }
@@ -209,17 +258,6 @@ export class ActiveDirtyController extends Disposable {
             getDirtyData: (command: ICommandInfo) => {
                 const params = command.params as ISetDefinedNameMutationParam;
                 return { dirtyDefinedNameMap: this._getDefinedNameMutation(params) };
-            },
-        });
-
-        this._activeDirtyManagerService.register(SetDefinedNameCommand.id, {
-            commandId: SetDefinedNameCommand.id,
-            getDirtyData: (command: ICommandInfo) => {
-                const params = command.params as ISetDefinedNameCommandParams;
-                const { oldDefinedName, newDefinedName } = params;
-                return { dirtyDefinedNameMap: this._getDefinedNameMutation({ ...newDefinedName, name: oldDefinedName.name }) };
-
-                // return { dirtyDefinedNameMap: this._getDefinedNameMutation(params) };
             },
         });
     }
@@ -286,49 +324,12 @@ export class ActiveDirtyController extends Disposable {
         return dirtyRanges;
     }
 
-    private _getDeleteRangeMutationDirtyRange(params: IDeleteRangeMutationParams) {
-        const { subUnitId: sheetId, unitId, range, shiftDimension } = params;
-
+    private _getReorderRangeMutationDirtyRange(params: IReorderRangeMutationParams) {
+        const { unitId, subUnitId: sheetId, range } = params;
+        const matrix = this._rangeToMatrix(range).getData();
         const dirtyRanges: IUnitRange[] = [];
-
-        const workbook = this._univerInstanceService.getUniverSheetInstance(unitId);
-
-        const worksheet = workbook?.getSheetBySheetId(sheetId);
-
-        const lastEndRow = worksheet?.getLastRowWithContent() || 0;
-
-        const lastEndColumn = worksheet?.getLastColumnWithContent() || 0;
-
-        const matrix = new ObjectMatrix<Nullable<ICellData>>();
-
-        let newMatrix: Nullable<ObjectMatrix<Nullable<ICellData>>> = null;
-        const { startRow, startColumn, endRow, endColumn } = range;
-        if (shiftDimension === Dimension.ROWS) {
-            newMatrix = this._rangeToMatrix({
-                startRow,
-                startColumn,
-                endRow: lastEndRow,
-                endColumn,
-            });
-        } else if (shiftDimension === Dimension.COLUMNS) {
-            newMatrix = this._rangeToMatrix({
-                startRow,
-                startColumn,
-                endRow,
-                endColumn: lastEndColumn,
-            });
-        }
-
-        if (newMatrix != null) {
-            matrix.merge(newMatrix);
-        }
-
-        const matrixData = matrix.getData();
-
-        dirtyRanges.push(...this._getDirtyRangesByCellValue(unitId, sheetId, matrixData));
-
-        dirtyRanges.push(...this._getDirtyRangesForArrayFormula(unitId, sheetId, matrixData));
-
+        dirtyRanges.push(...this._getDirtyRangesByCellValue(unitId, sheetId, matrix));
+        dirtyRanges.push(...this._getDirtyRangesForArrayFormula(unitId, sheetId, matrix));
         return dirtyRanges;
     }
 
@@ -345,29 +346,23 @@ export class ActiveDirtyController extends Disposable {
 
         const columnCount = worksheet?.getColumnCount() || 0;
 
-        const matrix = new ObjectMatrix<Nullable<ICellData>>();
-
-        let newMatrix: Nullable<ObjectMatrix<Nullable<ICellData>>> = null;
+        let matrix: Nullable<ObjectMatrix<Nullable<ICellData>>> = null;
         const { startRow, endRow, startColumn, endColumn } = range;
 
         if (isRow === true) {
-            newMatrix = this._rangeToMatrix({
+            matrix = this._rangeToMatrix({
                 startRow,
                 startColumn: 0,
                 endRow,
                 endColumn: columnCount - 1,
             });
         } else {
-            newMatrix = this._rangeToMatrix({
+            matrix = this._rangeToMatrix({
                 startRow: 0,
                 startColumn,
                 endRow: rowCount,
                 endColumn,
             });
-        }
-
-        if (newMatrix != null) {
-            matrix.merge(newMatrix);
         }
 
         const matrixData = matrix.getData();

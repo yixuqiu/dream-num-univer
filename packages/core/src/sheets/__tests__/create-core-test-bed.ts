@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import { Univer } from '../../univer';
 import { IUniverInstanceService } from '../../services/instance/instance.service';
 import { ILogService, LogLevel } from '../../services/log/log.service';
 import { LocaleType } from '../../types/enum/locale-type';
-import type { IWorkbookData } from '../../types/interfaces/i-workbook-data';
+import type { IWorkbookData } from '../typedef';
 
 const testWorkbookDataFactory: () => IWorkbookData = () => ({
     id: 'test',

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 /* eslint-disable */
+
 
 const newSheet = univerAPI.getActiveWorkbook().create("Draw Univer Logo", 80, 80);
 newSheet.setRowHeights(0, 80, 6);
@@ -1549,3 +1550,4 @@ const key = setInterval(() => {
 
     index += 1;
 }, 23);
+

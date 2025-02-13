@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,21 @@
  * limitations under the License.
  */
 
-import { ICommandService, UniverInstanceType } from '@univerjs/core';
+import type { IAccessor } from '@univerjs/core';
 import type { IBorderInfo } from '@univerjs/sheets';
-import { BorderStyleManagerService, getCurrentSheetDisabled$, SetBorderBasicCommand } from '@univerjs/sheets';
 import type { IMenuSelectorItem } from '@univerjs/ui';
-import { getMenuHiddenObservable, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
+import { ICommandService, UniverInstanceType } from '@univerjs/core';
+import { BorderStyleManagerService, RangeProtectionPermissionEditPoint, SetBorderBasicCommand, WorkbookEditablePermission, WorksheetEditPermission, WorksheetSetCellStylePermission } from '@univerjs/sheets';
+import { getMenuHiddenObservable, MenuItemType } from '@univerjs/ui';
 import { Observable } from 'rxjs';
 
 import { BORDER_LINE_CHILDREN, BORDER_PANEL_COMPONENT } from '../../components/border-panel/interface';
+import { getCurrentRangeDisable$ } from './menu-util';
 
 export function CellBorderSelectorMenuItemFactory(accessor: IAccessor): IMenuSelectorItem<IBorderInfo, IBorderInfo> {
-    // const permissionService = accessor.get(IPermissionService);
-
     const borderStyleManagerService = accessor.get(BorderStyleManagerService);
 
-    const disabled$ = getCurrentSheetDisabled$(accessor);
+    const disabled$ = getCurrentRangeDisable$(accessor, { workbookTypes: [WorkbookEditablePermission], worksheetTypes: [WorksheetEditPermission, WorksheetSetCellStylePermission], rangeTypes: [RangeProtectionPermissionEditPoint] });
 
     return {
         id: SetBorderBasicCommand.id,
@@ -56,9 +55,7 @@ export function CellBorderSelectorMenuItemFactory(accessor: IAccessor): IMenuSel
 
             return disposable.dispose;
         }),
-        group: MenuGroup.TOOLBAR_FORMAT,
         tooltip: 'toolbar.border.main',
-        positions: [MenuPosition.TOOLBAR_START],
         type: MenuItemType.BUTTON_SELECTOR,
         selections: [
             {

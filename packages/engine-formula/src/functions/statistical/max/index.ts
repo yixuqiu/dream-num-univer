@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
+import type { BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Max extends BaseFunction {
-    override calculate(...variants: BaseValueObject[]) {
-        if (variants.length === 0) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 1;
 
+    override maxParams = 255;
+
+    override calculate(...variants: BaseValueObject[]) {
         let accumulatorAll: BaseValueObject = NumberValueObject.create(Number.NEGATIVE_INFINITY);
         for (let i = 0; i < variants.length; i++) {
             let variant = variants[i];
@@ -48,14 +47,22 @@ export class Max extends BaseFunction {
             accumulatorAll = this._validator(accumulatorAll, variant as BaseValueObject);
         }
 
+        if (accumulatorAll.getValue() === Number.NEGATIVE_INFINITY) {
+            return NumberValueObject.create(0);
+        }
+
         return accumulatorAll;
     }
 
     private _validator(accumulatorAll: BaseValueObject, valueObject: BaseValueObject) {
         const validator = accumulatorAll.isLessThan(valueObject);
+
+        let _accumulatorAll = accumulatorAll;
+
         if (validator.getValue()) {
-            accumulatorAll = valueObject;
+            _accumulatorAll = valueObject;
         }
-        return accumulatorAll;
+
+        return _accumulatorAll;
     }
 }

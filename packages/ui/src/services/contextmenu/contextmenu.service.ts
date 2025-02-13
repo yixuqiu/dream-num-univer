@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,40 @@
  * limitations under the License.
  */
 
-import { Disposable, toDisposable } from '@univerjs/core';
+import { createIdentifier, Disposable, toDisposable } from '@univerjs/core';
+import type { IDisposable } from '@univerjs/core';
 import type { IMouseEvent, IPointerEvent } from '@univerjs/engine-render';
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
 
 export interface IContextMenuHandler {
     /** A callback to open context menu with given position and menu type. */
     handleContextMenu(event: IPointerEvent | IMouseEvent, menuType: string): void;
+    hideContextMenu(): void;
+
+    get visible(): boolean;
 }
 
 export interface IContextMenuService {
     disabled: boolean;
+    get visible(): boolean;
 
     enable(): void;
     disable(): void;
     triggerContextMenu(event: IPointerEvent | IMouseEvent, menuType: string): void;
+    hideContextMenu(): void;
+
     registerContextMenuHandler(handler: IContextMenuHandler): IDisposable;
 }
 
-export const IContextMenuService = createIdentifier<IContextMenuService>('univer.context-menu-service');
+export const IContextMenuService = createIdentifier<IContextMenuService>('ui.contextmenu.service');
 
-export class DesktopContextMenuService extends Disposable implements IContextMenuService {
+export class ContextMenuService extends Disposable implements IContextMenuService {
     private _currentHandler: IContextMenuHandler | null = null;
 
     disabled: boolean = false;
+
+    get visible(): boolean {
+        return this._currentHandler?.visible ?? false;
+    }
 
     disable(): void {
         this.disabled = true;
@@ -52,8 +61,11 @@ export class DesktopContextMenuService extends Disposable implements IContextMen
         event.stopPropagation();
 
         if (this.disabled) return;
-
         this._currentHandler?.handleContextMenu(event, menuType);
+    }
+
+    hideContextMenu(): void {
+        this._currentHandler?.hideContextMenu();
     }
 
     registerContextMenuHandler(handler: IContextMenuHandler): IDisposable {
@@ -62,9 +74,6 @@ export class DesktopContextMenuService extends Disposable implements IContextMen
         }
 
         this._currentHandler = handler;
-
-        return toDisposable(() => {
-            this._currentHandler = null;
-        });
+        return toDisposable(() => this._currentHandler = null);
     }
 }

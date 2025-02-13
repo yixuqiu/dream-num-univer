@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,11 +88,16 @@ export function Scrollbar(props: IScrollbarProps) {
     const [thumbHeight, setThumbHeight] = useState(0);
     const [thumbTop, setThumbTop] = useState(0);
     useEffect(() => {
-        const { height: containerHeight } = containerRef.current!.parentElement!.getBoundingClientRect();
+        function resize() {
+            if (!containerRef.current) {
+                return;
+            }
+            const { height: containerHeight } = containerRef.current.parentElement!.getBoundingClientRect();
 
-        const { scrollHeight } = contentRef.current!;
-        setThumbHeight((containerHeight / scrollHeight) * 100);
-        containerRef.current!.style.height = `${containerHeight}px`;
+            const { scrollHeight } = contentRef.current!;
+            setThumbHeight((containerHeight / scrollHeight) * 100);
+            containerRef.current!.style.height = `${Math.floor(containerHeight)}px`;
+        }
 
         function handleScroll(e: Event) {
             const { scrollTop, scrollHeight } = e.target as HTMLDivElement;
@@ -100,11 +105,17 @@ export function Scrollbar(props: IScrollbarProps) {
             setThumbTop(thumbTop);
         }
 
+        resize();
+
+        const observer = new ResizeObserver(resize);
+        observer.observe(containerRef.current!.parentElement!);
+
         // handle scroll event
         contentRef.current!.addEventListener('scroll', handleScroll);
 
         return () => {
             contentRef.current?.removeEventListener('scroll', handleScroll);
+            observer.disconnect();
         };
     }, []);
 

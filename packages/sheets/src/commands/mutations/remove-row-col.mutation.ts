@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { IColumnData, IMutation, IObjectArrayPrimitiveType, IRowData, Worksheet } from '@univerjs/core';
+import type { IAccessor, IColumnData, IMutation, IObjectArrayPrimitiveType, IRowData, Worksheet } from '@univerjs/core';
 import { CommandType, concatMatrixArray, IUniverInstanceService, sliceMatrixArray, spliceArray } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
 
 import type {
     IInsertColMutationParams,
@@ -71,7 +70,6 @@ export const RemoveRowMutation: IMutation<IRemoveRowsMutationParams> = {
                 filterOutRows.push(i);
             }
         }
-
 
         const rowCount = range.endRow - range.startRow + 1;
         spliceArray(range.startRow, rowCount, rowPrimitive);

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,16 @@
  */
 
 import type { IWorkbookData } from '@univerjs/core';
-import { LocaleType, Plugin, Univer, UniverInstanceType } from '@univerjs/core';
-import { SelectionManagerService, SheetInterceptorService, SheetPermissionService } from '@univerjs/sheets';
-import { DesktopMenuService, DesktopShortcutService, IMenuService, IShortcutService } from '@univerjs/ui';
-import { Inject, Injector } from '@wendellhu/redi';
+import { Inject, Injector, LocaleType, Plugin, Univer, UniverInstanceType } from '@univerjs/core';
+import { IRenderManagerService, RenderManagerService } from '@univerjs/engine-render';
+import { RangeProtectionCache, RangeProtectionRefRangeService, RangeProtectionRenderModel, RangeProtectionRuleModel, RangeProtectionService, RefRangeService, SheetInterceptorService,
+    SheetsSelectionsService,
+    WorkbookPermissionService,
+    WorksheetPermissionService,
+    WorksheetProtectionPointModel,
+    WorksheetProtectionRuleModel,
+} from '@univerjs/sheets';
+import { IMenuManagerService, IPlatformService, IShortcutService, MenuManagerService, PlatformService, ShortcutService } from '@univerjs/ui';
 
 const TEST_WORKBOOK_DATA_DEMO: IWorkbookData = {
     id: 'test',
@@ -48,23 +54,36 @@ export function createMenuTestBed() {
 
     class TestPlugin extends Plugin {
         static override pluginName = 'test-plugin';
-        protected override _injector: Injector;
 
         static override type = UniverInstanceType.UNIVER_SHEET;
 
-        constructor(_config: unknown, @Inject(Injector) _injector: Injector) {
+        constructor(_config: unknown, @Inject(Injector) override readonly _injector: Injector) {
             super();
-
-            this._injector = _injector;
-            // get = this._injector.get.bind(this._injector);
         }
 
-        override onStarting(injector: Injector): void {
-            injector.add([SelectionManagerService]);
-            injector.add([IShortcutService, { useClass: DesktopShortcutService }]);
-            injector.add([IMenuService, { useClass: DesktopMenuService }]);
-            injector.add([SheetPermissionService]);
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([IPlatformService, { useClass: PlatformService }]);
+            injector.add([SheetsSelectionsService]);
+            injector.add([IShortcutService, { useClass: ShortcutService }]);
+            injector.add([IMenuManagerService, { useClass: MenuManagerService }]);
+            injector.add([WorkbookPermissionService]);
+            injector.add([WorksheetPermissionService]);
+            injector.add([WorksheetProtectionPointModel]);
             injector.add([SheetInterceptorService]);
+            injector.add([WorksheetProtectionRuleModel]);
+            injector.add([IRenderManagerService, { useClass: RenderManagerService }]);
+            injector.add([RefRangeService]);
+
+            injector.add([RangeProtectionRefRangeService]);
+            injector.add([RangeProtectionRenderModel]);
+            injector.add([RangeProtectionCache]);
+            injector.add([RangeProtectionRuleModel]);
+            injector.add([RangeProtectionService]);
+
+            this._injector.get(SheetInterceptorService);
+            this._injector.get(WorkbookPermissionService);
+            this._injector.get(WorksheetPermissionService);
         }
     }
 

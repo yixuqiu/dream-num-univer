@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,22 @@
  * limitations under the License.
  */
 
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle } from '@univerjs/core';
-import { ComponentManager, IMenuService } from '@univerjs/ui';
-import { Inject, Injector } from '@wendellhu/redi';
+import { Disposable, ICommandService, Inject } from '@univerjs/core';
+import { ComponentManager, IMenuManagerService } from '@univerjs/ui';
 
 import { ScriptPanelComponentName, ToggleScriptPanelOperation } from '../commands/operations/panel.operation';
 import { ScriptEditorPanel } from '../views/components/ScriptEditorPanel';
-import { UniscriptMenuItemFactory } from './menu';
+import { menuSchema } from './menu.schema';
 
-@OnLifecycle(LifecycleStages.Steady, UniscriptController)
 export class UniscriptController extends Disposable {
     constructor(
-        @Inject(Injector) private readonly _injector: Injector,
-        @IMenuService menuService: IMenuService,
+        @IMenuManagerService private readonly _menuManagerService: IMenuManagerService,
         @ICommandService commandService: ICommandService,
         @Inject(ComponentManager) componentManager: ComponentManager
     ) {
         super();
 
-        this.disposeWithMe(menuService.addMenuItem(this._injector.invoke(UniscriptMenuItemFactory)));
+        this._menuManagerService.mergeMenu(menuSchema);
         this.disposeWithMe(componentManager.register(ScriptPanelComponentName, ScriptEditorPanel));
         this.disposeWithMe(commandService.registerCommand(ToggleScriptPanelOperation));
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,124 +14,142 @@
  * limitations under the License.
  */
 
-/* eslint-disable react-refresh/only-export-components */
-
-import { ErrorSingle, SuccessSingle, WarningSingle } from '@univerjs/icons';
-import { render } from 'rc-util/lib/React/render';
-import React from 'react';
-import { CSSTransition, TransitionGroup } from 'react-transition-group';
-import type { IDisposable } from '../../type';
-
-import styles from './index.module.less';
+import { ErrorSingle, InfoSingle, Loading, SuccessSingle, WarningSingle } from '@univerjs/icons';
+import canUseDom from 'rc-util/lib/Dom/canUseDom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { clsx } from '../../helper/clsx';
 
 export enum MessageType {
     Success = 'success',
+    Info = 'info',
     Warning = 'warning',
     Error = 'error',
+    Loading = 'loading',
 }
 
 export interface IMessageProps {
-    key: number;
-    type: MessageType;
-    content?: string;
-}
-
-export interface IMessageMethodOptions {
+    id?: string;
     content: string;
-    delay?: number;
+    duration?: number;
+    type?: MessageType;
+    onClose?: () => void;
 }
 
 const iconMap = {
-    [MessageType.Success]: <SuccessSingle className={styles.messageIconSuccess} />,
-    [MessageType.Warning]: <WarningSingle className={styles.messageIconWarning} />,
-    [MessageType.Error]: <ErrorSingle className={styles.messageIconError} />,
+    [MessageType.Success]: <SuccessSingle className="univer-text-green-500" />,
+    [MessageType.Info]: <InfoSingle className="univer-text-indigo-600 dark:univer-text-primary-500" />,
+    [MessageType.Warning]: <WarningSingle className="univer-text-yellow-400" />,
+    [MessageType.Error]: <ErrorSingle className="univer-text-red-500" />,
+    [MessageType.Loading]: <Loading className="univer-text-yellow-400 univer-animate-spin" />,
 };
 
-const MessageItem = (props: IMessageProps) => {
-    const { type, content } = props;
-
-    const messageElement = (
-        <div className={styles.messageItem}>
-            <div className={styles.messageContent}>
-                <span className={styles.messageIcon}>{iconMap[type]}</span>
-                <span>{content}</span>
+// eslint-disable-next-line react-refresh/only-export-components
+const Message = ({ content, type = MessageType.Info }: IMessageProps) => {
+    const icon = useMemo(() => iconMap[type], [type]);
+    return (
+        <div
+            className={clsx(
+                `
+                  univer-font-sans univer-rounded-xl univer-p-4 univer-min-w-[320px] univer-transition-all
+                  univer-bg-white univer-duration-300 univer-animate-in univer-fade-in univer-slide-in-from-top-4
+                  univer-shadow-md univer-max-w-[480px] univer-border univer-border-gray-200 univer-border-solid
+                  dark:univer-border-gray-700 dark:univer-bg-gray-700
+                `
+            )}
+        >
+            <div className="univer-flex univer-gap-2 univer-items-start">
+                <span className="[&>svg]:univer-relative [&>svg]:univer-top-0.5 [&>svg]:univer-block">
+                    {icon}
+                </span>
+                <p
+                    className={`
+                      univer-text-sm univer-opacity-90 univer-m-0 univer-text-gray-500
+                      dark:univer-text-gray-400
+                    `}
+                >
+                    {content}
+                </p>
             </div>
         </div>
     );
-
-    return messageElement;
 };
 
-const MessageContainer = (props: { messages: IMessageProps[] }) => {
-    const { messages } = props;
-
-    return (
-        <TransitionGroup className={styles.message}>
-            {messages.map((message) => (
-                <CSSTransition
-                    key={message.key}
-                    timeout={200}
-                    classNames={{
-                        enterActive: styles.enterActive,
-                        enterDone: styles.enterDone,
-                        exitActive: styles.exit,
-                        exitDone: styles.exitActive,
-                    }}
-                >
-                    <MessageItem {...message} />
-                </CSSTransition>
-            ))}
-        </TransitionGroup>
-    );
-};
-
-export class Message {
-    protected _container: HTMLDivElement;
-
-    protected _messages: IMessageProps[] = [];
-
-    constructor(container: HTMLElement) {
-        this._container = document.createElement('div');
-        container.appendChild(this._container);
-
-        this.render();
-    }
-
-    append(type: MessageType, options: IMessageMethodOptions): IDisposable {
-        const { content, delay = 3000 } = options;
-        const key = Date.now();
-
-        this._messages.push({
-            key,
-            type,
-            content,
-        });
-
-        this.render();
-
-        setTimeout(() => this.teardown(key), delay);
-        return { dispose: () => this.teardown(key) };
-    }
-
-    teardown(key: number) {
-        this._messages = this._messages.filter((message) => message.key !== key);
-
-        this.render();
-    }
-
-    render() {
-        render(<MessageContainer messages={this._messages} />, this._container);
-    }
-
-    success(options: IMessageMethodOptions): IDisposable {
-        return this.append(MessageType.Success, options);
-    }
-
-    warning(options: IMessageMethodOptions): IDisposable {
-        return this.append(MessageType.Warning, options);
-    }
-
-    error(options: IMessageMethodOptions): IDisposable {
-        return this.append(MessageType.Error, options);
-    }
+interface IMessageState {
+    messages: IMessageProps[];
 }
+
+let messageCount = 0;
+
+const createMessage = (() => {
+    let addMessage: (message: Omit<IMessageProps, 'id'>) => void = () => {};
+    let removeMessage: (id?: string) => void = () => {};
+
+    const Messager = () => {
+        if (!canUseDom()) {
+            return null;
+        }
+
+        const [state, setState] = useState<IMessageState>({ messages: [] });
+
+        removeMessage = (id?: string) => {
+            if (!id) {
+                setState({
+                    messages: [],
+                });
+            }
+
+            setState((prev) => ({
+                messages: prev.messages.filter((t) => t.id !== id),
+            }));
+        };
+
+        useEffect(() => {
+            addMessage = (message) => {
+                const id = String(messageCount++);
+                setState((prev) => ({
+                    messages: [...prev.messages, { ...message, id }],
+                }));
+
+                if (message.duration !== Infinity) {
+                    setTimeout(() => {
+                        setState((prev) => ({
+                            messages: prev.messages.filter((t) => t.id !== id),
+                        }));
+                    }, message.duration || 3000);
+                }
+            };
+        }, []);
+
+        return createPortal(
+            <div
+                className={`
+                  univer-fixed univer-left-1/2 univer-top-4 univer-z-50 univer-flex univer-flex-col univer-items-center
+                  univer-gap-1 -univer-translate-x-1/2
+                `}
+            >
+                {state.messages.map((message, index) => (
+                    <div
+                        key={message.id}
+                        style={{
+                            position: 'relative',
+                            top: `${index * 4}px`,
+                            zIndex: 50 - index,
+                        }}
+                    >
+                        <Message {...message} onClose={() => removeMessage(message.id)} />
+                    </div>
+                ))}
+            </div>,
+            document.body
+        );
+    };
+
+    return {
+        Messager,
+        message: (props: Omit<IMessageProps, 'id'>) => addMessage(props),
+        removeMessage,
+    };
+})();
+
+export const { Messager, message, removeMessage } = createMessage;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,7 +54,10 @@ describe('Test compare', () => {
 
     it('Function compareWithWildcard', () => {
         expect(compareWithWildcard('test12', 'test*', compareToken.EQUALS)).toBe(true);
+        expect(compareWithWildcard('hello', 'test*', compareToken.NOT_EQUAL)).toBe(true);
         expect(compareWithWildcard('test12', 'test*', compareToken.GREATER_THAN)).toBe(true);
         expect(compareWithWildcard('test12', 'test*', compareToken.GREATER_THAN_OR_EQUAL)).toBe(true);
+        expect(compareWithWildcard('hello', 'test*', compareToken.LESS_THAN)).toBe(true);
+        expect(compareWithWildcard('hello', 'test*', compareToken.LESS_THAN_OR_EQUAL)).toBe(true);
     });
 });

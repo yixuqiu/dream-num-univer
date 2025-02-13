@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,12 +32,13 @@ const univerPastePlugin: IPastePlugin = {
                 return el.tagName === 'P' && /UniverNormal/i.test(el.className);
             },
             handler(doc, el) {
-                if (doc.paragraphs == null) {
-                    doc.paragraphs = [];
+                const body = doc.body!;
+                if (body.paragraphs == null) {
+                    body.paragraphs = [];
                 }
 
                 const paragraph: IParagraph = {
-                    startIndex: doc.dataStream.length,
+                    startIndex: body.dataStream.length,
                 };
 
                 const paragraphStyle = getParagraphStyle(el);
@@ -46,8 +47,8 @@ const univerPastePlugin: IPastePlugin = {
                     paragraph.paragraphStyle = paragraphStyle;
                 }
 
-                doc.paragraphs.push(paragraph);
-                doc.dataStream += '\r';
+                body.paragraphs.push(paragraph);
+                body.dataStream += '\r';
             },
         },
     ],

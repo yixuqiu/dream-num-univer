@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { BooleanValue } from '../../basics/common';
 import type { ErrorType } from '../../basics/error-type';
+import { BooleanValue } from '../../basics/common';
 import { ERROR_TYPE_SET } from '../../basics/error-type';
 import { LexerNode } from '../analysis/lexer-node';
 import { ValueObjectFactory } from '../value-object/array-value-object';
@@ -24,25 +24,25 @@ import { BaseAstNodeFactory, DEFAULT_AST_NODE_FACTORY_Z_INDEX } from './base-ast
 import { NODE_ORDER_MAP, NodeType } from './node-type';
 
 export class ValueNode extends BaseAstNode {
-    constructor(private _operatorString: string) {
-        super(_operatorString);
+    constructor(operatorString: string) {
+        super(operatorString);
     }
 
-    override get nodeType() {
+    override get nodeType(): NodeType {
         return NodeType.VALUE;
     }
 
-    override execute() {
-        this.setValue(ValueObjectFactory.create(this._operatorString));
+    override execute(): void {
+        this.setValue(ValueObjectFactory.create(this.getToken()));
     }
 }
 
 export class ValueNodeFactory extends BaseAstNodeFactory {
-    override get zIndex() {
+    override get zIndex(): number {
         return NODE_ORDER_MAP.get(NodeType.VALUE) || DEFAULT_AST_NODE_FACTORY_Z_INDEX;
     }
 
-    _checkValueNode(token: string) {
+    _checkValueNode(token: string): BaseAstNode | undefined {
         if (Number.isNaN(Number(token))) {
             const tokenTrim = token.trim();
             const startToken = tokenTrim.charAt(0);
@@ -72,7 +72,7 @@ export class ValueNodeFactory extends BaseAstNodeFactory {
         return new ValueNode(param);
     }
 
-    override checkAndCreateNodeType(param: LexerNode | string) {
+    override checkAndCreateNodeType(param: LexerNode | string): BaseAstNode | undefined {
         if (param instanceof LexerNode) {
             return;
         }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,6 +26,8 @@ export enum KeyCode {
     TAB = 9,
 
     ENTER = 13,
+    SHIFT = 16,
+    CTRL = 17,
     ESC = 27,
     SPACE = 32,
 
@@ -89,10 +91,13 @@ export enum KeyCode {
     NUM_LOCK = 144,
     SCROLL_LOCK = 145,
 
-    MINUS = 189,
     EQUAL = 187,
+    COMMA = 188,
+    MINUS = 189,
+    PERIOD = 190,
 
     BACK_SLASH = 220,
+
 }
 
 export const KeyCodeToChar: { [key: number]: string } = {
@@ -145,8 +150,23 @@ export const KeyCodeToChar: { [key: number]: string } = {
     [KeyCode.Y]: 'Y',
     [KeyCode.Z]: 'Z',
 
+    [KeyCode.F1]: 'F1',
+    [KeyCode.F2]: 'F2',
+    [KeyCode.F3]: 'F3',
+    [KeyCode.F4]: 'F4',
+    [KeyCode.F5]: 'F5',
+    [KeyCode.F6]: 'F6',
+    [KeyCode.F7]: 'F7',
+    [KeyCode.F8]: 'F8',
+    [KeyCode.F9]: 'F9',
+    [KeyCode.F10]: 'F10',
+    [KeyCode.F11]: 'F11',
+    [KeyCode.F12]: 'F12',
+
     [KeyCode.MINUS]: '-',
     [KeyCode.EQUAL]: '=',
+    [KeyCode.PERIOD]: '.',
+    [KeyCode.COMMA]: ',',
 
     [KeyCode.BACK_SLASH]: '\\',
 };

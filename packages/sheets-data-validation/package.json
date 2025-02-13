@@ -1,6 +1,6 @@
 {
     "name": "@univerjs/sheets-data-validation",
-    "version": "0.1.9",
+    "version": "0.6.0-alpha.0",
     "private": false,
     "description": "Data validation for Univer Sheets",
     "author": "DreamNum <developer@univer.ai>",
@@ -22,14 +22,14 @@
     ],
     "exports": {
         ".": "./src/index.ts",
-        "./*": "./src/*"
+        "./*": "./src/*",
+        "./facade": "./src/facade/index.ts"
     },
-    "main": "./lib/cjs/index.js",
-    "module": "./lib/esm/index.js",
+    "main": "./src/index.ts",
     "types": "./lib/types/index.d.ts",
     "publishConfig": {
         "access": "public",
-        "main": "./lib/cjs/index.js",
+        "main": "./lib/es/index.js",
         "module": "./lib/es/index.js",
         "exports": {
             ".": {
@@ -41,6 +41,11 @@
                 "import": "./lib/es/*",
                 "require": "./lib/cjs/*",
                 "types": "./lib/types/index.d.ts"
+            },
+            "./facade": {
+                "import": "./lib/es/facade.js",
+                "require": "./lib/cjs/facade.js",
+                "types": "./lib/types/facade/index.d.ts"
             },
             "./lib/*": "./lib/*"
         }
@@ -56,46 +61,26 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "coverage": "vitest run --coverage",
-        "build": "tsc && vite build"
+        "build": "univer-cli build",
+        "lint:types": "tsc --noEmit"
     },
     "peerDependencies": {
-        "@univerjs/core": "workspace:*",
-        "@univerjs/data-validation": "workspace:*",
-        "@univerjs/design": "workspace:*",
-        "@univerjs/engine-formula": "workspace:*",
-        "@univerjs/engine-render": "workspace:*",
-        "@univerjs/sheets": "workspace:*",
-        "@univerjs/sheets-formula": "workspace:*",
-        "@univerjs/sheets-ui": "workspace:*",
-        "@univerjs/ui": "workspace:*",
-        "@wendellhu/redi": "^0.13.3",
-        "clsx": ">=2.0.0",
-        "dayjs": ">=1.11.0",
-        "react": "^16.9.0 || ^17.0.0 || ^18.0.0",
         "rxjs": ">=7.0.0"
     },
     "dependencies": {
-        "@univerjs/icons": "^0.1.44"
-    },
-    "devDependencies": {
         "@univerjs/core": "workspace:*",
         "@univerjs/data-validation": "workspace:*",
-        "@univerjs/design": "workspace:*",
         "@univerjs/engine-formula": "workspace:*",
-        "@univerjs/engine-render": "workspace:*",
-        "@univerjs/shared": "workspace:*",
+        "@univerjs/protocol": "0.1.43",
         "@univerjs/sheets": "workspace:*",
-        "@univerjs/sheets-formula": "workspace:*",
-        "@univerjs/sheets-ui": "workspace:*",
-        "@univerjs/ui": "workspace:*",
-        "@wendellhu/redi": "^0.13.3",
-        "clsx": "^2.1.1",
-        "dayjs": "^1.11.10",
-        "less": "^4.2.0",
-        "react": "18.2.0",
+        "@univerjs/sheets-formula": "workspace:*"
+    },
+    "devDependencies": {
+        "@univerjs-infra/shared": "workspace:*",
+        "less": "^4.2.2",
         "rxjs": "^7.8.1",
-        "typescript": "^5.4.5",
-        "vite": "^5.2.10",
-        "vitest": "^1.5.0"
+        "typescript": "^5.7.3",
+        "vite": "^6.1.0",
+        "vitest": "^3.0.5"
     }
 }

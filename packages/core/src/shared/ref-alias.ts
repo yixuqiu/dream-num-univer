@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,8 +78,8 @@ export class RefAlias<T extends Record<string, unknown>, K extends keyof T = key
         }
     }
 
-    deleteValue(key: string) {
-        const value = this.getValue(key);
+    deleteValue(key: string, keyGroup?: K[]) {
+        const value = this.getValue(key, keyGroup);
         if (value) {
             this._keys.forEach((keyItem) => {
                 const keyMap = this._keyMaps.get(keyItem);

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ export function attachObjectHover(
     hoverIn: (o: any, evt: IPointerEvent | IMouseEvent) => void,
     hoverOut: (o: any, evt: IPointerEvent | IMouseEvent) => void
 ) {
-    o.onPointerEnterObserver.add((evt) => {
+    o.onPointerEnter$.subscribeEvent((evt) => {
         hoverIn(o, evt);
     });
 
-    o.onPointerLeaveObserver.add((evt) => {
+    o.onPointerLeave$.subscribeEvent((evt) => {
         hoverOut(o, evt);
     });
 }

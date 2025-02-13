@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import type { IMutation } from '@univerjs/core';
-import { CommandType, IUniverInstanceService } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
+import { CommandType, IUniverInstanceService, Tools } from '@univerjs/core';
+import type { IAccessor, IMutation } from '@univerjs/core';
 
 import type {
     IAddWorksheetMergeMutationParams,
@@ -37,7 +36,7 @@ export const AddMergeUndoMutationFactory = (
     return {
         unitId: params.unitId,
         subUnitId: params.subUnitId,
-        ranges: params.ranges,
+        ranges: Tools.deepClone(params.ranges),
     };
 };
 
@@ -61,6 +60,7 @@ export const AddWorksheetMergeMutation: IMutation<IAddWorksheetMergeMutationPara
         for (let i = 0; i < mergeAppendData.length; i++) {
             mergeConfigData.push(mergeAppendData[i]);
         }
+        worksheet.getSpanModel().rebuild(mergeConfigData);
 
         return true;
     },

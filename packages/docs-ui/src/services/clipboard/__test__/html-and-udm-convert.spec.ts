@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,16 +116,16 @@ describe('test case in html and udm convert', () => {
             const convertor = new HtmlToUDMService();
             const udm = await convertor.convert(html);
 
-            expect(udm.dataStream).toBe('hello\rworld');
+            expect(udm.body!.dataStream).toBe('hello\rworld');
         });
     });
 
     describe('test cases in udm-to-html', () => {
         it('should paste the case when convert udm to html', async () => {
             const convertor = new UDMToHtmlService();
-            const html = await convertor.convert([body!]);
+            const html = await convertor.convert([{ body: body!, id: '', documentStyle: {} }]);
 
-            expect(html).toBe('<strong>hello</strong><strong><i>world</i></strong>');
+            expect(html).toBe('<p class="UniverNormal" ><strong>hello</strong><strong><i>world</i></strong></p>');
         });
     });
 });

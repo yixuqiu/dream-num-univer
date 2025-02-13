@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,80 +14,101 @@
  * limitations under the License.
  */
 
-import { ICommandService, LocaleService, Plugin, UniverInstanceType } from '@univerjs/core';
-import { type Dependency, Inject, Injector } from '@wendellhu/redi';
-import { DataValidationRenderController } from './controllers/dv-render.controller';
-import { DataValidationController } from './controllers/dv.controller';
-import { SheetDataValidationService } from './services/dv.service';
-import { DataValidationAlertController } from './controllers/dv-alert.controller';
-import { AddSheetDataValidationAndOpenCommand, AddSheetDataValidationCommand, UpdateSheetDataValidationRangeCommand } from './commands/commands/data-validation.command';
-import { DataValidationCacheService } from './services/dv-cache.service';
-import { DataValidationFormulaService } from './services/dv-formula.service';
-import { DataValidationCustomFormulaService } from './services/dv-custom-formula.service';
-import { DataValidationRefRangeController } from './controllers/dv-ref-range.controller';
-import { enUS, zhCN } from './locale';
+import type { Dependency } from '@univerjs/core';
+import type { IUniverSheetsDataValidationConfig } from './controllers/config.schema';
+import {
+    DependentOn,
+    ICommandService,
+    IConfigService,
+    Inject,
+    Injector,
+    merge, Plugin, UniverInstanceType,
+} from '@univerjs/core';
+import { UniverDataValidationPlugin } from '@univerjs/data-validation';
+import {
+    AddSheetDataValidationCommand,
+    ClearRangeDataValidationCommand,
+    RemoveSheetAllDataValidationCommand,
+    RemoveSheetDataValidationCommand,
+    UpdateSheetDataValidationOptionsCommand,
+    UpdateSheetDataValidationRangeCommand,
+    UpdateSheetDataValidationSettingCommand,
+} from './commands/commands/data-validation.command';
 import { DATA_VALIDATION_PLUGIN_NAME } from './common/const';
-import { DataValidationAutoFillController } from './controllers/dv-auto-fill.controller';
-import { DataValidationCopyPasteController } from './controllers/dv-copy-paste.controller';
-import { DataValidationModelController } from './controllers/dv-model.controller';
-import { DataValidationDropdownManagerService } from './services/dropdown-manager.service';
-import { CloseValidationPanelOperation, HideDataValidationDropdown, OpenValidationPanelOperation, ShowDataValidationDropdown, ToggleValidationPanelOperation } from './commands/operations/data-validation.operation';
-import { DataValidationRejectInputController } from './controllers/dv-reject-input.controller';
-import { DataValidationPanelService } from './services/data-validation-panel.service';
+import { defaultPluginConfig, SHEETS_DATA_VALIDATION_PLUGIN_CONFIG_KEY } from './controllers/config.schema';
+import { DataValidationFormulaRefRangeController } from './controllers/dv-formula-ref-range.controller';
+import { DataValidationFormulaController } from './controllers/dv-formula.controller';
+import { DataValidationRefRangeController } from './controllers/dv-ref-range.controller';
+import { SheetDataValidationSheetController } from './controllers/dv-sheet.controller';
+import { DataValidationController } from './controllers/dv.controller';
+import { SheetDataValidationModel } from './models/sheet-data-validation-model';
+import { DataValidationCacheService } from './services/dv-cache.service';
+import { DataValidationCustomFormulaService } from './services/dv-custom-formula.service';
+import { DataValidationFormulaService } from './services/dv-formula.service';
+import { SheetsDataValidationValidatorService } from './services/dv-validator-service';
 
+@DependentOn(UniverDataValidationPlugin)
 export class UniverSheetsDataValidationPlugin extends Plugin {
     static override pluginName = DATA_VALIDATION_PLUGIN_NAME;
     static override type = UniverInstanceType.UNIVER_SHEET;
 
     constructor(
-        _config: unknown,
+        private readonly _config: Partial<IUniverSheetsDataValidationConfig> = defaultPluginConfig,
         @Inject(Injector) protected _injector: Injector,
         @ICommandService private readonly _commandService: ICommandService,
-        @Inject(LocaleService) private readonly _localeService: LocaleService
+        @IConfigService private readonly _configService: IConfigService
     ) {
         super();
+
+        // Manage the plugin configuration.
+        const { ...rest } = merge(
+            {},
+            defaultPluginConfig,
+            this._config
+        );
+        this._configService.setConfig(SHEETS_DATA_VALIDATION_PLUGIN_CONFIG_KEY, rest);
     }
 
-    override onStarting(injector: Injector) {
+    override onStarting() {
         ([
-            [DataValidationPanelService],
-            [SheetDataValidationService],
             [DataValidationCacheService],
             [DataValidationFormulaService],
             [DataValidationCustomFormulaService],
-            [DataValidationDropdownManagerService],
-
-            // controller
-            [DataValidationModelController],
+            [SheetsDataValidationValidatorService],
+            [SheetDataValidationModel],
             [DataValidationController],
-            [DataValidationRenderController],
-            [DataValidationAlertController],
+            [DataValidationFormulaController],
+            [SheetDataValidationSheetController],
             [DataValidationRefRangeController],
-            [DataValidationAutoFillController],
-            [DataValidationCopyPasteController],
-            [DataValidationRejectInputController],
+            [DataValidationFormulaRefRangeController],
         ] as Dependency[]).forEach((dep) => {
-            injector.add(dep);
+            this._injector.add(dep);
         });
 
         [
             AddSheetDataValidationCommand,
-            AddSheetDataValidationAndOpenCommand,
             UpdateSheetDataValidationRangeCommand,
-
-             // operation
-            ShowDataValidationDropdown,
-            HideDataValidationDropdown,
-            CloseValidationPanelOperation,
-            OpenValidationPanelOperation,
-            ToggleValidationPanelOperation,
+            UpdateSheetDataValidationSettingCommand,
+            UpdateSheetDataValidationOptionsCommand,
+            RemoveSheetDataValidationCommand,
+            RemoveSheetAllDataValidationCommand,
+            ClearRangeDataValidationCommand,
         ].forEach((command) => {
             this._commandService.registerCommand(command);
         });
 
-        this._localeService.load({
-            zhCN,
-            enUS,
-        });
+        this._injector.get(DataValidationCacheService);
+        this._injector.get(SheetsDataValidationValidatorService);
+        this._injector.get(DataValidationController);
+        this._injector.get(DataValidationFormulaRefRangeController);
+        this._injector.get(DataValidationRefRangeController);
+    }
+
+    override onReady(): void {
+        this._injector.get(SheetDataValidationSheetController);
+    }
+
+    override onRendered(): void {
+        this._injector.get(DataValidationFormulaController);
     }
 }

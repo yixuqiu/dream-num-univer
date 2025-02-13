@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,32 @@
  * limitations under the License.
  */
 
+export { UniverNetworkPlugin } from './plugin';
 export { HTTPHeaders } from './services/http/headers';
 export { HTTPService } from './services/http/http.service';
 export { IHTTPImplementation } from './services/http/implementations/implementation';
+export { FetchHTTPImplementation } from './services/http/implementations/fetch';
 export { XHRHTTPImplementation } from './services/http/implementations/xhr';
 export { HTTPRequest, type HTTPRequestMethod } from './services/http/request';
-export { HTTPResponse, type HTTPEvent, HTTPResponseError } from './services/http/response';
+export { type HTTPResponseType, HTTPStatusCode } from './services/http/http';
+export {
+    type HTTPEvent,
+    HTTPEventType,
+    HTTPProgress,
+    HTTPResponse,
+    type HTTPResponseBody,
+    HTTPResponseError,
+    ResponseHeader,
+} from './services/http/response';
 export {
     type ISocket,
     ISocketService,
     type SocketBodyType,
     WebSocketService,
 } from './services/web-socket/web-socket.service';
-export type { IRequestParams, IPostRequestParams } from './services/http/http.service';
+export type { IPostRequestParams, IRequestParams } from './services/http/http.service';
 export type { HTTPHandlerFn, HTTPInterceptorFn, HTTPInterceptorFnFactory } from './services/http/interceptor';
-export { retryInterceptor } from './services/http/interceptors/retry-interceptor';
+export { type IRetryInterceptorFactoryParams, RetryInterceptorFactory } from './services/http/interceptors/retry-interceptor';
 export { ThresholdInterceptorFactory } from './services/http/interceptors/threshold-interceptor';
+export { AuthInterceptorFactory, type IAuthInterceptorParams } from './services/http/interceptors/auth-interceptor';
+export { MergeInterceptorFactory } from './services/http/interceptors/merge-interceptor';

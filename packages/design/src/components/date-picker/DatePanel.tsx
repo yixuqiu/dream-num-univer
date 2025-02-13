@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-import React, { useContext } from 'react';
-import type { Dayjs } from 'dayjs';
-import generateConfig from 'rc-picker/lib/generate/dayjs';
+import type { dayjs } from '@univerjs/core';
 import type { BasePickerPanelProps } from 'rc-picker';
 import { PickerPanel } from 'rc-picker';
+import generateConfig from 'rc-picker/lib/generate/dayjs';
+import React, { useContext } from 'react';
 import { ConfigContext } from '../config-provider';
 import styles from './index.module.less';
 
-export type IDatePanelProps = Omit<BasePickerPanelProps<Dayjs>, 'prefixCls' | 'locale' | 'generateConfig'>;
+export type IDatePanelProps = Omit<BasePickerPanelProps<dayjs.Dayjs>, 'prefixCls' | 'locale' | 'generateConfig'>;
 
 export const DatePanel = (props: IDatePanelProps) => {
     const { locale } = useContext(ConfigContext);
@@ -32,7 +32,7 @@ export const DatePanel = (props: IDatePanelProps) => {
             {...props}
             generateConfig={generateConfig}
             prefixCls={styles.datePicker}
-            locale={locale.design.Picker}
+            locale={locale?.Picker!}
         />
     );
 };

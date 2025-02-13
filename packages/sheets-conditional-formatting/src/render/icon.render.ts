@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,15 @@
  */
 
 import type { IRange, IScale } from '@univerjs/core';
-import { Range } from '@univerjs/core';
 import type { SpreadsheetSkeleton, UniverRenderingContext } from '@univerjs/engine-render';
-import { SheetExtension } from '@univerjs/engine-render';
 import type { IIconType } from '../models/icon-map';
-import { EMPTY_ICON_TYPE, iconMap } from '../models/icon-map';
 import type { IIconSetCellData } from './type';
+import { Range } from '@univerjs/core';
+import { SheetExtension, SpreadsheetExtensionRegistry } from '@univerjs/engine-render';
+import { EMPTY_ICON_TYPE, iconMap } from '../models/icon-map';
 
 export const IconUKey = 'sheet-conditional-rule-icon';
-const EXTENSION_Z_INDEX = 34;
+const EXTENSION_Z_INDEX = 35;
 export const DEFAULT_WIDTH = 15;
 export const DEFAULT_PADDING = 2;
 
@@ -44,24 +44,22 @@ export class ConditionalFormattingIcon extends SheetExtension {
 
     override draw(
         ctx: UniverRenderingContext,
-        parentScale: IScale,
+        _parentScale: IScale,
         spreadsheetSkeleton: SpreadsheetSkeleton,
-        diffRanges?: IRange[]
+        diffRanges: IRange[]
     ) {
-        const { rowHeightAccumulation, columnWidthAccumulation, worksheet, dataMergeCache } =
-        spreadsheetSkeleton;
+        const { worksheet } = spreadsheetSkeleton;
         if (!worksheet) {
             return false;
         }
         ctx.save();
-        ctx.globalCompositeOperation = 'destination-over';
+        // ctx.globalCompositeOperation = 'destination-over';
         Range.foreach(spreadsheetSkeleton.rowColumnSegment, (row, col) => {
+            if (!worksheet.getRowVisible(row) || !worksheet.getColVisible(col)) {
+                return;
+            }
             const cellData = worksheet.getCell(row, col) as IIconSetCellData;
             if (cellData?.iconSet) {
-                if (!worksheet.getColVisible(col) || !worksheet.getRowRawVisible(row)) {
-                    return;
-                }
-
                 const { iconType, iconId } = cellData.iconSet;
                 if (iconType === EMPTY_ICON_TYPE) {
                     return;
@@ -70,7 +68,7 @@ export class ConditionalFormattingIcon extends SheetExtension {
                 if (!icon) {
                     return;
                 }
-                const cellInfo = this.getCellIndex(row, col, rowHeightAccumulation, columnWidthAccumulation, dataMergeCache);
+                const cellInfo = spreadsheetSkeleton.getCellWithCoordByIndex(row, col, false);
                 let { isMerged, isMergedMainCell, mergeInfo, startY, endY, startX, endX } = cellInfo;
                 if (isMerged) {
                     return;
@@ -115,3 +113,5 @@ export class ConditionalFormattingIcon extends SheetExtension {
         return `${iconType}_${iconIndex}`;
     }
 }
+
+SpreadsheetExtensionRegistry.add(ConditionalFormattingIcon);

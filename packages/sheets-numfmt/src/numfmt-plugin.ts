@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,35 +14,56 @@
  * limitations under the License.
  */
 
-import { Plugin, UniverInstanceType } from '@univerjs/core';
-import { Inject, Injector } from '@wendellhu/redi';
+import { DependentOn, ICommandService, Inject, Injector, Plugin, registerDependencies, touchDependencies, UniverInstanceType } from '@univerjs/core';
+import { UniverSheetsPlugin } from '@univerjs/sheets';
+import { SHEET_NUMFMT_PLUGIN } from './base/const/plugin-name';
+import { AddDecimalCommand } from './commands/commands/add-decimal.command';
+import { SetCurrencyCommand } from './commands/commands/set-currency.command';
+import { SetNumfmtCommand } from './commands/commands/set-numfmt.command';
+import { SetPercentCommand } from './commands/commands/set-percent.command';
+import { SubtractDecimalCommand } from './commands/commands/subtract-decimal.command';
+import { SheetsNumfmtCellContentController } from './controllers/numfmt-cell-content.controller';
+import { NumfmtCurrencyController } from './controllers/numfmt-currency.controller';
+import { MenuCurrencyService } from './service/menu.currency.service';
 
-import { SHEET_NUMFMT_PLUGIN } from './base/const/PLUGIN_NAME';
-import { NumfmtCellContent } from './controllers/numfmt.cell-content.controller';
-import { NumfmtController } from './controllers/numfmt.controller';
-import { NumfmtEditorController } from './controllers/numfmt.editor.controller';
-import { NumfmtI18nController } from './controllers/numfmt.i18n.controller';
-import { NumfmtMenuController } from './controllers/numfmt.menu.controller';
-import { INumfmtController } from './controllers/type';
-import { UserHabitController } from './controllers/user-habit.controller';
-
+@DependentOn(UniverSheetsPlugin)
 export class UniverSheetsNumfmtPlugin extends Plugin {
     static override pluginName = SHEET_NUMFMT_PLUGIN;
     static override type = UniverInstanceType.UNIVER_SHEET;
 
     constructor(
-        _config: unknown,
-        @Inject(Injector) override readonly _injector: Injector
+        private readonly _config: undefined = undefined,
+        @Inject(Injector) override readonly _injector: Injector,
+        @ICommandService private readonly _commandService: ICommandService
     ) {
         super();
     }
 
     override onStarting(): void {
-        this._injector.add([INumfmtController, { useClass: NumfmtController, lazy: false }]);
-        this._injector.add([NumfmtEditorController]);
-        this._injector.add([UserHabitController]);
-        this._injector.add([NumfmtCellContent]);
-        this._injector.add([NumfmtI18nController]);
-        this._injector.add([NumfmtMenuController]);
+        registerDependencies(this._injector, [
+            [SheetsNumfmtCellContentController],
+            [MenuCurrencyService],
+            [NumfmtCurrencyController],
+        ]);
+
+        touchDependencies(this._injector, [
+            [SheetsNumfmtCellContentController],
+        ]);
+    }
+
+    override onRendered(): void {
+        touchDependencies(this._injector, [
+            [NumfmtCurrencyController],
+        ]);
+
+        [
+            AddDecimalCommand,
+            SubtractDecimalCommand,
+            SetCurrencyCommand,
+            SetPercentCommand,
+            SetNumfmtCommand,
+        ].forEach((config) => {
+            this.disposeWithMe(this._commandService.registerCommand(config));
+        });
     }
 }

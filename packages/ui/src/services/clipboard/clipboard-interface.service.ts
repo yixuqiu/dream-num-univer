@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,25 @@
  * limitations under the License.
  */
 
-import { Disposable, ILogService, LocaleService } from '@univerjs/core';
-import { createIdentifier, Inject, Optional } from '@wendellhu/redi';
+import { createIdentifier, Disposable, ILogService, Inject, LocaleService, Optional } from '@univerjs/core';
 
 import { INotificationService } from '../notification/notification.service';
 import { supportClipboardAPI } from './clipboard-utils';
 
 export const PLAIN_TEXT_CLIPBOARD_MIME_TYPE = 'text/plain';
 export const HTML_CLIPBOARD_MIME_TYPE = 'text/html';
+export const FILE_PNG_CLIPBOARD_MIME_TYPE = 'image/png';
+export const FILE__JPEG_CLIPBOARD_MIME_TYPE = 'image/jpeg';
+export const FILE__BMP_CLIPBOARD_MIME_TYPE = 'image/bmp';
+export const FILE__WEBP_CLIPBOARD_MIME_TYPE = 'image/webp';
+export const FILE_SVG_XML_CLIPBOARD_MIME_TYPE = 'image/svg+xml';
+
+export const imageMimeTypeSet = new Set([
+    FILE__BMP_CLIPBOARD_MIME_TYPE,
+    FILE__JPEG_CLIPBOARD_MIME_TYPE,
+    FILE__WEBP_CLIPBOARD_MIME_TYPE,
+    FILE_PNG_CLIPBOARD_MIME_TYPE,
+]);
 
 /**
  * This interface provides an interface to access system's clipboard.
@@ -163,7 +174,7 @@ export class BrowserClipboardService extends Disposable implements IClipboardInt
             select(container);
             document.execCommand('copy');
         } finally {
-        // reset previous elements focus state
+            // reset previous elements focus state
             if (activeElement instanceof HTMLElement) {
                 activeElement.focus();
             }

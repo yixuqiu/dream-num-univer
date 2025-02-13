@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,34 @@
  * limitations under the License.
  */
 
-import type { IMessageMethodOptions, IMessageProps } from '@univerjs/design';
-import { Message } from '@univerjs/design';
-import type { IDisposable } from '@wendellhu/redi';
-
+import type { IMessageProps } from '@univerjs/design';
 import type { IMessageService } from './message.service';
+import { Disposable, Inject, Injector } from '@univerjs/core';
+import { message, Messager, removeMessage } from '@univerjs/design';
+import { connectInjector } from '../../utils/di';
+import { BuiltInUIPart, IUIPartsService } from '../parts/parts.service';
 
-export class DesktopMessageService implements IMessageService {
-    portalContainer: HTMLElement = document.body;
-    message?: Message;
+export class DesktopMessageService extends Disposable implements IMessageService {
+    constructor(
+        @Inject(Injector) protected readonly _injector: Injector,
+        @IUIPartsService protected readonly _uiPartsService: IUIPartsService
+    ) {
+        super();
 
-    setContainer(container: HTMLElement): void {
-        this.portalContainer = container;
-        this.message = new Message(container);
+        this._initUIPart();
     }
 
-    show(options: IMessageMethodOptions & Omit<IMessageProps, 'key'>): IDisposable {
-        if (!this.message) {
-            throw new Error('[DesktopMessageService]: no message implementation!');
-        }
+    protected _initUIPart(): void {
+        this.disposeWithMe(
+            this._uiPartsService.registerComponent(BuiltInUIPart.GLOBAL, () => connectInjector(Messager, this._injector))
+        );
+    }
 
-        const { type, ...rest } = options;
-        return this.message[type](rest);
+    override dispose(): void {
+        removeMessage();
+    }
+
+    show(options: IMessageProps) {
+        message(options);
     }
 }

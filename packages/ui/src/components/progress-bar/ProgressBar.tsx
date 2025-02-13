@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,55 +15,102 @@
  */
 
 import { ThemeService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import React, { useEffect, useState } from 'react';
-import type { IProgressStep } from '../../services/progress/progress.service';
-import { IProgressService } from '../../services/progress/progress.service';
+import { Tooltip } from '@univerjs/design';
+import { CloseSingle } from '@univerjs/icons';
+import React, { useEffect, useRef } from 'react';
+import { useDependency } from '../../utils/di';
 import styles from './index.module.less';
 
-export function ProgressBar() {
+export interface IProgressBarProps {
+    progress: { done: number; count: number; label?: string };
+    barColor?: string;
+    onTerminate?: () => void;
+    onClearProgress?: () => void; // Notify the parent component of the reset progress
+}
+
+export function ProgressBar(props: IProgressBarProps) {
+    const { barColor, progress, onTerminate, onClearProgress } = props;
+    const { count, done, label = '' } = progress;
+
     const themeService = useDependency(ThemeService);
-    const progressService = useDependency(IProgressService);
-    const barColor = themeService.getCurrentTheme().primaryColor;
-    const [progress, setProgress] = useState(0);
-    const [visible, setVisible] = useState(false);
+    const color = barColor ?? themeService.getCurrentTheme().primaryColor; ;
+
+    const progressBarInnerRef = useRef<HTMLDivElement>(null);
+    const progressBarContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const progressVisible = progressService.progressVisible$.subscribe((isVisible) => {
-            if (!isVisible) {
-                // Wait for the progress animation to complete before hiding the progress bar
-                setTimeout(() => {
-                    setVisible(isVisible);
-                    setProgress(0);
-                }, 500);
+        const progressBarInner = progressBarInnerRef.current;
+        const progressBarContainer = progressBarContainerRef.current;
+
+        if (!progressBarInner || !progressBarContainer) return;
+
+        // Hide immediately if both count and done are zero
+        if (count === 0 && done === 0) {
+            progressBarContainer.style.display = 'none';
+            progressBarInner.style.width = '0%';
+            return;
+        }
+        // Update the width of the progress bar
+        else if (count > 0) {
+            progressBarContainer.style.display = 'flex';
+
+            const width = Math.floor((done / count) * 100);
+
+            // Trigger the animation to prevent the progress bar from not being closed due to reaching 100% too quickly without animation
+            if (done === count) {
+                requestAnimationFrame(() => {
+                    progressBarInner.style.width = `${width - 1}%`; // Set a width slightly smaller than the target
+                    requestAnimationFrame(() => {
+                        progressBarInner.style.width = `${width}%`; // Then set the target width
+                    });
+                });
             } else {
-                setVisible(isVisible);
+                progressBarInner.style.width = `${width}%`;
             }
-        });
+        }
+        // Else, wait for the transition to end before hiding
 
-        const progressChange = progressService.progressChange$.subscribe((task: IProgressStep) => {
-            const { step } = task;
-            setProgress((currentProgress) => {
-                const newProgress = currentProgress + (1 - currentProgress) * step;
-                return newProgress;
-            });
-        });
+        // Listen for the transitionend event
+        const handleTransitionEnd = () => {
+            if (done === count) {
+                // Hide the progress bar after the animation finishes
+                progressBarContainer.style.display = 'none';
+                progressBarInner.style.width = '0%';
 
-        return () => {
-            progressVisible.unsubscribe();
-            progressChange.unsubscribe();
+                // Notify the parent component to reset the progress after the animation ends
+                // After the progress bar is completed 100%, the upper props data source may not be reset, resulting in count and done still being the previous values (displaying 100%) when the progress bar is triggered next time, so a message is reported here to trigger clearing.
+                onClearProgress && onClearProgress();
+            }
         };
-    }, []);
+
+        progressBarInner.addEventListener('transitionend', handleTransitionEnd);
+
+        // Clean up the event listener on unmount or when dependencies change
+        return () => {
+            progressBarInner.removeEventListener('transitionend', handleTransitionEnd);
+        };
+    }, [count, done]);
 
     return (
-        <div className={styles.progressBar} style={{ display: visible ? 'block' : 'none' }}>
-            <div
-                className={styles.progressBarInner}
-                style={{
-                    width: `${Math.floor(progress * 100)}%`,
-                    backgroundColor: barColor,
-                }}
-            />
+        <div ref={progressBarContainerRef} className={styles.progressBarContainer} style={{ display: 'none' }}>
+
+            <Tooltip showIfEllipsis title={label}>
+                <span className={styles.progressBarLabel}>{label}</span>
+            </Tooltip>
+
+            <div className={styles.progressBar}>
+                <div
+                    ref={progressBarInnerRef}
+                    className={styles.progressBarInner}
+                    style={{
+                        backgroundColor: color,
+                    }}
+                />
+            </div>
+            <div className={styles.progressBarCloseButton} onClick={onTerminate}>
+                {' '}
+                <CloseSingle />
+            </div>
         </div>
     );
 };

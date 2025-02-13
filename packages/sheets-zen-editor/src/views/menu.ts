@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,20 @@
  * limitations under the License.
  */
 
-import { type IMenuButtonItem, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
+import type { IAccessor } from '@univerjs/core';
 
-import { OpenZenEditorOperation } from '../commands/operations/zen-editor.operation';
+import { RangeProtectionPermissionEditPoint, WorkbookEditablePermission, WorksheetEditPermission, WorksheetSetCellStylePermission, WorksheetSetCellValuePermission } from '@univerjs/sheets';
+import { getCurrentExclusiveRangeInterest$, getCurrentRangeDisable$ } from '@univerjs/sheets-ui';
+import { type IMenuButtonItem, MenuItemType } from '@univerjs/ui';
+import { OpenZenEditorCommand } from '../commands/commands/zen-editor.command';
 
-export function ZenEditorMenuItemFactory(): IMenuButtonItem {
+export function ZenEditorMenuItemFactory(accessor: IAccessor): IMenuButtonItem {
     return {
-        id: OpenZenEditorOperation.id,
-        group: MenuGroup.CONTEXT_MENU_OTHERS,
+        id: OpenZenEditorCommand.id,
         type: MenuItemType.BUTTON,
         title: 'rightClick.zenEditor',
         icon: 'AmplifySingle',
-        positions: [MenuPosition.CONTEXT_MENU],
+        hidden$: getCurrentExclusiveRangeInterest$(accessor),
+        disabled$: getCurrentRangeDisable$(accessor, { workbookTypes: [WorkbookEditablePermission], worksheetTypes: [WorksheetEditPermission, WorksheetSetCellValuePermission, WorksheetSetCellStylePermission], rangeTypes: [RangeProtectionPermissionEditPoint] }),
     };
 }

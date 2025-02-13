@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-import { Subject } from 'rxjs';
-
-import { Disposable, toDisposable } from '../../shared/lifecycle';
 import type { ILanguagePack, ILocales, LanguageValue } from '../../shared/locale';
-import { Tools } from '../../shared/tools';
+
+import { merge } from 'lodash-es';
+import { BehaviorSubject, Subject } from 'rxjs';
+import { Disposable, toDisposable } from '../../shared/lifecycle';
 import { LocaleType } from '../../types/enum/locale-type';
 
 /**
  * This service provides i18n and timezone / location features to other modules.
  */
 export class LocaleService extends Disposable {
-    private _currentLocale: LocaleType = LocaleType.ZH_CN;
+    private _currentLocale$ = new BehaviorSubject<LocaleType>(LocaleType.ZH_CN);
+    readonly currentLocale$ = this._currentLocale$.asObservable();
+    private get _currentLocale(): LocaleType { return this._currentLocale$.value; }
 
     private _locales: ILocales | null = null;
 
@@ -43,7 +45,7 @@ export class LocaleService extends Disposable {
      * @param locales - Locale object
      */
     load(locales: ILocales) {
-        this._locales = Tools.deepMerge(this._locales ?? {}, locales);
+        this._locales = merge(this._locales ?? {}, locales);
     }
 
     /**
@@ -72,7 +74,7 @@ export class LocaleService extends Disposable {
      * t('foo.bar', 'World') => 'Hello World'
      */
     t = (key: string, ...args: string[]): string => {
-        if (!this._locales) throw new Error('Locale not initialized');
+        if (!this._locales) throw new Error('[LocaleService]: Locale not initialized');
 
         const keys = key.split('.');
         const resolvedValue = this.resolveKeyPath(this._locales[this._currentLocale], keys);
@@ -88,7 +90,7 @@ export class LocaleService extends Disposable {
     };
 
     setLocale(locale: LocaleType) {
-        this._currentLocale = locale;
+        this._currentLocale$.next(locale);
         this.localeChanged$.next();
     }
 

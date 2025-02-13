@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,16 +24,16 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         abstract: 'formula.functionList.CELL.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.CELL.functionParameter.number1.name',
-                detail: 'formula.functionList.CELL.functionParameter.number1.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.CELL.functionParameter.infoType.name',
+                detail: 'formula.functionList.CELL.functionParameter.infoType.detail',
+                example: '"type"',
                 require: 1,
                 repeat: 0,
             },
             {
-                name: 'formula.functionList.CELL.functionParameter.number2.name',
-                detail: 'formula.functionList.CELL.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.CELL.functionParameter.reference.name',
+                detail: 'formula.functionList.CELL.functionParameter.reference.detail',
+                example: 'A1',
                 require: 1,
                 repeat: 0,
             },
@@ -46,16 +46,9 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         abstract: 'formula.functionList.ERROR_TYPE.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.ERROR_TYPE.functionParameter.number1.name',
-                detail: 'formula.functionList.ERROR_TYPE.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.ERROR_TYPE.functionParameter.number2.name',
-                detail: 'formula.functionList.ERROR_TYPE.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.ERROR_TYPE.functionParameter.errorVal.name',
+                detail: 'formula.functionList.ERROR_TYPE.functionParameter.errorVal.detail',
+                example: '"#NULL!"',
                 require: 1,
                 repeat: 0,
             },
@@ -84,6 +77,49 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         ],
     },
     {
+        functionName: FUNCTION_NAMES_INFORMATION.ISBETWEEN,
+        functionType: FunctionType.Information,
+        description: 'formula.functionList.ISBETWEEN.description',
+        abstract: 'formula.functionList.ISBETWEEN.abstract',
+        functionParameter: [
+            {
+                name: 'formula.functionList.ISBETWEEN.functionParameter.valueToCompare.name',
+                detail: 'formula.functionList.ISBETWEEN.functionParameter.valueToCompare.detail',
+                example: '7.9',
+                require: 1,
+                repeat: 0,
+            },
+            {
+                name: 'formula.functionList.ISBETWEEN.functionParameter.lowerValue.name',
+                detail: 'formula.functionList.ISBETWEEN.functionParameter.lowerValue.detail',
+                example: '1.2',
+                require: 1,
+                repeat: 0,
+            },
+            {
+                name: 'formula.functionList.ISBETWEEN.functionParameter.upperValue.name',
+                detail: 'formula.functionList.ISBETWEEN.functionParameter.upperValue.detail',
+                example: '12.45',
+                require: 1,
+                repeat: 0,
+            },
+            {
+                name: 'formula.functionList.ISBETWEEN.functionParameter.lowerValueIsInclusive.name',
+                detail: 'formula.functionList.ISBETWEEN.functionParameter.lowerValueIsInclusive.detail',
+                example: 'true',
+                require: 0,
+                repeat: 0,
+            },
+            {
+                name: 'formula.functionList.ISBETWEEN.functionParameter.upperValueIsInclusive.name',
+                detail: 'formula.functionList.ISBETWEEN.functionParameter.upperValueIsInclusive.detail',
+                example: 'true',
+                require: 0,
+                repeat: 0,
+            },
+        ],
+    },
+    {
         functionName: FUNCTION_NAMES_INFORMATION.ISBLANK,
         functionType: FunctionType.Information,
         description: 'formula.functionList.ISBLANK.description',
@@ -93,6 +129,36 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
                 name: 'formula.functionList.ISBLANK.functionParameter.value.name',
                 detail: 'formula.functionList.ISBLANK.functionParameter.value.detail',
                 example: 'A1',
+                require: 1,
+                repeat: 0,
+            },
+        ],
+    },
+    {
+        functionName: FUNCTION_NAMES_INFORMATION.ISDATE,
+        functionType: FunctionType.Information,
+        description: 'formula.functionList.ISDATE.description',
+        abstract: 'formula.functionList.ISDATE.abstract',
+        functionParameter: [
+            {
+                name: 'formula.functionList.ISDATE.functionParameter.value.name',
+                detail: 'formula.functionList.ISDATE.functionParameter.value.detail',
+                example: 'A1',
+                require: 1,
+                repeat: 0,
+            },
+        ],
+    },
+    {
+        functionName: FUNCTION_NAMES_INFORMATION.ISEMAIL,
+        functionType: FunctionType.Information,
+        description: 'formula.functionList.ISEMAIL.description',
+        abstract: 'formula.functionList.ISEMAIL.abstract',
+        functionParameter: [
+            {
+                name: 'formula.functionList.ISEMAIL.functionParameter.value.name',
+                detail: 'formula.functionList.ISEMAIL.functionParameter.value.detail',
+                example: '"developer@univer.ai"',
                 require: 1,
                 repeat: 0,
             },
@@ -150,16 +216,9 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         abstract: 'formula.functionList.ISFORMULA.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.ISFORMULA.functionParameter.number1.name',
-                detail: 'formula.functionList.ISFORMULA.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.ISFORMULA.functionParameter.number2.name',
-                detail: 'formula.functionList.ISFORMULA.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.ISFORMULA.functionParameter.reference.name',
+                detail: 'formula.functionList.ISFORMULA.functionParameter.reference.detail',
+                example: 'A1',
                 require: 1,
                 repeat: 0,
             },
@@ -293,22 +352,30 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         ],
     },
     {
+        functionName: FUNCTION_NAMES_INFORMATION.ISURL,
+        functionType: FunctionType.Information,
+        description: 'formula.functionList.ISURL.description',
+        abstract: 'formula.functionList.ISURL.abstract',
+        functionParameter: [
+            {
+                name: 'formula.functionList.ISURL.functionParameter.value.name',
+                detail: 'formula.functionList.ISURL.functionParameter.value.detail',
+                example: '"univer.ai"',
+                require: 1,
+                repeat: 0,
+            },
+        ],
+    },
+    {
         functionName: FUNCTION_NAMES_INFORMATION.N,
         functionType: FunctionType.Information,
         description: 'formula.functionList.N.description',
         abstract: 'formula.functionList.N.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.N.functionParameter.number1.name',
-                detail: 'formula.functionList.N.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.N.functionParameter.number2.name',
-                detail: 'formula.functionList.N.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.N.functionParameter.value.name',
+                detail: 'formula.functionList.N.functionParameter.value.detail',
+                example: '7',
                 require: 1,
                 repeat: 0,
             },
@@ -320,20 +387,6 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         description: 'formula.functionList.NA.description',
         abstract: 'formula.functionList.NA.abstract',
         functionParameter: [
-            {
-                name: 'formula.functionList.NA.functionParameter.number1.name',
-                detail: 'formula.functionList.NA.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.NA.functionParameter.number2.name',
-                detail: 'formula.functionList.NA.functionParameter.number2.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
         ],
     },
     {
@@ -343,16 +396,9 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         abstract: 'formula.functionList.SHEET.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.SHEET.functionParameter.number1.name',
-                detail: 'formula.functionList.SHEET.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.SHEET.functionParameter.number2.name',
-                detail: 'formula.functionList.SHEET.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.SHEET.functionParameter.value.name',
+                detail: 'formula.functionList.SHEET.functionParameter.value.detail',
+                example: 'A1',
                 require: 1,
                 repeat: 0,
             },
@@ -364,20 +410,6 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         description: 'formula.functionList.SHEETS.description',
         abstract: 'formula.functionList.SHEETS.abstract',
         functionParameter: [
-            {
-                name: 'formula.functionList.SHEETS.functionParameter.number1.name',
-                detail: 'formula.functionList.SHEETS.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.SHEETS.functionParameter.number2.name',
-                detail: 'formula.functionList.SHEETS.functionParameter.number2.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
         ],
     },
     {
@@ -387,16 +419,9 @@ export const FUNCTION_LIST_INFORMATION: IFunctionInfo[] = [
         abstract: 'formula.functionList.TYPE.abstract',
         functionParameter: [
             {
-                name: 'formula.functionList.TYPE.functionParameter.number1.name',
-                detail: 'formula.functionList.TYPE.functionParameter.number1.detail',
-                example: 'A1:A20',
-                require: 1,
-                repeat: 0,
-            },
-            {
-                name: 'formula.functionList.TYPE.functionParameter.number2.name',
-                detail: 'formula.functionList.TYPE.functionParameter.number2.detail',
-                example: 'A1:A20',
+                name: 'formula.functionList.TYPE.functionParameter.value.name',
+                detail: 'formula.functionList.TYPE.functionParameter.value.detail',
+                example: 'A2',
                 require: 1,
                 repeat: 0,
             },

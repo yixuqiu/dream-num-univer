@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,39 +15,91 @@
  */
 
 import type { IKeyValue, Nullable } from '@univerjs/core';
-import { sortRules, sortRulesByDesc, toDisposable } from '@univerjs/core';
-import { BehaviorSubject } from 'rxjs';
-
 import type { BaseObject } from './base-object';
+import type { IDragEvent, IKeyboardEvent, IMouseEvent, IPointerEvent, IWheelEvent } from './basics/i-events';
+import type { ISceneTransformState, ITransformChangeState } from './basics/interfaces';
+import type { ITransformerConfig } from './basics/transformer-config';
+import type { Vector2 } from './basics/vector2';
+import type { Canvas } from './canvas';
+import type { UniverRenderingContext } from './context';
+import type { Engine } from './engine';
+import type { SceneViewer } from './scene-viewer';
+import type { Viewport } from './viewport';
+import { Disposable, EventSubject, sortRules, sortRulesByDesc, toDisposable } from '@univerjs/core';
+import { BehaviorSubject } from 'rxjs';
 import { CURSOR_TYPE, RENDER_CLASS_TYPE } from './basics/const';
-import type { IKeyboardEvent, IMouseEvent, IPointerEvent, IWheelEvent } from './basics/i-events';
-import type { IObjectFullState, ISceneTransformState, ITransformChangeState } from './basics/interfaces';
 import { TRANSFORM_CHANGE_OBSERVABLE_TYPE } from './basics/interfaces';
 import { precisionTo, requestNewFrame } from './basics/tools';
 import { Transform } from './basics/transform';
-import { Vector2 } from './basics/vector2';
-import type { UniverRenderingContext } from './context';
 import { Layer } from './layer';
-import type { ITransformerConfig } from './scene.transformer';
-import { Transformer } from './scene.transformer';
 import { InputManager } from './scene.input-manager';
-import type { SceneViewer } from './scene-viewer';
-import type { ThinEngine } from './thin-engine';
-import { ThinScene } from './thin-scene';
-import type { Viewport } from './viewport';
+import { Transformer } from './scene.transformer';
 
-export class Scene extends ThinScene {
+export const MAIN_VIEW_PORT_KEY = 'viewMain';
+
+export interface ISceneInputControlOptions {
+    enableDown: boolean;
+    enableUp: boolean ;
+    enableMove: boolean ;
+    enableWheel: boolean ;
+    enableEnter: boolean ;
+    enableLeave: boolean ;
+}
+export class Scene extends Disposable {
+    private _sceneKey: string = '';
+    /**
+     * Width of scene content, does not affected by zoom.
+     */
+    private _width: number = 100;
+    /**
+     * Height of scene content, does not affected by zoom.
+     */
+    private _height: number = 100;
+    private _scaleX: number = 1;
+    private _scaleY: number = 1;
+    private _transform = new Transform();
+    private _evented = true;
+
     private _layers: Layer[] = [];
-
     private _viewports: Viewport[] = [];
 
     private _cursor: CURSOR_TYPE = CURSOR_TYPE.DEFAULT;
-
     private _defaultCursor: CURSOR_TYPE = CURSOR_TYPE.DEFAULT;
 
     private _addObject$ = new BehaviorSubject<Scene>(this);
-
     readonly addObject$ = this._addObject$.asObservable();
+
+    onTransformChange$ = new EventSubject<ITransformChangeState>();
+    onFileLoaded$ = new EventSubject<string>();
+    onPointerDown$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerMove$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerUp$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerEnter$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerOut$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerCancel$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerLeave$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onDragEnter$ = new EventSubject<IDragEvent>();
+    onDragOver$ = new EventSubject<IDragEvent>();
+    onDragLeave$ = new EventSubject<IDragEvent>();
+    onDrop$ = new EventSubject<IDragEvent>();
+    onDblclick$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onTripleClick$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onMouseWheel$ = new EventSubject<IWheelEvent>();
+
+    /**
+     * @deprecated  use `fromGlobalEvent('keydown')` from rx.js instead.
+     */
+    onKeyDown$ = new EventSubject<IKeyboardEvent>();
+
+    /**
+     * @deprecated  use `fromGlobalEvent('keyup')` from rx.js instead.
+     */
+    onKeyUp$ = new EventSubject<IKeyboardEvent>();
+
+    private _beforeRender$ = new BehaviorSubject<Nullable<Canvas>>(null);
+    readonly beforeRender$ = this._beforeRender$.asObservable();
+    private _afterRender$ = new BehaviorSubject<Nullable<Canvas>>(null);
+    readonly afterRender$ = this._afterRender$.asObservable();
 
     /**
      * Transformer constructor.  Transformer is a special type of group that allow you transform
@@ -56,44 +108,96 @@ export class Scene extends ThinScene {
      */
     private _transformer: Nullable<Transformer>;
 
-    private _transformerOpenState = false;
-
     /** @hidden */
     private _inputManager: Nullable<InputManager>;
 
     constructor(
         sceneKey: string,
-        private _parent: ThinEngine<Scene> | SceneViewer,
+        private _parent: Engine | SceneViewer,
         state?: ISceneTransformState
     ) {
-        super(sceneKey);
-
+        super();
+        this._sceneKey = sceneKey;
         if (state) {
             this.transformByState(state);
         }
 
         if (this._parent.classType === RENDER_CLASS_TYPE.ENGINE) {
-            const parent = this._parent as ThinEngine<Scene>;
+            const parent = this._parent as Engine;
             parent.addScene(this);
             if (!parent.hasActiveScene()) {
                 parent.setActiveScene(sceneKey);
             }
             this._inputManager = new InputManager(this);
         } else if (this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
-            // 挂载到 sceneViewer 的 scene 需要响应前者的 transform
             const parent = this._parent as SceneViewer;
             parent.addSubScene(this);
         }
 
         this.disposeWithMe(
             toDisposable(
-                this._parent?.onTransformChangeObservable.add((change: ITransformChangeState) => {
-                    this._setTransForm();
+                this._parent?.onTransformChange$.subscribeEvent((_change: ITransformChangeState) => {
+                    this._transformHandler();
                 })
             )
         );
     }
 
+    get classType() {
+        return RENDER_CLASS_TYPE.SCENE;
+    }
+
+    get transform() {
+        return this._transform;
+    }
+
+    get width() {
+        return this._width;
+    }
+
+    get height() {
+        return this._height;
+    }
+
+    get scaleX() {
+        return this._scaleX;
+    }
+
+    get scaleY() {
+        return this._scaleY;
+    }
+
+    get sceneKey() {
+        return this._sceneKey;
+    }
+
+    get objectsEvented() {
+        return this._evented;
+    }
+
+    set transform(trans: Transform) {
+        this._transform = trans;
+    }
+
+    set width(num: number) {
+        this._width = num;
+    }
+
+    set height(num: number) {
+        this._height = num;
+    }
+
+    set scaleX(scaleX: number) {
+        this._scaleX = scaleX;
+    }
+
+    set scaleY(scaleY: number) {
+        this._scaleY = scaleY;
+    }
+
+    /**
+     * ancestorScaleX means this.scaleX * ancestorScaleX
+     */
     get ancestorScaleX() {
         const p = this.getParent();
         let pScale = 1;
@@ -103,6 +207,9 @@ export class Scene extends ThinScene {
         return this.scaleX * pScale;
     }
 
+    /**
+     * ancestorScaleY means this.scaleY * ancestorScaleY
+     */
     get ancestorScaleY() {
         const p = this.getParent();
         let pScale = 1;
@@ -112,17 +219,50 @@ export class Scene extends ThinScene {
         return this.scaleY * pScale;
     }
 
+    getAncestorScale() {
+        // const { scaleX = 1, scaleY = 1 } = this;
+        // this.classType is always 'Scene', this if is always false
+        // if (this.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
+        //     scaleX = this.ancestorScaleX || 1;
+        //     scaleY = this.ancestorScaleY || 1;
+        // }
+
+        return {
+            scaleX: this.ancestorScaleX || 1,
+            scaleY: this.ancestorScaleY || 1,
+        };
+    }
+
+    get ancestorLeft() {
+        const p = this.getParent();
+        let pOffsetX = 0;
+        if (p.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
+            pOffsetX = (p as SceneViewer).ancestorLeft;
+        }
+        return pOffsetX;
+    }
+
+    get ancestorTop() {
+        const p = this.getParent();
+        let pOffsetY = 0;
+        if (p.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
+            pOffsetY = (p as SceneViewer).ancestorTop;
+        }
+        return pOffsetY;
+    }
+
     set cursor(val: CURSOR_TYPE) {
         this.setCursor(val);
     }
 
-    attachControl(hasDown: boolean = true, hasUp: boolean = true, hasMove: boolean = true, hasWheel: boolean = true) {
+    attachControl(options?: ISceneInputControlOptions) {
+        // const hasDown: boolean = true; const hasUp: boolean = true; const hasMove: boolean = true; const hasWheel: boolean = true;
         if (!(this._parent.classType === RENDER_CLASS_TYPE.ENGINE)) {
             // 只绑定直接与 engine 挂载的 scene 来统一管理事件
             return;
         }
 
-        this._inputManager?.attachControl(hasDown, hasUp, hasMove, hasWheel);
+        this._inputManager?.attachControl(options);
         return this;
     }
 
@@ -131,7 +271,7 @@ export class Scene extends ThinScene {
         return this;
     }
 
-    override makeDirty(state: boolean = true) {
+    makeDirty(state: boolean = true) {
         this._layers.forEach((layer) => {
             layer.makeDirty(state);
         });
@@ -141,7 +281,7 @@ export class Scene extends ThinScene {
         return this;
     }
 
-    override makeDirtyNoParent(state: boolean = true) {
+    makeDirtyNoParent(state: boolean = true) {
         this._layers.forEach((layer) => {
             layer.makeDirty(state);
         });
@@ -174,11 +314,11 @@ export class Scene extends ThinScene {
         return this._cursor;
     }
 
-    override resetCursor() {
+    resetCursor() {
         this.setCursor(this._defaultCursor);
     }
 
-    override setCursor(val: CURSOR_TYPE) {
+    setCursor(val: CURSOR_TYPE) {
         this._cursor = val;
         const engine = this.getEngine();
         if (!engine) {
@@ -192,6 +332,11 @@ export class Scene extends ThinScene {
         this.resetCursor();
     }
 
+    /**
+     * @deprecated use transformByState instead.
+     * @param width
+     * @param height
+     */
     resize(width?: number, height?: number) {
         const preWidth = this.width;
         if (width !== undefined) {
@@ -203,8 +348,8 @@ export class Scene extends ThinScene {
             this.height = height;
         }
 
-        this._setTransForm();
-        this.onTransformChangeObservable.notifyObservers({
+        this._transformHandler();
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.resize,
             value: {
                 width: this.width,
@@ -217,21 +362,33 @@ export class Scene extends ThinScene {
     }
 
     /**
-     * scale to value, absolute
+     * Unlike @scale, this method doesn't emit event.
+     * @param scaleX
+     * @param scaleY
      */
-    scale(scaleX?: number, scaleY?: number) {
-        const preScaleX = this.scaleX;
+    setScaleValueOnly(scaleX: number, scaleY: number) {
         if (scaleX !== undefined) {
             this.scaleX = scaleX;
         }
 
-        const preScaleY = this.scaleY;
         if (scaleY !== undefined) {
             this.scaleY = scaleY;
         }
+    }
 
-        this._setTransForm();
-        this.onTransformChangeObservable.notifyObservers({
+    /**
+     * Set scale, and then emit event to update Viewport scroll state.
+     * @param scaleX
+     * @param scaleY
+     * @returns Scene
+     */
+    scale(scaleX?: number, scaleY?: number) {
+        const preScaleX = this.scaleX;
+        const preScaleY = this.scaleY;
+        this.setScaleValueOnly(scaleX || 1, scaleY || 1);
+
+        this._transformHandler();
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.scale,
             value: {
                 scaleX: this.scaleX,
@@ -243,23 +400,23 @@ export class Scene extends ThinScene {
     }
 
     /**
-     * current scale plus offset, relative
+     * Apply scaleXY base on current scaleX and scaleY
      */
-    scaleBy(scaleX?: number, scaleY?: number) {
+    scaleBy(deltaScaleX?: number, deltaScaleY?: number) {
         const preScaleX = this.scaleX;
-        if (scaleX !== undefined) {
-            this.scaleX += scaleX;
+        if (deltaScaleX !== undefined) {
+            this.scaleX += deltaScaleX; // @TODO lumixraku why not this.scaleX *= deltaScaleX  ???
         }
         const preScaleY = this.scaleY;
-        if (scaleY !== undefined) {
-            this.scaleY += scaleY;
+        if (deltaScaleY !== undefined) {
+            this.scaleY += deltaScaleY;
         }
 
         this.scaleX = precisionTo(this.scaleX, 1);
         this.scaleY = precisionTo(this.scaleY, 1);
 
-        this._setTransForm();
-        this.onTransformChangeObservable.notifyObservers({
+        this._transformHandler();
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.scale,
             value: {
                 scaleX: this.scaleX,
@@ -270,36 +427,40 @@ export class Scene extends ThinScene {
         return this;
     }
 
+    /**
+     * Reset canvas size and update scroll
+     * @param state
+     */
     transformByState(state: ISceneTransformState) {
-        const optionKeys = Object.keys(state);
-        const preKeys: IObjectFullState = {};
-        if (optionKeys.length === 0) {
+        const transformStateKeys = Object.keys(state);
+        const preKeys: ISceneTransformState = {};
+        if (transformStateKeys.length === 0) {
             return;
         }
 
-        optionKeys.forEach((pKey) => {
+        transformStateKeys.forEach((pKey) => {
             if (state[pKey as keyof ISceneTransformState] !== undefined) {
                 (preKeys as IKeyValue)[pKey] = this[pKey as keyof Scene];
                 (this as IKeyValue)[pKey] = state[pKey as keyof ISceneTransformState];
             }
         });
 
-        this._setTransForm();
+        this._transformHandler();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.all,
             value: state,
             preValue: preKeys,
         });
     }
 
-    override getParent(): ThinEngine<Scene> | SceneViewer {
+    getParent(): Engine | SceneViewer {
         return this._parent;
     }
 
-    override getEngine(): Nullable<ThinEngine<Scene>> {
+    getEngine(): Nullable<Engine> {
         if (this._parent.classType === RENDER_CLASS_TYPE.ENGINE) {
-            return this._parent as ThinEngine<Scene>;
+            return this._parent as Engine;
         }
 
         let parent: any = this._parent; // type:  SceneViewer | Engine | BaseObject | Scene
@@ -312,17 +473,25 @@ export class Scene extends ThinScene {
         return null;
     }
 
-    getLayers() {
+    getLayers(): Layer[] {
         return this._layers;
     }
 
-    getLayer(zIndex: number = 1) {
+    getLayer(zIndex: number = 1): Layer {
         for (const layer of this._layers) {
             if (layer.zIndex === zIndex) {
                 return layer;
             }
         }
         return this._createDefaultLayer(zIndex);
+    }
+
+    findLayerByZIndex(zIndex: number = 1): Nullable<Layer> {
+        for (const layer of this.getLayers()) {
+            if (layer.zIndex === zIndex) {
+                return layer;
+            }
+        }
     }
 
     getLayerMaxZIndex(): number {
@@ -336,33 +505,53 @@ export class Scene extends ThinScene {
         return maxIndex;
     }
 
-    addLayer(...argument: Layer[]) {
+    addLayer(...argument: Layer[]): void {
         this._layers.push(...argument);
     }
 
-    override addObject(o: BaseObject, zIndex: number = 1) {
+    /**
+     * Add objects to Layer( Layer is specfied by zIndex)
+     * If object is a group, insert all its children and group itself to _objects[].
+     * @param objects
+     * @param zIndex
+     * @returns {Scene} this
+     */
+    addObjects(objects: BaseObject[], zIndex: number = 1): Scene {
+        this.getLayer(zIndex)?.addObjects(objects);
+        this._addObject$.next(this);
+        return this;
+    }
+
+    /**
+     * Add object to Layer (Layer is specified by zIndex).
+     * If object is a group, insert all its children and group itself to _objects[].
+     * @param o
+     * @param zIndex layer index
+     * @returns {Scene} scene
+     */
+    addObject(o: BaseObject, zIndex: number = 1): Scene {
         this.getLayer(zIndex)?.addObject(o);
         this._addObject$.next(this);
         return this;
     }
 
-    override setObjectBehavior(o: BaseObject) {
+    /**
+     * Set Scene as object parent, if object has no parent.
+     * @param o
+     * @returns {void}
+     */
+    setObjectBehavior(o: BaseObject): void {
         if (!o.parent) {
             o.parent = this;
         }
         // this.onTransformChangeObservable.add((state: ITransformChangeState) => {
         //     o.scaleCacheCanvas();
         // });
-        o.onIsAddedToParentObserver.notifyObservers(this);
+        o.onIsAddedToParent$.emitEvent(this);
     }
 
-    override addObjects(objects: BaseObject[], zIndex: number = 1) {
-        this.getLayer(zIndex)?.addObjects(objects);
-        this._addObject$.next(this);
-        return this;
-    }
-
-    removeObject(object?: BaseObject | string) {
+    // Why? return values is so strange! removeObject should return true/false, or didn't return anything.
+    removeObject(object?: BaseObject | string): Nullable<Scene> {
         if (object == null) {
             return;
         }
@@ -373,7 +562,7 @@ export class Scene extends ThinScene {
         return this;
     }
 
-    removeObjects(objects?: BaseObject[] | string[]) {
+    removeObjects(objects?: BaseObject[] | string[]): Nullable<Scene> {
         if (objects == null) {
             return;
         }
@@ -398,7 +587,35 @@ export class Scene extends ThinScene {
     //     return this;
     // }
 
-    getAllObjects() {
+    getObjectsByLayer(zIndex: number): BaseObject[] {
+        const objects: BaseObject[] = [];
+        this._layers.sort(sortRules);
+        for (const layer of this._layers) {
+            if (layer.zIndex === zIndex) {
+                objects.push(...layer.getObjects());
+            }
+        }
+        return objects;
+    }
+
+    /**
+     * Get all objects of each Layer.
+     * @returns {BaseObject[]} objects
+     */
+    getAllObjects(): BaseObject[] {
+        const objects: BaseObject[] = [];
+        this._layers.sort(sortRules);
+        for (const layer of this._layers) {
+            objects.push(...layer.getObjects());
+        }
+        return objects;
+    }
+
+    /**
+     * Get objects which is visible and not in a group in each layer.
+     * @returns BaseObject[]
+     */
+    getAllObjectsByOrder(): BaseObject[] {
         const objects: BaseObject[] = [];
         this._layers.sort(sortRules);
         for (const layer of this._layers) {
@@ -407,7 +624,12 @@ export class Scene extends ThinScene {
         return objects;
     }
 
-    getAllObjectsByOrder(isDesc: boolean = false) {
+    /**
+     * get objects which is visible and not in a group.
+     * @param isDesc
+     * @returns BaseObject[]
+     */
+    getAllObjectsByDescOrder(isDesc: boolean = false): BaseObject[] {
         const objects: BaseObject[] = [];
         const useSortRules = isDesc ? sortRulesByDesc : sortRules;
         this._layers.sort(useSortRules);
@@ -417,7 +639,12 @@ export class Scene extends ThinScene {
         return objects;
     }
 
-    getAllObjectsByOrderForPick(isDesc: boolean = false) {
+    /**
+     * Get visible and evented objects.
+     * @param isDesc
+     * @returns {BaseObject[]} objects
+     */
+    getAllObjectsByOrderForPick(isDesc: boolean = false): BaseObject[] {
         const objects: BaseObject[] = [];
         const useSortRules = isDesc ? sortRulesByDesc : sortRules;
         this._layers.sort(useSortRules);
@@ -427,7 +654,12 @@ export class Scene extends ThinScene {
         return objects;
     }
 
-    override getObject(oKey: string) {
+    /**
+     * Get object in all layers by okey.
+     * @param oKey
+     * @returns
+     */
+    getObject(oKey: string): Nullable<BaseObject> {
         for (const layer of this._layers) {
             const objects = layer.getObjectsByOrder();
             for (const object of objects) {
@@ -438,57 +670,63 @@ export class Scene extends ThinScene {
         }
     }
 
-    fuzzyMathObjects(oKey: string) {
-        const objects: BaseObject[] = [];
+    getObjectIncludeInGroup(oKey: string): Nullable<BaseObject> {
+        for (const layer of this._layers) {
+            const objects = layer.getObjects();
+            for (const object of objects) {
+                if (object.oKey === oKey) {
+                    return object;
+                }
+            }
+        }
+    }
+
+    fuzzyMathObjects(oKey: string, matchStart = false) {
+        const results: BaseObject[] = [];
         for (const layer of this._layers) {
             const objects = layer.getObjectsByOrder();
             for (const object of objects) {
-                if (object.oKey.indexOf(oKey) > -1) {
-                    objects.push(object);
+                if (matchStart ? object.oKey.startsWith(oKey) : object.oKey.indexOf(oKey) > -1) {
+                    results.push(object);
                 }
             }
         }
 
-        return objects;
+        return results;
     }
 
-    override addViewport(...viewport: Viewport[]) {
+    addViewport(...viewport: Viewport[]) {
         this._viewports.push(...viewport);
         return this;
     }
 
-    override removeViewport(key: string) {
+    removeViewport(key: string) {
         for (let i = 0, len = this._viewports.length; i < len; i++) {
             const viewport = this._viewports[i];
-            if (viewport.viewPortKey === key) {
+            if (viewport.viewportKey === key) {
                 this._viewports.splice(i, 1);
                 return viewport;
             }
         }
     }
 
-    override getViewports() {
+    getViewports() {
         return this._viewports;
     }
 
-    getViewport(key: string) {
+    getMainViewport(): Viewport {
+        return this.getViewport(MAIN_VIEW_PORT_KEY)!;
+    }
+
+    getViewport(key: string): Viewport | undefined {
         for (const viewport of this._viewports) {
-            if (viewport.viewPortKey === key) {
+            if (viewport.viewportKey === key) {
                 return viewport;
             }
         }
     }
 
-    changeObjectOrder() {}
-
-    // override renderObjects(ctx: UniverRenderingContext, bounds?: IViewportBound) {
-    //     this.getAllObjectsByOrder().forEach((o) => {
-    //         o.render(ctx, bounds);
-    //     });
-    //     return this;
-    // }
-
-    override render(parentCtx?: UniverRenderingContext) {
+    render(parentCtx?: UniverRenderingContext) {
         if (!this.isDirty()) {
             return;
         }
@@ -496,86 +734,106 @@ export class Scene extends ThinScene {
         !parentCtx && this.getEngine()?.clearCanvas();
 
         const layers = this._layers.sort(sortRules);
-
+        const canvasInstance = this.getEngine()?.getCanvas();
+        this._beforeRender$.next(canvasInstance);
         for (let i = 0, len = layers.length; i < len; i++) {
             layers[i].render(parentCtx, i === len - 1);
         }
-
-        // this.getViewports()?.forEach((vp: Viewport) => vp.render(parentCtx));
+        this._afterRender$.next(canvasInstance);
     }
 
     async requestRender(parentCtx?: UniverRenderingContext) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve, _reject) => {
             this.render(parentCtx);
             requestNewFrame(resolve);
         });
     }
 
-    openTransformer(config?: ITransformerConfig) {
+    /**
+     * create transformer if not exist, and then transformer attach to object that passed in by parameter.
+     * @param o
+     */
+    attachTransformerTo(o: BaseObject) {
         if (!this._transformer) {
-            this._transformer = new Transformer(this, config);
+            this.initTransformer();
         }
-        this._transformerOpenState = true;
+        this._transformer?.attachTo(o);
     }
 
-    closeTransformer(isDestroyed = false) {
-        if (isDestroyed) {
-            this._transformer = null;
-        }
-
-        this._transformerOpenState = false;
+    detachTransformerFrom(o: BaseObject) {
+        this._transformer?.detachFrom(o);
     }
 
-    override applyTransformer(o: BaseObject) {
-        if (!this._transformerOpenState) {
+    initTransformer(config?: ITransformerConfig) {
+        if (this._transformer) {
+            this._transformer.resetProps(config);
             return;
         }
+        this._transformer = new Transformer(this, config);
+    }
 
-        this._transformer?.attachTo(o);
+    getTransformerByCreate() {
+        if (!this._transformer) {
+            this.initTransformer();
+        }
+        return this._transformer!;
     }
 
     getTransformer() {
         return this._transformer;
     }
 
-    getActiveViewportByRelativeCoord(coord: Vector2) {
+    updateTransformerZero(left: number, top: number) {
+        this._transformer?.updateZeroPoint(left, top);
+    }
+
+    /**
+     * Get viewport by cursor position.
+     * Position is relative to canvas(event offsetXY).
+     * @param coord
+     * @returns
+     */
+    findViewportByPosToScene(coord: Vector2) {
         return this._viewports.find((vp) => vp.isHit(coord));
     }
 
     getActiveViewportByCoord(coord: Vector2) {
-        // let parent: any = this.getParent();
-        // while (parent) {
-        //     if (parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
-        //         const sv = parent as SceneViewer;
-        //         const transform = sv.transform.clone().invert();
-        //         coord = transform.applyPoint(coord);
-        //     }
-        //     parent = parent?.getParent && parent?.getParent();
-        // }
-
-        coord = this.getRelativeCoord(coord);
-        return this.getActiveViewportByRelativeCoord(coord);
+        coord = this.getCoordRelativeToViewport(coord);
+        return this.findViewportByPosToScene(coord);
     }
 
-    getScrollXYByRelativeCoords(coord: Vector2, viewPort?: Viewport) {
-        if (!viewPort) {
-            viewPort = this.getActiveViewportByRelativeCoord(coord);
-        }
-        if (!viewPort) {
-            return {
-                x: 0,
-                y: 0,
-            };
-        }
-        return this.getScrollXY(viewPort);
+    /**
+     * @deprecated use `getScrollXYInfoByViewport` instead.
+     * @param pos
+     * @param viewPort
+     */
+    getVpScrollXYInfoByPosToVp(pos: Vector2, viewPort?: Viewport) {
+        return this.getScrollXYInfoByViewport(pos, viewPort);
     }
 
-    getScrollXY(viewPort: Viewport) {
+    /**
+     * getViewportScrollXYInfo by viewport under cursor position
+     * prev getScrollXYByRelativeCoords
+     * @param pos
+     * @param viewPort
+     */
+    getScrollXYInfoByViewport(pos: Vector2, viewPort?: Viewport) {
+        if (!viewPort) {
+            viewPort = this.findViewportByPosToScene(pos) || this.getDefaultViewport();
+        }
+        return this.getViewportScrollXY(viewPort);
+    }
+
+    getDefaultViewport() {
+        return this.getViewport('viewMain')!;
+    }
+
+    getViewportScrollXY(viewPort: Viewport) {
         let x = 0;
         let y = 0;
         if (viewPort) {
-            const actualX = viewPort.actualScrollX || 0;
-            const actualY = viewPort.actualScrollY || 0;
+            const actualX = viewPort.viewportScrollX || 0;
+            const actualY = viewPort.viewportScrollY || 0;
             x += actualX;
             y += actualY;
         }
@@ -586,11 +844,23 @@ export class Scene extends ThinScene {
     }
 
     /**
+     * @deprecated use `getCoordRelativeToViewport` instead
+     * @param coord
+     * @returns
+     */
+    getRelativeToViewportCoord(coord: Vector2) {
+        return this.getCoordRelativeToViewport(coord);
+    }
+
+    /**
+     * Get coord to active viewport.
      * In a nested scene scenario, it is necessary to obtain the relative offsets layer by layer.
+     *
+     * origin name: getRelativeToViewportCoord
      * @param coord Coordinates to be converted.
      * @returns
      */
-    getRelativeCoord(coord: Vector2) {
+    getCoordRelativeToViewport(coord: Vector2): Vector2 {
         let parent: any = this.getParent();
 
         const parentList: any[] = [];
@@ -609,8 +879,8 @@ export class Scene extends ThinScene {
                 const scene = parent as Scene;
                 const viewPort = scene.getActiveViewportByCoord(coord);
                 if (viewPort) {
-                    const actualX = viewPort.actualScrollX || 0;
-                    const actualY = viewPort.actualScrollY || 0;
+                    const actualX = viewPort.viewportScrollX || 0;
+                    const actualY = viewPort.viewportScrollY || 0;
                     coord = coord.addByPoint(actualX, actualY);
                 }
             } else if (parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
@@ -636,21 +906,7 @@ export class Scene extends ThinScene {
         this._viewports = [];
     }
 
-    override getAncestorScale() {
-        let { scaleX = 1, scaleY = 1 } = this;
-
-        if (this.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
-            scaleX = this.ancestorScaleX || 1;
-            scaleY = this.ancestorScaleY || 1;
-        }
-
-        return {
-            scaleX,
-            scaleY,
-        };
-    }
-
-    override getPrecisionScale() {
+    getPrecisionScale() {
         const pixelRatio = this.getEngine()?.getPixelRatio() || 1;
         const { scaleX, scaleY } = this.getAncestorScale();
 
@@ -676,35 +932,51 @@ export class Scene extends ThinScene {
         this.clearLayer();
         this.clearViewports();
         this.detachControl();
-        this.onTransformChangeObservable?.clear();
+        this.onTransformChange$?.complete();
         this._inputManager?.dispose();
         this._inputManager = null;
         this._transformer?.dispose();
         this._transformer = null;
-        this.onPointerDownObserver.clear();
-        this.onPointerMoveObserver.clear();
-        this.onPointerUpObserver.clear();
-        this.onPointerEnterObserver.clear();
-        this.onPointerLeaveObserver.clear();
-        this.onDblclickObserver.clear();
-        this.onTripleClickObserver.clear();
-        this.onMouseWheelObserver.clear();
-        this.onKeyDownObservable.clear();
-        this.onKeyUpObservable.clear();
+
+        this.onFileLoaded$.complete();
+
+        this.onPointerDown$.complete();
+        this.onPointerMove$.complete();
+        this.onPointerUp$.complete();
+        this.onPointerEnter$.complete();
+        this.onPointerLeave$.complete();
+        this.onPointerOut$.complete();
+        this.onPointerCancel$.complete();
+
+        this.onDragEnter$.complete();
+        this.onDragOver$.complete();
+        this.onDragLeave$.complete();
+        this.onDrop$.complete();
+
+        this.onDblclick$.complete();
+        this.onTripleClick$.complete();
+        this.onMouseWheel$.complete();
+        this.onKeyDown$.complete();
+        this.onKeyUp$.complete();
         this._addObject$.complete();
+
         super.dispose();
     }
 
-    // Determine the only object selected
-    override pick(coord: Vector2): Nullable<BaseObject | Scene | ThinScene> {
+    /**
+     * Get the object under the pointer, if scene.event is disabled, the object is null.
+     * @param {Vector2} coord
+     * @return {Nullable<BaseObject | Scene>} object under the pointer
+     */
+    pick(coord: Vector2): Nullable<BaseObject | Scene> {
         let pickedViewport = this.getActiveViewportByCoord(coord);
 
         if (!pickedViewport) {
             pickedViewport = this._viewports[0];
         }
 
-        if (!this.evented || !pickedViewport) {
-            return;
+        if (!this.objectsEvented || !pickedViewport) {
+            return null;
         }
 
         const scrollBarRect = pickedViewport.pickScrollBar(coord);
@@ -712,9 +984,9 @@ export class Scene extends ThinScene {
             return scrollBarRect;
         }
 
-        const svCoordOrigin = pickedViewport.getRelativeVector(coord);
+        const vecFromSheetContent = pickedViewport.transformVector2SceneCoord(coord);
 
-        let isPickedObject: Nullable<BaseObject | Scene | ThinScene> = null;
+        let isPickedObject: Nullable<BaseObject | Scene> = null;
 
         const objectOrder = this.getAllObjectsByOrderForPick().reverse();
         const objectLength = objectOrder.length;
@@ -724,11 +996,11 @@ export class Scene extends ThinScene {
             if (!o.visible || !o.evented || o.classType === RENDER_CLASS_TYPE.GROUP) {
                 continue;
             }
-            let svCoord = svCoordOrigin;
-            if (o.isInGroup && o.parent.classType === RENDER_CLASS_TYPE.GROUP) {
-                const { cumLeft, cumTop } = this._getGroupCumLeftRight(o);
-                svCoord = svCoord.clone().add(Vector2.FromArray([-cumLeft, -cumTop]));
-            }
+            const svCoord = vecFromSheetContent;
+            // if (o.isInGroup && o.parent?.classType === RENDER_CLASS_TYPE.GROUP) {
+            //     const { cumLeft, cumTop } = this._getGroupCumLeftRight(o);
+            //     svCoord = svCoord.clone().add(Vector2.FromArray([-cumLeft, -cumTop]));
+            // }
 
             if (o.isHit(svCoord)) {
                 if (o.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
@@ -761,23 +1033,23 @@ export class Scene extends ThinScene {
         return isPickedObject;
     }
 
-    override triggerKeyDown(evt: IKeyboardEvent) {
-        this.onKeyDownObservable.notifyObservers(evt);
+    // triggerKeyDown(evt: IKeyboardEvent) {
+    //     this.onKeyDown$.emitEvent(evt);
         // if (this._parent instanceof SceneViewer) {
         //     this._parent?.triggerKeyDown(evt);
         // }
-    }
+    // }
 
-    override triggerKeyUp(evt: IKeyboardEvent) {
-        this.onKeyUpObservable.notifyObservers(evt);
+    // triggerKeyUp(evt: IKeyboardEvent) {
+    //     this.onKeyUp$.emitEvent(evt);
         // if (this._parent instanceof SceneViewer) {
         //     this._parent?.triggerKeyUp(evt);
         // }
-    }
+    // }
 
-    override triggerPointerUp(evt: IPointerEvent | IMouseEvent) {
+    triggerPointerUp(evt: IPointerEvent | IMouseEvent) {
         if (
-            !this.onPointerUpObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onPointerUp$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerPointerUp(evt);
@@ -786,9 +1058,9 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerMouseWheel(evt: IWheelEvent) {
+    triggerMouseWheel(evt: IWheelEvent) {
         if (
-            !this.onMouseWheelObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onMouseWheel$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerMouseWheel(evt);
@@ -797,9 +1069,9 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerMove(evt: IPointerEvent | IMouseEvent) {
+    triggerPointerMove(evt: IPointerEvent | IMouseEvent) {
         if (
-            !this.onPointerMoveObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onPointerMove$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerPointerMove(evt);
@@ -808,9 +1080,9 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerDblclick(evt: IPointerEvent | IMouseEvent) {
+    triggerDblclick(evt: IPointerEvent | IMouseEvent) {
         if (
-            !this.onDblclickObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onDblclick$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerDblclick(evt);
@@ -819,9 +1091,9 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerTripleClick(evt: IPointerEvent | IMouseEvent) {
+    triggerTripleClick(evt: IPointerEvent | IMouseEvent) {
         if (
-            !this.onTripleClickObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onTripleClick$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerTripleClick(evt);
@@ -830,9 +1102,9 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerDown(evt: IPointerEvent | IMouseEvent) {
+    triggerPointerDown(evt: IPointerEvent | IMouseEvent) {
         if (
-            !this.onPointerDownObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onPointerDown$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerPointerDown(evt);
@@ -842,7 +1114,7 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerOut(evt: IPointerEvent | IMouseEvent) {
+    triggerPointerOut(evt: IPointerEvent | IMouseEvent) {
         // this.onPointerOutObserver.notifyObservers(evt);
         if (this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
             (this._parent as SceneViewer)?.triggerPointerOut(evt);
@@ -851,10 +1123,10 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerLeave(evt: IPointerEvent | IMouseEvent) {
-        // this.onPointerLeaveObserver.notifyObservers(evt);
+    triggerPointerLeave(evt: IPointerEvent | IMouseEvent) {
+        // this.onPointerLeave$.emitEvent(evt);
         if (
-            !this.onPointerLeaveObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onPointerLeave$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerPointerLeave(evt);
@@ -863,7 +1135,7 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerOver(evt: IPointerEvent | IMouseEvent) {
+    triggerPointerOver(evt: IPointerEvent | IMouseEvent) {
         // this.onPointerOverObserver.notifyObservers(evt);
         if (this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
             (this._parent as SceneViewer)?.triggerPointerOver(evt);
@@ -872,13 +1144,65 @@ export class Scene extends ThinScene {
         return true;
     }
 
-    override triggerPointerEnter(evt: IPointerEvent | IMouseEvent) {
-        // this.onPointerEnterObserver.notifyObservers(evt);
+    triggerPointerCancel(evt: IPointerEvent) {
+        if (this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
+            (this._parent as SceneViewer)?.triggerPointerCancel(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerPointerEnter(evt: IPointerEvent | IMouseEvent) {
+        // this.onPointerEnter$.emitEvent(evt);
         if (
-            !this.onPointerEnterObserver.notifyObservers(evt)?.stopPropagation &&
+            !this.onPointerEnter$.emitEvent(evt)?.stopPropagation &&
             this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
         ) {
             (this._parent as SceneViewer)?.triggerPointerEnter(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragLeave(evt: IDragEvent) {
+        if (
+            !this.onDragLeave$.emitEvent(evt)?.stopPropagation &&
+            this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
+        ) {
+            (this._parent as SceneViewer)?.triggerDragLeave(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragOver(evt: IDragEvent) {
+        if (
+            !this.onDragOver$.emitEvent(evt)?.stopPropagation &&
+            this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
+        ) {
+            (this._parent as SceneViewer)?.triggerDragOver(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragEnter(evt: IDragEvent) {
+        if (
+            !this.onDragEnter$.emitEvent(evt)?.stopPropagation &&
+            this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
+        ) {
+            (this._parent as SceneViewer)?.triggerDragEnter(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDrop(evt: IDragEvent) {
+        if (
+            !this.onDrop$.emitEvent(evt)?.stopPropagation &&
+            this._parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER
+        ) {
+            (this._parent as SceneViewer)?.triggerDrop(evt);
             return false;
         }
         return true;
@@ -890,7 +1214,14 @@ export class Scene extends ThinScene {
         return defaultLayer;
     }
 
-    private _setTransForm() {
+    /**
+     * Triggered when scale, resize of scene.
+     * origin name: _setTransForm
+     *
+     */
+    private _transformHandler() {
+        // why not use this.ancestorScaleXY ?
+        // if parent scale changed, this.ancestorScaleXY will remain same.
         const composeResult = Transform.create().composeMatrix({
             scaleX: this.scaleX,
             scaleY: this.scaleY,
@@ -898,22 +1229,21 @@ export class Scene extends ThinScene {
 
         this.transform = composeResult;
         this.getViewports().forEach((vp: Viewport) => {
-            vp.resetSizeAndScrollBar();
+            vp.resetCanvasSizeAndUpdateScroll();
         });
         this.makeDirty(true);
     }
 
-    private _getGroupCumLeftRight(object: BaseObject) {
-        let parent: any = object.parent;
-        let cumLeft = 0;
-        let cumTop = 0;
-        while (parent.classType === RENDER_CLASS_TYPE.GROUP) {
-            const { left, top } = parent;
-            cumLeft += left;
-            cumTop += top;
+    /**
+     * If scene.event is disabled, scene.pick(cursor Pos) return null.
+     * Then only scene itself can response to pointer event, all objects under the scene would not.
+     * see sceneInputManager@_onPointerMove
+     */
+    disableObjectsEvent() {
+        this._evented = false;
+    }
 
-            parent = parent.parent;
-        }
-        return { cumLeft, cumTop };
+    enableObjectsEvent() {
+        this._evented = true;
     }
 }

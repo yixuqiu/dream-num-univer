@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,7 @@
  * limitations under the License.
  */
 
-import dayjs from 'dayjs';
-import advancedFormat from 'dayjs/plugin/advancedFormat';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-import localeData from 'dayjs/plugin/localeData';
-import weekday from 'dayjs/plugin/weekday';
-import weekOfYear from 'dayjs/plugin/weekOfYear';
-import weekYear from 'dayjs/plugin/weekYear';
-
-dayjs.extend(customParseFormat);
-dayjs.extend(advancedFormat);
-dayjs.extend(weekday);
-dayjs.extend(localeData);
-dayjs.extend(weekOfYear);
-dayjs.extend(weekYear);
+import './global.css';
 
 export { Avatar, type IAvatarProps } from './components/avatar';
 export { Button, type ButtonSize, type ButtonType, type IButtonProps } from './components/button';
@@ -37,17 +24,17 @@ export { CheckboxGroup, type ICheckboxGroupProps } from './components/checkbox-g
 export { ColorPicker, type IColorPickerProps } from './components/color-picker';
 export { ConfigContext, ConfigProvider, type IConfigProviderProps } from './components/config-provider';
 export { Confirm, type IConfirmProps } from './components/confirm';
-export { Container, type IContainerProps } from './components/container';
-export { DatePicker, type IDatePickerProps, DatePanel, type IDatePanelProps } from './components/date-picker';
+export { DatePanel, DatePicker, type IDatePanelProps, type IDatePickerProps } from './components/date-picker';
 export { Dialog, type IDialogProps } from './components/dialog';
-export { Dropdown, type IDropdownProps } from './components/dropdown';
-export { FormDualColumnLayout, type IFormDualColumnLayoutProps, FormLayout, type IFormLayoutProps } from './components/form-layout';
+export { DropdownLegacy, type IDropdownLegacyProps } from './components/dropdown-legacy';
+export { DropdownOverlay, DropdownProvider, DropdownTrigger, type IDropdownOverlayProps } from './components/dropdown';
+export { FormDualColumnLayout, FormLayout, type IFormDualColumnLayoutProps, type IFormLayoutProps } from './components/form-layout';
 export { type IInputProps, type IInputWithSlotProps, Input, InputWithSlot } from './components/input';
 export { type IInputNumberProps, InputNumber } from './components/input-number';
-export { Menu, MenuItem, MenuItemGroup, SubMenu } from './components/menu';
-export { type IMessageMethodOptions, type IMessageProps, Message, MessageType } from './components/message';
+export { Menu, MenuItem, MenuItemGroup, type MenuRef, SubMenu } from './components/menu';
+export { type IMessageProps, message, Messager, MessageType, removeMessage } from './components/message';
 export { type IPagerProps, Pager } from './components/pager';
-export { type IPopupProps, Popup, RectPopup, type IRectPopupProps } from './components/popup';
+export { type IPopupProps, Popup } from './components/popup';
 export { type IRadioProps, Radio } from './components/radio';
 export { type IRadioGroupProps, RadioGroup } from './components/radio-group';
 export { type IScrollbarProps, Scrollbar } from './components/scrollbar';
@@ -56,8 +43,11 @@ export { type ISelectListProps, SelectList } from './components/select-list';
 export { type ISegmentedProps, Segmented } from './components/segmented';
 export { type ISliderProps, Slider } from './components/slider';
 export { type ITooltipProps, Tooltip } from './components/tooltip';
-export { type ITreeNodeProps, type ITreeProps, Tree, TreeSelectionMode } from './components/tree';
-export { enUS, zhCN } from './locale';
+export { filterLeafNode, findNodePathFromTree, findSubTreeFromPath, type ITreeNodeProps, type ITreeProps, mergeTreeSelected, Tree, TreeSelectionMode } from './components/tree';
+export { Switch } from './components/switch';
 export { type ILocale } from './locale/interface';
 export { defaultTheme, greenTheme, themeInstance } from './themes';
 export { DraggableList, type IDraggableListProps } from './components/draggable-list';
+export { clsx } from './helper/clsx';
+export { resizeObserverCtor } from './helper/resize-observer';
+export { render, unmount } from './utils/render';

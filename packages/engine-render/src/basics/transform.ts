@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 import type { ITransformState } from '@univerjs/core';
 
-import type { IRect } from './interfaces';
 import { degToRad, precisionTo, radToDeg } from './tools';
 import { Vector2 } from './vector2';
+import type { IRect } from './interfaces';
 
 export const INITIAL_MATRIX: number[] = [1, 0, 0, 1, 0, 0];
 
@@ -45,10 +45,10 @@ export class Transform {
     }
 
     /**
-     * Copy UniverSheet.Transform object
+     * Copy universheet.Transform object
      * @method
-     * @name UniverSheet.Transform#copy
-     * @returns {UniverSheet.Transform}
+     * @name universheet.Transform#copy
+     * @returns {universheet.Transform}
      * @example
      * const tr = shape.getTransform().copy()
      */
@@ -68,7 +68,7 @@ export class Transform {
     /**
      * Transform point
      * @method
-     * @name UniverSheet.Transform#point
+     * @name universheet.Transform#point
      * @param {object} point 2D point(x, y)
      * @returns {object} 2D point(x, y)
      */
@@ -90,7 +90,7 @@ export class Transform {
      * @name universheet.Transform#translate
      * @param {number} x
      * @param {number} y
-     * @returns {UniverSheet.Transform}
+     * @returns {universheet.Transform}
      */
     translate(x: number, y: number) {
         this._m[4] += this._m[0] * x + this._m[2] * y;
@@ -101,25 +101,27 @@ export class Transform {
     /**
      * Apply scale
      * @method
-     * @name UniverSheet.Transform#scale
+     * @name universheet.Transform#scale
      * @param {number} sx
      * @param {number} sy
-     * @returns {UniverSheet.Transform}
+     * @returns {universheet.Transform}
      */
     scale(sx: number, sy: number) {
         this._m[0] *= sx;
         this._m[1] *= sx;
         this._m[2] *= sy;
         this._m[3] *= sy;
+        // this._m[4] *= sx;
+        // this._m[5] *= sy;
         return this;
     }
 
     /**
      * Apply rotation
      * @method
-     * @name UniverSheet.Transform#rotate
+     * @name universheet.Transform#rotate
      * @param {number} Degree  Angle in Degree
-     * @returns {UniverSheet.Transform}
+     * @returns {universheet.Transform}
      */
     rotate(deg: number) {
         const rad = degToRad(deg);
@@ -139,7 +141,7 @@ export class Transform {
     /**
      * Returns the translation
      * @method
-     * @name UniverSheet.Transform#getTranslation
+     * @name universheet.Transform#getTranslation
      * @returns {object} 2D point(x, y)
      */
     getTranslation() {
@@ -152,10 +154,10 @@ export class Transform {
     /**
      * Apply skew
      * @method
-     * @name UniverSheet.Transform#skew
+     * @name universheet.Transform#skew
      * @param {number} sx
      * @param {number} sy
-     * @returns {UniverSheet.Transform}
+     * @returns {universheet.Transform}
      */
     skew(sx: number, sy: number) {
         const m11 = this._m[0] + this._m[2] * sy;
@@ -172,9 +174,9 @@ export class Transform {
     /**
      * Transform multiplication
      * @method
-     * @name UniverSheet.Transform#multiply
-     * @param {UniverSheet.Transform} matrix
-     * @returns {UniverSheet.Transform}
+     * @name universheet.Transform#multiply
+     * @param {universheet.Transform} matrix
+     * @returns {universheet.Transform}
      */
     multiply(matrix: Transform) {
         const m11 = this._m[0] * matrix._m[0] + this._m[2] * matrix._m[1];
@@ -198,8 +200,8 @@ export class Transform {
     /**
      * Invert the matrix
      * @method
-     * @name UniverSheet.Transform#invert
-     * @returns {UniverSheet.Transform}
+     * @name universheet.Transform#invert
+     * @returns {universheet.Transform}
      */
     invert() {
         const d = 1 / (this._m[0] * this._m[3] - this._m[1] * this._m[2]);
@@ -221,7 +223,7 @@ export class Transform {
     /**
      * return matrix
      * @method
-     * @name UniverSheet.Transform#getMatrix
+     * @name universheet.Transform#getMatrix
      */
     getMatrix() {
         return this._m;
@@ -230,7 +232,7 @@ export class Transform {
     /**
      * return matrix
      * @method
-     * @name UniverSheet.Transform#getMatrix
+     * @name universheet.Transform#getMatrix
      */
     getMatrixByAccurate(accurate = 3) {
         return this._m.map((value) => precisionTo(value, accurate));
@@ -239,8 +241,8 @@ export class Transform {
     /**
      * set to absolute position via translation
      * @method
-     * @name UniverSheet.Transform#setAbsolutePosition
-     * @returns {UniverSheet.Transform}
+     * @name universheet.Transform#setAbsolutePosition
+     * @returns {universheet.Transform}
      */
     setAbsolutePosition(coord: Vector2) {
         const m0 = this._m[0];
@@ -258,8 +260,8 @@ export class Transform {
     /**
      * convert transformation matrix back into node's attributes
      * @method
-     * @name UniverSheet.Transform#decompose
-     * @returns {UniverSheet.Transform}
+     * @name universheet.Transform#decompose
+     * @returns {universheet.Transform}
      */
     decompose() {
         const a = this._m[0];
@@ -311,6 +313,7 @@ export class Transform {
                 points[i] = this.applyPoint(points[i]);
             }
         }
+
         const xPoints = [points[0].x, points[1].x, points[2].x, points[3].x];
         const minX = Math.min(...xPoints);
         const maxX = Math.max(...xPoints);
@@ -385,6 +388,18 @@ export class Transform {
             scaleMatrix.multiply(new Transform([1, Math.tan(degToRad(options.skewY)), 0, 1, 0, 0]));
         }
         return scaleMatrix;
+    }
+
+    convert2DOMMatrix2D() {
+        const m = this.getMatrix();
+        return {
+            a: m[0],
+            b: m[1],
+            c: m[2],
+            d: m[3],
+            e: m[4],
+            f: m[5],
+        };
     }
 
     // static createTransformByState(state: positionState) {

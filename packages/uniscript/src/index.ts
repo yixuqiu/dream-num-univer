@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,14 @@
  * limitations under the License.
  */
 
-export { enUS, zhCN } from './locale';
-export { type IUniscriptConfig, UniverUniscriptPlugin } from './plugin';
+import './global.css';
+
+export { UniverUniscriptPlugin } from './plugin';
 export { ScriptEditorService } from './services/script-editor.service';
+export { IUniscriptExecutionService } from './services/script-execution.service';
+
+// #region - all commands
+
+export { ToggleScriptPanelOperation } from './commands/operations/panel.operation';
+
+// #endregion

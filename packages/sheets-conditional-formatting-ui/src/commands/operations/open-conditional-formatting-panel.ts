@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
+import type { IAccessor, ICommand } from '@univerjs/core';
 import { CommandType, ICommandService } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-import { SelectionManagerService } from '@univerjs/sheets';
+import { SheetsSelectionsService } from '@univerjs/sheets';
 import { CFRuleType, CFSubRuleType, createDefaultRule } from '@univerjs/sheets-conditional-formatting';
 import type { IColorScale, IConditionFormattingRule, IDataBar, IFormulaHighlightCell, IIconSet, IRankHighlightCell } from '@univerjs/sheets-conditional-formatting';
-import { ConditionalFormattingMenuController } from '../../controllers/cf.menu.controller';
+import { ConditionalFormattingPanelController } from '../../controllers/cf.panel.controller';
 import type { IClearRangeCfParams } from '../commands/clear-range-cf.command';
 import { ClearRangeCfCommand } from '../commands/clear-range-cf.command';
 import { ClearWorksheetCfCommand } from '../commands/clear-worksheet-cf.command';
@@ -41,15 +40,16 @@ export enum CF_MENU_OPERATION {
     clearRangeRules,
     clearWorkSheetRules,
 }
+
 export const OpenConditionalFormattingOperator: ICommand = {
     id: 'sheet.operation.open.conditional.formatting.panel',
     type: CommandType.OPERATION,
     handler: (accessor: IAccessor, params: IOpenConditionalFormattingOperatorParams) => {
-        const conditionalFormattingMenuController = accessor.get(ConditionalFormattingMenuController);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const conditionalFormattingMenuController = accessor.get(ConditionalFormattingPanelController);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
         const commandService = accessor.get(ICommandService);
 
-        const ranges = selectionManagerService.getSelectionRanges() || [];
+        const ranges = selectionManagerService.getCurrentSelections()?.map((s) => s.range) || [];
 
         const type = params.value;
         switch (type) {

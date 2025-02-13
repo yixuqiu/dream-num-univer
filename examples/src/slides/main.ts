@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,45 @@
  * limitations under the License.
  */
 
-import { Univer, UniverInstanceType } from '@univerjs/core';
+import { LocaleType, Univer, UniverInstanceType } from '@univerjs/core';
 import { greenTheme } from '@univerjs/design';
+import { UniverDocsPlugin } from '@univerjs/docs';
+import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
+import { UniverDrawingPlugin } from '@univerjs/drawing';
+import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
+
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
+import { DEFAULT_SLIDE_DATA } from '@univerjs/mockdata';
 import { UniverSlidesPlugin } from '@univerjs/slides';
 import { UniverSlidesUIPlugin } from '@univerjs/slides-ui';
 import { UniverUIPlugin } from '@univerjs/ui';
+import { enUS, faIR, ruRU, zhCN } from '../locales';
 
-import { UniverFormulaEnginePlugin } from '@univerjs/engine-formula';
-import { DEFAULT_SLIDE_DATA } from '../data';
+import '../global.css';
 
 // univer
 const univer = new Univer({
     theme: greenTheme,
+    locale: LocaleType.ZH_CN,
+    locales: {
+        [LocaleType.ZH_CN]: zhCN,
+        [LocaleType.EN_US]: enUS,
+        [LocaleType.RU_RU]: ruRU,
+        [LocaleType.FA_IR]: faIR,
+    },
 });
 
-// base-render
+// core plugins
 univer.registerPlugin(UniverRenderEnginePlugin);
+univer.registerPlugin(UniverUIPlugin, { container: 'app' });
+univer.registerPlugin(UniverDocsPlugin);
+univer.registerPlugin(UniverDocsUIPlugin);
+// base-render
 univer.registerPlugin(UniverFormulaEnginePlugin);
-univer.registerPlugin(UniverUIPlugin, {
-    container: 'univer-container',
-    header: true,
-    footer: true,
-});
+univer.registerPlugin(UniverDrawingPlugin);
 univer.registerPlugin(UniverSlidesPlugin);
 univer.registerPlugin(UniverSlidesUIPlugin);
 
 univer.createUnit(UniverInstanceType.UNIVER_SLIDE, DEFAULT_SLIDE_DATA);
+
+window.univer = univer;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,50 +22,51 @@ import { BooleanValueObject, NullValueObject, NumberValueObject, StringValueObje
 import { ArrayValueObject, transformToValueObject } from '../../../../engine/value-object/array-value-object';
 import { ErrorType } from '../../../../basics/error-type';
 import { ErrorValueObject } from '../../../../engine/value-object/base-value-object';
+import { stripErrorMargin } from '../../../../engine/utils/math-kit';
 
 describe('Test sum function', () => {
-    const textFunction = new Sum(FUNCTION_NAMES_MATH.SUM);
+    const testFunction = new Sum(FUNCTION_NAMES_MATH.SUM);
 
     describe('Sum', () => {
         it('Var1 is number, var2 is number', () => {
             const var1 = NumberValueObject.create(1);
             const var2 = NumberValueObject.create(2);
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(3);
         });
         it('Var1 is number, var2 is string', () => {
             const var1 = NumberValueObject.create(1);
             const var2 = StringValueObject.create('test');
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(ErrorType.VALUE);
         });
         it('Var1 is number, var2 is string number', () => {
             const var1 = NumberValueObject.create(1);
             const var2 = StringValueObject.create('2');
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(3);
         });
         it('Var1 is number, var2 is boolean', () => {
             const var1 = NumberValueObject.create(2);
 
             let var2 = BooleanValueObject.create(true);
-            let result = textFunction.calculate(var1, var2);
+            let result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(3);
 
             var2 = BooleanValueObject.create(false);
-            result = textFunction.calculate(var1, var2);
+            result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(2);
         });
         it('Var1 is number, var2 is null', () => {
             const var1 = NumberValueObject.create(1);
             const var2 = NullValueObject.create();
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(1);
         });
         it('Var1 is number, var2 is error', () => {
             const var1 = NumberValueObject.create(1);
             const var2 = ErrorValueObject.create(ErrorType.NA);
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(ErrorType.NA);
         });
 
@@ -83,7 +84,7 @@ describe('Test sum function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(var1, var2);
+            const result = testFunction.calculate(var1, var2);
             expect(result.getValue()).toBe(ErrorType.VALUE);
         });
 
@@ -101,8 +102,8 @@ describe('Test sum function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(var1, var2);
-            expect(result.getValue()).toBe(103.57);
+            const result = testFunction.calculate(var1, var2);
+            expect(stripErrorMargin(Number(result.getValue()))).toBe(103.57);
         });
     });
 });

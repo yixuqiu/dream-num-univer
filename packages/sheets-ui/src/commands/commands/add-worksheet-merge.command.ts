@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import type { ICommand, IMutationInfo, IRange, Workbook } from '@univerjs/core';
+/* eslint-disable max-lines-per-function */
+
+import type { IAccessor, ICommand, IMutationInfo, IRange, Workbook } from '@univerjs/core';
+import type { IAddWorksheetMergeMutationParams, IRemoveWorksheetMergeMutationParams } from '@univerjs/sheets';
 import {
     CommandType,
     Dimension,
@@ -23,9 +26,9 @@ import {
     IUniverInstanceService,
     LocaleService,
     sequenceExecute,
+    Tools,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { IAddWorksheetMergeMutationParams, IRemoveWorksheetMergeMutationParams } from '@univerjs/sheets';
 import {
     AddMergeRedoSelectionsOperationFactory,
     AddMergeUndoMutationFactory,
@@ -33,10 +36,9 @@ import {
     AddWorksheetMergeMutation,
     getAddMergeMutationRangeByType,
     RemoveMergeUndoMutationFactory,
-    RemoveWorksheetMergeMutation, SelectionManagerService,
+    RemoveWorksheetMergeMutation, SheetInterceptorService, SheetsSelectionsService,
 } from '@univerjs/sheets';
 import { IConfirmService } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
 
 import { checkCellContentInRanges, getClearContentMutationParamsForRanges } from '../../common/utils';
 import { getMergeableSelectionsByType, MergeType } from './utils/selection-utils';
@@ -46,6 +48,7 @@ export interface IAddMergeCommandParams {
     selections: IRange[];
     unitId: string;
     subUnitId: string;
+    defaultMerge?: boolean;
 }
 
 export const AddWorksheetMergeCommand: ICommand = {
@@ -70,7 +73,7 @@ export const AddWorksheetMergeCommand: ICommand = {
 
         // First we should check if there are values in the going-to-be-merged cells.
         const willClearSomeCell = checkCellContentInRanges(worksheet, ranges);
-        if (willClearSomeCell) {
+        if (willClearSomeCell && !params.defaultMerge) {
             const result = await confirmService.confirm({
                 id: 'merge.confirm.add-worksheet-merge',
                 title: {
@@ -89,12 +92,12 @@ export const AddWorksheetMergeCommand: ICommand = {
         const removeMergeMutationParams: IRemoveWorksheetMergeMutationParams = {
             unitId,
             subUnitId,
-            ranges,
+            ranges: Tools.deepClone(ranges),
         };
         const addMergeMutationParams: IAddWorksheetMergeMutationParams = {
             unitId,
             subUnitId,
-            ranges,
+            ranges: Tools.deepClone(ranges),
         };
 
         // prepare undo mutations
@@ -125,6 +128,15 @@ export const AddWorksheetMergeCommand: ICommand = {
         const addMergeUndoSelectionsMutation = AddMergeUndoSelectionsOperationFactory(accessor, params);
         addMergeUndoSelectionsMutation && undoMutations.push(addMergeUndoSelectionsMutation);
 
+        const sheetInterceptorService = accessor.get(SheetInterceptorService);
+        const interceptor = sheetInterceptorService.onCommandExecute({
+            id: AddWorksheetMergeCommand.id,
+            params: { unitId, subUnitId, ranges },
+        });
+
+        redoMutations.push(...interceptor.redos);
+        undoMutations.push(...interceptor.undos);
+
         const result = sequenceExecute(redoMutations, commandService);
         if (result.result) {
             undoRedoService.pushUndoRedo({
@@ -143,8 +155,8 @@ export const AddWorksheetMergeAllCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-all',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         const mergeableSelections = getMergeableSelectionsByType(MergeType.MergeAll, selections);
         if (!mergeableSelections?.length) {
             return false;
@@ -174,8 +186,8 @@ export const AddWorksheetMergeVerticalCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-vertical',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         const mergeableSelections = getMergeableSelectionsByType(MergeType.MergeVertical, selections);
         if (!mergeableSelections?.length) {
             return false;
@@ -206,8 +218,8 @@ export const AddWorksheetMergeHorizontalCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-horizontal',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         const mergeableSelections = getMergeableSelectionsByType(MergeType.MergeHorizontal, selections);
         if (!mergeableSelections?.length) {
             return false;

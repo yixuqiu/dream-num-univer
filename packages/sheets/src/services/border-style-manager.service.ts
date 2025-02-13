@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+import type { IDisposable } from '@univerjs/core';
 import { BorderStyleTypes, BorderType } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
 import { BehaviorSubject } from 'rxjs';
 
 export interface IBorderInfo {
     type: BorderType;
-    color: string;
+    color: string | undefined;
     style: BorderStyleTypes;
     activeBorderType: boolean; // When you click on the border type, then click on the color and style, it should take effect immediately.
 }
@@ -37,7 +37,6 @@ export class BorderStyleManagerService implements IDisposable {
     };
 
     private readonly _borderInfo$ = new BehaviorSubject<IBorderInfo>(this._borderInfo);
-
     readonly borderInfo$ = this._borderInfo$.asObservable();
 
     dispose(): void {
@@ -47,17 +46,17 @@ export class BorderStyleManagerService implements IDisposable {
     setType(type: BorderType): void {
         this._borderInfo.type = type;
         this.setActiveBorderType(true);
-        this.refresh();
+        this._refresh();
     }
 
     setColor(color: string): void {
         this._borderInfo.color = color;
-        this.refresh();
+        this._refresh();
     }
 
     setStyle(style: BorderStyleTypes): void {
         this._borderInfo.style = style;
-        this.refresh();
+        this._refresh();
     }
 
     setActiveBorderType(status: boolean) {
@@ -68,7 +67,7 @@ export class BorderStyleManagerService implements IDisposable {
         return this._borderInfo;
     }
 
-    private refresh(): void {
+    private _refresh(): void {
         this._borderInfo$.next(this._borderInfo);
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
 import type { Subscription, SubscriptionLike } from 'rxjs';
+import type { IDisposable } from '../common/di';
 import { Subject } from 'rxjs';
 import { isSubscription } from 'rxjs/internal/Subscription';
 
-import type { Nullable } from '../common/type-util';
-import type { Observer } from '../observer/observable';
-import { isObserver } from '../observer/observable';
-
-type DisposableLike = IDisposable | Nullable<Observer<any>> | SubscriptionLike | (() => void);
+type DisposableLike = IDisposable | SubscriptionLike | (() => void);
 
 export function toDisposable(disposable: IDisposable): IDisposable;
-export function toDisposable(observer: Nullable<Observer<any>>): IDisposable;
 export function toDisposable(subscription: SubscriptionLike): IDisposable;
 export function toDisposable(callback: () => void): IDisposable;
 export function toDisposable(v: DisposableLike): IDisposable;
@@ -34,31 +29,14 @@ export function toDisposable(v: DisposableLike): IDisposable {
     let disposed = false;
 
     if (!v) {
-        return toDisposable(() => { });
+        return toDisposable(() => {
+            // empty
+        });
     }
 
     if (isSubscription(v)) {
         return {
             dispose: () => v.unsubscribe(),
-        };
-    }
-
-    /**
-     * Represent an WorkBookObserver registered to a given Observable object.
-     * The current implementation of the rendering layer is still in use.
-     *
-     * @deprecated use rxjs instead
-     */
-    if (isObserver(v)) {
-        return {
-            dispose: () => {
-                if (disposed) {
-                    return;
-                }
-
-                disposed = true;
-                (v as Observer).dispose();
-            },
         };
     }
 
@@ -90,13 +68,16 @@ export function fromObservable(subscription: Subscription) {
 export class DisposableCollection implements IDisposable {
     private readonly _disposables = new Set<IDisposable>();
 
-    add(disposable: DisposableLike): IDisposable {
+    add(disposable: DisposableLike): { dispose: (notDisposeSelf?: boolean) => void } {
         const d = toDisposable(disposable);
         this._disposables.add(d);
 
         return {
-            dispose: () => {
-                d.dispose();
+            dispose: (notDisposeSelf: boolean = false) => {
+                if (!notDisposeSelf) {
+                    d.dispose();
+                }
+
                 this._disposables.delete(d);
             },
         };
@@ -115,7 +96,7 @@ export class Disposable implements IDisposable {
     protected _disposed = false;
     private readonly _collection = new DisposableCollection();
 
-    protected disposeWithMe(disposable: DisposableLike): IDisposable {
+    public disposeWithMe(disposable: DisposableLike): IDisposable {
         return this._collection.add(disposable);
     }
 
@@ -142,5 +123,29 @@ export class RxDisposable extends Disposable implements IDisposable {
         super.dispose();
         this.dispose$.next();
         this.dispose$.complete();
+    }
+}
+
+export class RCDisposable extends Disposable {
+    private _ref = 0;
+
+    constructor(private readonly _rootDisposable: IDisposable) {
+        super();
+    }
+
+    inc(): void {
+        if (this._disposed) {
+            throw new Error('[RCDisposable]: should not ref to a disposed.');
+        }
+        this._ref += 1;
+    }
+
+    dec(): void {
+        this._ref -= 1;
+
+        if (this._ref === 0) {
+            this._rootDisposable.dispose();
+            this.dispose();
+        }
     }
 }

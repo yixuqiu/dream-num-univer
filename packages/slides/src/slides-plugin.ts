@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import { IUniverInstanceService, LocaleService, Plugin, UniverInstanceType } from '@univerjs/core';
+import type { Dependency } from '@univerjs/core';
 import type { Engine } from '@univerjs/engine-render';
-import { IRenderingEngine } from '@univerjs/engine-render';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import { zhCN } from './locale';
-import { CanvasView } from './views/render';
+import { IConfigService, Inject, Injector, merge, Plugin, UniverInstanceType } from '@univerjs/core';
+import { IRenderingEngine, IRenderManagerService } from '@univerjs/engine-render';
+import { defaultPluginConfig, SLIDES_PLUGIN_CONFIG_KEY } from './controllers/config.schema';
+// import { DocSelectionManagerService } from '@univerjs/docs';
+// import { CanvasView } from './views/render';
 
 export interface IUniverSlidesConfig {}
 
@@ -33,29 +32,35 @@ export class UniverSlidesPlugin extends Plugin {
     static override pluginName = PLUGIN_NAME;
     static override type = UniverInstanceType.UNIVER_SLIDE;
 
-    private _config: IUniverSlidesConfig;
-
     private _canvasEngine: Engine | null = null;
 
-    private _canvasView: CanvasView | null = null;
+    // private _canvasView: CanvasView | null = null;
 
     constructor(
-        config: Partial<IUniverSlidesConfig> = {},
-        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
-        @Inject(LocaleService) private readonly _localeService: LocaleService,
-        @Inject(Injector) override readonly _injector: Injector
+        private readonly _config: Partial<IUniverSlidesConfig> = defaultPluginConfig,
+        @Inject(Injector) override readonly _injector: Injector,
+        @IRenderManagerService private readonly _renderManagerService: IRenderManagerService,
+        @IConfigService private readonly _configService: IConfigService
     ) {
         super();
 
-        this._config = Object.assign(DEFAULT_SLIDE_PLUGIN_DATA, config);
+        // Manage the plugin configuration.
+        const { ...rest } = merge(
+            {},
+            defaultPluginConfig,
+            this._config
+        );
+        this._configService.setConfig(SLIDES_PLUGIN_CONFIG_KEY, rest);
+
         this._initializeDependencies(this._injector);
     }
 
     initialize(): void {
-        this._localeService.load({
-            zhCN,
-        });
         this.initCanvasEngine();
+    }
+
+    override onReady(): void {
+
     }
 
     getConfig() {
@@ -74,12 +79,11 @@ export class UniverSlidesPlugin extends Plugin {
         return this._canvasEngine;
     }
 
-    getCanvasView() {
-        return this._canvasView;
-    }
-
     private _initializeDependencies(slideInjector: Injector) {
-        const dependencies: Dependency[] = [[CanvasView]];
+        const dependencies: Dependency[] = [
+            // [CanvasView],
+            // [DocSelectionManagerService],
+        ];
 
         dependencies.forEach((d) => {
             slideInjector.add(d);

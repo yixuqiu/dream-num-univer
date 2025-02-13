@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,9 @@ interface Line {
 }
 
 export class Path2 {
-    constructor(private _lines: Vector2[] = INITIAL_Path2) {}
+    constructor(private _lines: Vector2[] = INITIAL_Path2) {
+        // empty
+    }
 
     intersection(lines: Vector2[]): Nullable<Vector2[]> {
         if (this._lines.length < 1 || lines.length < 1) {

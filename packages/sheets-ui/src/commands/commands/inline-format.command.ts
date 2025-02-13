@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,8 @@
  */
 
 import type { ICommand } from '@univerjs/core';
-import { CommandType, EDITOR_ACTIVATED, ICommandService, IContextService } from '@univerjs/core';
-import {
-    SetInlineFormatBoldCommand,
-    SetInlineFormatFontFamilyCommand,
-    SetInlineFormatFontSizeCommand,
-    SetInlineFormatItalicCommand,
-    SetInlineFormatStrikethroughCommand,
-    SetInlineFormatSubscriptCommand,
-    SetInlineFormatSuperscriptCommand,
-    SetInlineFormatTextColorCommand,
-    SetInlineFormatUnderlineCommand,
-} from '@univerjs/docs';
+import { CommandType, EDITOR_ACTIVATED, ICommandService, IContextService, ThemeService } from '@univerjs/core';
+import { SetInlineFormatBoldCommand, SetInlineFormatFontFamilyCommand, SetInlineFormatFontSizeCommand, SetInlineFormatItalicCommand, SetInlineFormatStrikethroughCommand, SetInlineFormatSubscriptCommand, SetInlineFormatSuperscriptCommand, SetInlineFormatTextColorCommand, SetInlineFormatUnderlineCommand } from '@univerjs/docs-ui';
 import {
     SetBoldCommand,
     SetFontFamilyCommand,
@@ -184,5 +174,22 @@ export const SetRangeTextColorCommand: ICommand = {
         }
 
         return commandService.executeCommand(SetTextColorCommand.id, params);
+    },
+};
+
+export const ResetRangeTextColorCommand: ICommand = {
+    type: CommandType.COMMAND,
+    id: 'sheet.command.reset-range-text-color',
+    handler: async (accessor) => {
+        const commandService = accessor.get(ICommandService);
+        const contextService = accessor.get(IContextService);
+        const isCellEditorFocus = contextService.getContextValue(EDITOR_ACTIVATED);
+        const themeService = accessor.get(ThemeService);
+
+        if (isCellEditorFocus) {
+            return commandService.executeCommand(SetInlineFormatTextColorCommand.id, { value: null });
+        }
+
+        return commandService.executeCommand(SetTextColorCommand.id, { value: themeService.getCurrentTheme().textColor });
     },
 };

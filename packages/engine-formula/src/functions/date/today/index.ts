@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,17 @@
  */
 
 import { DEFAULT_DATE_FORMAT, excelDateSerial } from '../../../basics/date';
-import { ErrorType } from '../../../basics/error-type';
-import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
-import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Today extends BaseFunction {
-    override calculate(value?: BaseValueObject) {
-        if (value) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
+    override minParams = 0;
 
+    override maxParams = 0;
+
+    override calculate() {
         const currentSerial = excelDateSerial(new Date());
-        const valueObject = NumberValueObject.create(currentSerial);
-        valueObject.setPattern(DEFAULT_DATE_FORMAT);
+        const valueObject = NumberValueObject.create(currentSerial, DEFAULT_DATE_FORMAT);
         return valueObject;
     }
 }

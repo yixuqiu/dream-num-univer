@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-import { ColorKit, LocaleService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import React from 'react';
 import type { Observable } from 'rxjs';
-import { isObservable } from 'rxjs';
-
-import { ComponentManager } from '../../common/component-manager';
 import type { IMenuSelectorItem } from '../../services/menu/menu';
-import { useObservable } from '../hooks/observable';
+import { ColorKit, LocaleService } from '@univerjs/core';
+import React, { useEffect, useMemo, useState } from 'react';
+
+import { isObservable } from 'rxjs';
+import { ComponentManager } from '../../common/component-manager';
+import { useDependency } from '../../utils/di';
 
 export type ICustomLabelProps<T = undefined> = {
     value?: string | number | undefined;
@@ -37,33 +36,55 @@ export type ICustomLabelProps<T = undefined> = {
 /**
  * The component to render toolbar item label and menu item label.
  * @param props
- * @returns
  */
-export function CustomLabel(props: ICustomLabelProps): JSX.Element | null {
+export function CustomLabel(props: ICustomLabelProps) {
     const { title, icon, label, value, value$ } = props;
     const localeService = useDependency(LocaleService);
     const componentManager = useDependency(ComponentManager);
+    const [subscribedValue, setSubscribedValue] = useState(value);
+    const [realIcon, setRealIcon] = useState('');
 
     const nodes = [];
     let index = 0;
 
-    let realValue = value;
-    if (value$) {
-        realValue = useObservable(value$, undefined, true);
-    }
+    useEffect(() => {
+        if (value$) {
+            const subscription = value$.subscribe((v) => {
+                setSubscribedValue(v);
+            });
 
-    let realIcon;
-    if (isObservable(icon)) {
-        realIcon = useObservable(icon, undefined, true);
-    } else {
-        realIcon = icon;
-    }
+            return () => {
+                subscription.unsubscribe();
+            };
+        }
+    }, [value$]);
+
+    const realValue = useMemo(() => {
+        return value ?? subscribedValue;
+    }, [subscribedValue, value]);
+
+    useEffect(() => {
+        let subscription = null;
+        if (isObservable(icon)) {
+            subscription = icon.subscribe((v) => {
+                setRealIcon(v);
+            });
+        } else {
+            setRealIcon(icon ?? '');
+        }
+
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, [icon]);
 
     // if value is not valid, use primary color
-    let isValid = false;
-    if (realValue && typeof realValue === 'string') {
-        isValid = new ColorKit(realValue).isValid;
-    }
+    const isValid = useMemo(() => {
+        if (realValue && typeof realValue === 'string') {
+            return new ColorKit(realValue).isValid;
+        }
+        return false;
+    }, [realValue]);
 
     if (icon) {
         const Icon = componentManager.get(realIcon ?? '');

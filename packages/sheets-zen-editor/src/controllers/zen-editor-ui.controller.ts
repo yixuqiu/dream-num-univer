@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,19 @@
  * limitations under the License.
  */
 
-import { Disposable, ICommandService, LifecycleStages, OnLifecycle } from '@univerjs/core';
-import type { IMenuItemFactory } from '@univerjs/ui';
-import { IMenuService, IShortcutService, IZenZoneService } from '@univerjs/ui';
-import { Inject, Injector } from '@wendellhu/redi';
+import { Disposable, ICommandService } from '@univerjs/core';
+import { IMenuManagerService, IShortcutService, IZenZoneService } from '@univerjs/ui';
 
-import { CancelZenEditCommand, ConfirmZenEditCommand } from '../commands/commands/zen-editor.command';
-import { OpenZenEditorOperation } from '../commands/operations/zen-editor.operation';
-import { ZenEditorMenuItemFactory } from '../views/menu';
+import { CancelZenEditCommand, ConfirmZenEditCommand, OpenZenEditorCommand } from '../commands/commands/zen-editor.command';
 import { ZEN_EDITOR_COMPONENT, ZenEditor } from '../views/zen-editor';
+import { menuSchema } from './menu.schema';
 import { ZenEditorCancelShortcut, ZenEditorConfirmShortcut } from './shortcuts/zen-editor.shortcut';
 
-@OnLifecycle(LifecycleStages.Rendered, ZenEditorUIController)
 export class ZenEditorUIController extends Disposable {
     constructor(
-        @Inject(Injector) private readonly _injector: Injector,
         @IZenZoneService private readonly _zenZoneService: IZenZoneService,
         @ICommandService private readonly _commandService: ICommandService,
-        @IMenuService private readonly _menuService: IMenuService,
+        @IMenuManagerService private readonly _menuManagerService: IMenuManagerService,
         @IShortcutService private readonly _shortcutService: IShortcutService
     ) {
         super();
@@ -51,20 +46,13 @@ export class ZenEditorUIController extends Disposable {
     }
 
     private _initCommands(): void {
-        [OpenZenEditorOperation, CancelZenEditCommand, ConfirmZenEditCommand].forEach((c) => {
+        [OpenZenEditorCommand, CancelZenEditCommand, ConfirmZenEditCommand].forEach((c) => {
             this.disposeWithMe(this._commandService.registerCommand(c));
         });
     }
 
     private _initMenus(): void {
-        (
-            [
-                // context menu
-                ZenEditorMenuItemFactory,
-            ] as IMenuItemFactory[]
-        ).forEach((factory) => {
-            this.disposeWithMe(this._menuService.addMenuItem(this._injector.invoke(factory)));
-        });
+        this._menuManagerService.mergeMenu(menuSchema);
     }
 
     private _initShortcuts(): void {

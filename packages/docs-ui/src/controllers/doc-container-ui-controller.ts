@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,27 @@
  */
 
 import type { LocaleType } from '@univerjs/core';
-import { LocaleService } from '@univerjs/core';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import type { IUniverDocsUIConfig } from '../basics';
 import type { DocContainer } from '../views/doc-container/DocContainer';
+
+import type { IUniverDocsUIConfig } from './config.schema';
+import { IConfigService, Inject, Injector, LocaleService } from '@univerjs/core';
+import { DOCS_UI_PLUGIN_CONFIG_KEY } from './config.schema';
 
 export class DocContainerUIController {
     private _docContainer?: DocContainer;
 
     constructor(
-        private readonly _config: IUniverDocsUIConfig,
         @Inject(LocaleService) private readonly _localeService: LocaleService,
-        @Inject(Injector) private readonly _injector: Injector
-    ) {}
+        @Inject(Injector) private readonly _injector: Injector,
+        @IConfigService private readonly _configService: IConfigService
+    ) {
+        // empty
+    }
 
     getUIConfig() {
         const config = {
             injector: this._injector,
-            config: this._config,
+            config: this._configService.getConfig<IUniverDocsUIConfig>(DOCS_UI_PLUGIN_CONFIG_KEY),
             changeLocale: this.changeLocale,
             getComponent: this.getComponent,
         };

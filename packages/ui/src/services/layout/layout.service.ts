@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-import type { ContextService, Nullable } from '@univerjs/core';
-import { Disposable, DocumentDataModel, FOCUSING_UNIVER_EDITOR, IContextService, ILogService, IUniverInstanceService, LifecycleStages, OnLifecycle, remove, SlideDataModel, toDisposable, UniverInstanceType, Workbook } from '@univerjs/core';
-import { createIdentifier, type IDisposable } from '@wendellhu/redi';
+import type { ContextService, IDisposable, Nullable } from '@univerjs/core';
+import { createIdentifier, Disposable, DocumentDataModel, FOCUSING_UNIVER_EDITOR, IContextService, IUniverInstanceService, remove, SlideDataModel, toDisposable, UniverInstanceType, Workbook } from '@univerjs/core';
 import { fromEvent } from 'rxjs';
-import { IEditorService } from '../editor/editor.service';
 
 type FocusHandlerFn = (unitId: string) => void;
 
@@ -30,11 +28,13 @@ const givingBackFocusElements = [
     'univer-button',
     'univer-sheet-bar-btn',
     'univer-render-canvas',
+    'univer-workbench-layout',
 ];
 
 export interface ILayoutService {
     readonly isFocused: boolean;
 
+    get rootContainerElement(): Nullable<HTMLElement>;
     /** Re-focus the currently focused Univer business instance. */
     focus(): void;
 
@@ -42,13 +42,15 @@ export interface ILayoutService {
     registerFocusHandler(type: UniverInstanceType, handler: FocusHandlerFn): IDisposable;
     /** Register the root container element. */
     registerRootContainerElement(container: HTMLElement): IDisposable;
-    /** Register a canvas element. */
-    registerCanvasElement(container: HTMLCanvasElement): IDisposable;
+    /** Register a content element. */
+    registerContentElement(container: HTMLElement): IDisposable;
     /** Register an element as a container, especially floating components like Dialogs and Notifications. */
     registerContainerElement(container: HTMLElement): IDisposable;
 
+    getContentElement(): HTMLElement;
+
     checkElementInCurrentContainers(element: HTMLElement): boolean;
-    checkCanvasIsFocused(): boolean;
+    checkContentIsFocused(): boolean;
 }
 export const ILayoutService = createIdentifier<ILayoutService>('ui.layout-service');
 
@@ -56,7 +58,6 @@ export const ILayoutService = createIdentifier<ILayoutService>('ui.layout-servic
  * This service is responsible for storing layout information of the current
  * Univer application instance.
  */
-@OnLifecycle(LifecycleStages.Ready, ILayoutService)
 export class DesktopLayoutService extends Disposable implements ILayoutService {
     private _rootContainerElement: Nullable<HTMLElement> = null;
     private _isFocused = false;
@@ -67,19 +68,22 @@ export class DesktopLayoutService extends Disposable implements ILayoutService {
 
     private readonly _focusHandlers = new Map<UniverInstanceType, FocusHandlerFn>();
 
-    private _canvasContainers: HTMLCanvasElement[] = [];
+    // FIXME: this don't need to be plural
+    private _contentElements: HTMLElement[] = [];
     private _allContainers: HTMLElement[] = [];
 
     constructor(
         @IContextService private readonly _contextService: ContextService,
-        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
-        @ILogService private readonly _logService: ILogService,
-        @IEditorService private readonly _editorService: IEditorService
+        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService
     ) {
         super();
 
         this._initUniverFocusListener();
         this._initEditorStatus();
+    }
+
+    get rootContainerElement() {
+        return this._rootContainerElement;
     }
 
     focus(): void {
@@ -111,13 +115,17 @@ export class DesktopLayoutService extends Disposable implements ILayoutService {
         return toDisposable(() => this._focusHandlers.delete(type));
     }
 
-    registerCanvasElement(container: HTMLCanvasElement): IDisposable {
-        if (this._canvasContainers.indexOf(container) === -1) {
-            this._canvasContainers.push(container);
-            return toDisposable(() => remove(this._canvasContainers, container));
+    registerContentElement(container: HTMLElement): IDisposable {
+        if (this._contentElements.indexOf(container) === -1) {
+            this._contentElements.push(container);
+            return toDisposable(() => remove(this._contentElements, container));
         }
 
-        throw new Error('[DesktopLayoutService]: canvas container already registered!');
+        throw new Error('[DesktopLayoutService]: content container already registered!');
+    }
+
+    getContentElement(): HTMLElement {
+        return this._contentElements[0];
     }
 
     registerRootContainerElement(container: HTMLElement): IDisposable {
@@ -147,16 +155,16 @@ export class DesktopLayoutService extends Disposable implements ILayoutService {
         return this._allContainers.some((container) => container.contains(element));
     }
 
-    checkCanvasIsFocused(): boolean {
-        return this._canvasContainers.some((canvas) => canvas === document.activeElement || canvas.contains(document.activeElement));
+    checkContentIsFocused(): boolean {
+        return this._contentElements.some((contentEl) => contentEl === document.activeElement || contentEl.contains(document.activeElement));
     }
 
     private _initUniverFocusListener(): void {
         this.disposeWithMe(
             fromEvent(window, 'focusin').subscribe((event) => {
                 const target = event.target as HTMLElement;
+
                 if (givingBackFocusElements.some((item) => target.classList.contains(item))) {
-                    this._blurSheetEditor();
                     queueMicrotask(() => this.focus());
                     return;
                 }
@@ -175,14 +183,6 @@ export class DesktopLayoutService extends Disposable implements ILayoutService {
 
     private _initEditorStatus(): void {
         this._contextService.setContextValue(FOCUSING_UNIVER_EDITOR, getFocusingUniverEditorStatus());
-    }
-
-    private _blurSheetEditor() {
-        // NOTE: Note that the focus editor will not be docs' editor but calling `this._editorService.blur()` will blur doc's editor.
-        const focusEditor = this._editorService.getFocusEditor();
-        if (focusEditor && focusEditor.isSheetEditor() !== true) {
-            this._editorService.blur();
-        }
     }
 }
 

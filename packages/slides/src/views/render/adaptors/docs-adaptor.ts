@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,22 @@
  * limitations under the License.
  */
 
-import type { EventState, IPageElement } from '@univerjs/core';
-import { DocumentDataModel, LocaleService, PageElementType } from '@univerjs/core';
-import type { BaseObject, IDocumentSkeletonDrawing, IPageRenderConfig, IWheelEvent } from '@univerjs/engine-render';
+import { DocumentDataModel, Inject, LocaleService, PageElementType } from '@univerjs/core';
 import {
     Documents,
     DocumentSkeleton,
     DocumentViewModel,
-    EVENT_TYPE,
+    Image,
     Liquid,
     PageLayoutType,
-    Picture,
-    Rect,
+    // Rect,
     Scene,
     SceneViewer,
     ScrollBar,
     Viewport,
 } from '@univerjs/engine-render';
-import type { Injector } from '@wendellhu/redi';
-import { Inject } from '@wendellhu/redi';
+import type { EventState, Injector, IPageElement } from '@univerjs/core';
+import type { BaseObject, IDocumentSkeletonDrawing, IPageRenderConfig, IWheelEvent } from '@univerjs/engine-render';
 
 import { CanvasObjectProviderRegistry, ObjectAdaptor } from '../adaptor';
 
@@ -106,7 +103,6 @@ export class DocsAdaptor extends ObjectAdaptor {
             skewY,
             flipX,
             flipY,
-            isTransformer: true,
         });
         const scene = new Scene(DOCS_VIEW_KEY.SCENE + id, sv);
 
@@ -115,12 +111,14 @@ export class DocsAdaptor extends ObjectAdaptor {
             top: 0,
             bottom: 0,
             right: 0,
+            explicitViewportWidthSet: false,
+            explicitViewportHeightSet: false,
             isWheelPreventDefaultX: true,
         });
 
         scene.attachControl();
 
-        scene.on(EVENT_TYPE.wheel, (evt: unknown, state: EventState) => {
+        scene.onMouseWheel$.subscribeEvent((evt: unknown, state: EventState) => {
             const e = evt as IWheelEvent;
             if (e.ctrlKey) {
                 const deltaFactor = Math.abs(e.deltaX);
@@ -162,19 +160,19 @@ export class DocsAdaptor extends ObjectAdaptor {
 
         const pageSize = documents.getSkeleton()?.getPageSize();
 
-        documents.onPageRenderObservable.add((config: IPageRenderConfig) => {
+        documents.pageRender$.subscribe((config: IPageRenderConfig) => {
             const { page, pageLeft, pageTop, ctx } = config;
             const { width, height, marginBottom, marginLeft, marginRight, marginTop } = page;
             ctx.save();
             ctx.translate(pageLeft - 0.5, pageTop - 0.5);
-            Rect.drawWith(ctx, {
-                width: pageSize?.width || width,
-                height: pageSize?.height || height,
-                strokeWidth: 1,
-                stroke: 'rgba(198,198,198, 1)',
-                fill: 'rgba(255,255,255, 1)',
-                zIndex: 3,
-            });
+            // Rect.drawWith(ctx, {
+            //     width: pageSize?.width || width,
+            //     height: pageSize?.height || height,
+            //     strokeWidth: 1,
+            //     stroke: 'rgba(198,198,198, 1)',
+            //     fill: 'rgba(255,255,255, 1)',
+            //     zIndex: 3,
+            // });
             ctx.restore();
         });
 
@@ -203,19 +201,18 @@ export class DocsAdaptor extends ObjectAdaptor {
             skeDrawings.forEach((drawing: IDocumentSkeletonDrawing) => {
                 const { aLeft, aTop, height, width, drawingOrigin } = drawing;
 
-                const { objectTransform } = drawingOrigin;
+                const { docTransform } = drawingOrigin;
 
-                const rect = new Picture(drawing.objectId, {
-                    // url: objectTransform.imageProperties?.contentUrl || '',
+                const rect = new Image(drawing.drawingId, {
+                    // url: docTransform.imageProperties?.contentUrl || '',
                     left: aLeft + docsLeft + this._liquid.x,
                     top: aTop + docsTop + this._liquid.y,
                     width,
                     height,
                     zIndex: 11,
-                    isTransformer: true,
                 });
 
-                pageMarginCache.set(drawing.objectId, {
+                pageMarginCache.set(drawing.drawingId, {
                     marginLeft: this._liquid.x,
                     marginTop: this._liquid.y,
                 });
@@ -230,9 +227,13 @@ export class DocsAdaptor extends ObjectAdaptor {
                 documents.pageMarginTop
             );
         }
-        scene.openTransformer();
+
         scene.addObjects(objectList);
-        scene.getTransformer()?.onChangingObservable.add((state) => {
+        objectList.forEach((object) => {
+            scene.attachTransformerTo(object);
+        });
+
+        scene.getTransformer()?.changing$.subscribe((state) => {
             const { objects } = state;
 
             objects.forEach((object) => {
@@ -256,8 +257,6 @@ export class DocsAdaptor extends ObjectAdaptor {
 
             documentSkeleton?.calculate();
         });
-        scene.closeTransformer();
-
         this._calculatePagePosition(documents, scene, viewMain);
 
         return sv;
@@ -349,8 +348,8 @@ export class DocsAdaptor extends ObjectAdaptor {
         docsComponent.translate(docsLeft, docsTop);
 
         if (scrollToX !== Number.POSITIVE_INFINITY && viewport != null) {
-            const actualX = viewport.getBarScroll(scrollToX, 0).x;
-            viewport.scrollTo({
+            const actualX = viewport.transScroll2ViewportScrollValue(scrollToX, 0).x;
+            viewport.scrollToBarPos({
                 x: actualX,
             });
         }

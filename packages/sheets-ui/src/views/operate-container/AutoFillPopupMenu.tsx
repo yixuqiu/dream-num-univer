@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,19 @@
 
 import type { ICommandInfo, IExecutionOptions } from '@univerjs/core';
 import { ICommandService, IUniverInstanceService, LocaleService, toDisposable } from '@univerjs/core';
-import { Dropdown } from '@univerjs/design';
-import { IRenderManagerService } from '@univerjs/engine-render';
+import { DropdownLegacy } from '@univerjs/design';
+import { convertTransformToOffsetX, convertTransformToOffsetY, IRenderManagerService } from '@univerjs/engine-render';
 import { Autofill, CheckMarkSingle, MoreDownSingle } from '@univerjs/icons';
-import { InsertColMutation, InsertRowMutation, MoveColsMutation, MoveRangeMutation, MoveRowsMutation, RemoveColMutation, RemoveRowMutation, SetRangeValuesMutation, SetWorksheetActiveOperation, SetWorksheetColWidthMutation, SetWorksheetRowHeightMutation } from '@univerjs/sheets';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { useDependency } from '@univerjs/ui';
 import clsx from 'clsx';
-import React, { useCallback, useEffect, useState } from 'react';
-
-import { AutoClearContentCommand } from '../../commands/commands/auto-fill.command';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefillCommand } from '../../commands/commands/refill.command';
-import { SetCellEditVisibleOperation } from '../../commands/operations/cell-edit.operation';
 import { SetScrollOperation } from '../../commands/operations/scroll.operation';
-import { SetZoomRatioOperation } from '../../commands/operations/set-zoom-ratio.operation';
+import { useActiveWorkbook } from '../../components/hook';
 import { getSheetObject } from '../../controllers/utils/component-tools';
 import { IAutoFillService } from '../../services/auto-fill/auto-fill.service';
 import { APPLY_TYPE } from '../../services/auto-fill/type';
-import { ISelectionRenderService } from '../../services/selection/selection-render.service';
+import { ISheetSelectionRenderService } from '../../services/selection/base-selection-render.service';
 import { SheetSkeletonManagerService } from '../../services/sheet-skeleton-manager.service';
 import styles from './index.module.less';
 
@@ -55,18 +51,27 @@ const useUpdate = () => {
 
 export const AutoFillPopupMenu: React.FC<{}> = () => {
     const commandService = useDependency(ICommandService);
-    const sheetSkeletonManagerService = useDependency(SheetSkeletonManagerService);
     const univerInstanceService = useDependency(IUniverInstanceService);
     const renderManagerService = useDependency(IRenderManagerService);
-    const selectionRenderService = useDependency(ISelectionRenderService);
     const autoFillService = useDependency(IAutoFillService);
     const localeService = useDependency(LocaleService);
     const [menu, setMenu] = useState<IAutoFillPopupMenuItem[]>([]);
-
     const [visible, setVisible] = useState(false);
     const [anchor, setAnchor] = useState<IAnchorPoint>({ row: -1, col: -1 });
     const [selected, setSelected] = useState<APPLY_TYPE>(APPLY_TYPE.SERIES);
     const [isHovered, setHovered] = useState(false);
+    const workbook = useActiveWorkbook();
+    const { sheetSkeletonManagerService, selectionRenderService } = useMemo(() => {
+        if (workbook) {
+            const ru = renderManagerService.getRenderById(workbook.getUnitId());
+            return {
+                sheetSkeletonManagerService: ru?.with(SheetSkeletonManagerService),
+                selectionRenderService: ru?.with(ISheetSelectionRenderService),
+            };
+        }
+
+        return { sheetSkeletonManagerService: null, selectionRenderService: null };
+    }, [workbook, renderManagerService]);
 
     const handleMouseEnter = () => {
         setHovered(true);
@@ -77,44 +82,23 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
     };
     const forceUpdate = useUpdate();
 
-
     useEffect(() => {
-        const endCommands = [
-            SetCellEditVisibleOperation.id,
-            AutoClearContentCommand.id,
-            SetZoomRatioOperation.id,
-            SetWorksheetActiveOperation.id,
-            SetRangeValuesMutation.id,
-            MoveRangeMutation.id,
-            RemoveRowMutation.id,
-            RemoveColMutation.id,
-            InsertRowMutation.id,
-            InsertColMutation.id,
-            MoveRowsMutation.id,
-            MoveColsMutation.id,
-            SetWorksheetColWidthMutation.id,
-            SetWorksheetRowHeightMutation.id,
-        ];
         const disposable = commandService.onCommandExecuted((command: ICommandInfo, options?: IExecutionOptions) => {
             if (command.id === SetScrollOperation.id) {
                 forceUpdate();
-            }
-            const fromCollab = options?.fromCollab;
-            if (endCommands.includes(command.id) && !fromCollab) {
-                setAnchor({ row: -1, col: -1 });
             }
         });
         return disposable.dispose;
     }, [forceUpdate, commandService]);
 
     useEffect(() => {
-        const disposable = toDisposable(
+        const disposable = sheetSkeletonManagerService && toDisposable(
             sheetSkeletonManagerService.currentSkeleton$.subscribe((skeleton) => {
                 if (skeleton) {
                     forceUpdate();
                 }
             }));
-        return disposable.dispose;
+        return disposable?.dispose;
     }, [sheetSkeletonManagerService, forceUpdate]);
 
     useEffect(() => {
@@ -134,6 +118,8 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
                     const lastRow = Math.max(source.rows[source.rows.length - 1], target.rows[target.rows.length - 1]);
                     const lastCol = Math.max(source.cols[source.cols.length - 1], target.cols[target.cols.length - 1]);
                     setAnchor({ row: lastRow, col: lastCol });
+                } else {
+                    setAnchor({ row: -1, col: -1 });
                 }
             })
         );
@@ -166,19 +152,19 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
     }
 
     const sheetObject = getSheetObject(univerInstanceService, renderManagerService);
-    if (!sheetObject) return null;
+    if (!sheetObject || !selectionRenderService) return null;
 
     const { scene } = sheetObject;
-    const skeleton = sheetSkeletonManagerService.getCurrent()?.skeleton;
+    const skeleton = sheetSkeletonManagerService?.getCurrentSkeleton();
     const viewport = selectionRenderService.getViewPort();
     const scaleX = scene?.scaleX;
     const scaleY = scene?.scaleY;
-    const scrollXY = scene?.getScrollXY(viewport);
+    const scrollXY = scene?.getViewportScrollXY(viewport);
     if (!scaleX || !scene || !scaleX || !scaleY || !scrollXY) return null;
-    const x = skeleton?.getNoMergeCellPositionByIndex(anchor.row, anchor.col).endX || 0;
-    const y = skeleton?.getNoMergeCellPositionByIndex(anchor.row, anchor.col).endY || 0;
-    const relativeX = skeleton?.convertTransformToOffsetX(x, scaleX, scrollXY);
-    const relativeY = skeleton?.convertTransformToOffsetY(y, scaleY, scrollXY);
+    const x = skeleton?.getNoMergeCellWithCoordByIndex(anchor.row, anchor.col).endX || 0;
+    const y = skeleton?.getNoMergeCellWithCoordByIndex(anchor.row, anchor.col).endY || 0;
+    const relativeX = convertTransformToOffsetX(x, scaleX, scrollXY);
+    const relativeY = convertTransformToOffsetY(y, scaleY, scrollXY);
 
     if (relativeX == null || relativeY == null) return null;
     const onVisibleChange = (visible: boolean) => {
@@ -187,6 +173,7 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
 
     const handleClick = (item: IAutoFillPopupMenuItem) => {
         commandService.executeCommand(RefillCommand.id, { type: item.value });
+        setVisible(false);
     };
 
     const showMore = visible || isHovered;
@@ -199,7 +186,7 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
             onMouseLeave={handleMouseLeave}
             style={{ left: `${relativeX + 2}px`, top: `${relativeY + 2}px`, position: 'absolute' }}
         >
-            <Dropdown
+            <DropdownLegacy
                 placement="bottomLeft"
                 trigger={['click']}
                 overlay={(
@@ -234,7 +221,7 @@ export const AutoFillPopupMenu: React.FC<{}> = () => {
                     />
                     {showMore && <MoreDownSingle style={{ color: '#CCCCCC', fontSize: '8px', marginLeft: '8px' }} />}
                 </div>
-            </Dropdown>
+            </DropdownLegacy>
         </div>
     );
 };

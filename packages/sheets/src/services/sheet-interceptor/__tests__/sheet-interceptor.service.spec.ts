@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-import type { ICellData, Nullable, Univer, Workbook } from '@univerjs/core';
-import { createInterceptorKey, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
+import type { ICellData, IInterceptor, Injector, Nullable, Univer, Workbook } from '@univerjs/core';
+import type { ISheetLocation } from '../utils/interceptor';
+import { createInterceptorKey, InterceptorEffectEnum, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
 import { INTERCEPTOR_POINT } from '../interceptor-const';
 import { SheetInterceptorService } from '../sheet-interceptor.service';
-import type { ISheetLocation } from '../utils/interceptor';
-import { createCoreTestBed } from './create-core-test-bed';
+import { createSheetTestBed } from './create-core-test-bed';
 
 describe('Test SheetInterceptorService', () => {
     let univer: Univer;
@@ -31,17 +29,19 @@ describe('Test SheetInterceptorService', () => {
     const numberIntercept = createInterceptorKey<number, { step: number }>('numberIntercept');
 
     beforeEach(() => {
-        const testBed = createCoreTestBed(undefined, [[SheetInterceptorService]]);
+        const testBed = createSheetTestBed(undefined, [[SheetInterceptorService]]);
         univer = testBed.univer;
         get = testBed.get;
     });
 
     afterEach(() => univer.dispose());
 
-    function getCell(row: number, col: number): Nullable<ICellData> {
+    function getCell(row: number, col: number): Nullable<ICellData>;
+    function getCell(row: number, col: number, key: string, filter: (interceptor: IInterceptor<any, any>) => boolean): Nullable<ICellData>;
+    function getCell(row: number, col: number, key?: string, filter?: (interceptor: IInterceptor<any, any>) => boolean): Nullable<ICellData> {
         const cus = get(IUniverInstanceService);
         const sheet = cus.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()!;
-        return sheet.getCell(row, col);
+        return (key && filter) ? sheet.getCellWithFilteredInterceptors(row, col, key, filter) : sheet.getCell(row, col);
     }
 
     function getRowFiltered(row: number): boolean {
@@ -50,7 +50,7 @@ describe('Test SheetInterceptorService', () => {
         return sheet.getRowFiltered(row);
     }
 
-    function getRowRawVisible(row: number): boolean {
+    function getRowVisible(row: number): boolean {
         const cus = get(IUniverInstanceService);
         const sheet = cus.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()!;
         return sheet.getRowVisible(row);
@@ -59,6 +59,7 @@ describe('Test SheetInterceptorService', () => {
     describe('Test intercepting getting cell content', () => {
         it('should intercept cells and merge result if next is called', () => {
             get(SheetInterceptorService).intercept(INTERCEPTOR_POINT.CELL_CONTENT, {
+                effect: InterceptorEffectEnum.Value | InterceptorEffectEnum.Style,
                 priority: 100,
                 handler(_cell, location: ISheetLocation, next: (v: Nullable<ICellData>) => Nullable<ICellData>) {
                     if (location.row === 0 && location.col === 0) {
@@ -76,6 +77,7 @@ describe('Test SheetInterceptorService', () => {
         it('interceptors should directly return result if next is not called', () => {
             get(SheetInterceptorService).intercept(INTERCEPTOR_POINT.CELL_CONTENT, {
                 priority: 100,
+                effect: InterceptorEffectEnum.Value | InterceptorEffectEnum.Style,
                 handler(_cell, location: ISheetLocation, next: (v: Nullable<ICellData>) => Nullable<ICellData>) {
                     if (location.row === 0 && location.col === 0) {
                         return { v: 'intercepted' };
@@ -87,6 +89,37 @@ describe('Test SheetInterceptorService', () => {
 
             expect(getCell(0, 0)).toEqual({ v: 'intercepted' });
             expect(getCell(0, 1)).toEqual({ v: 'A2' });
+        });
+
+        it('should skip some interceptors by filtering out the effect', () => {
+            const interceptorService = get(SheetInterceptorService);
+            interceptorService.intercept(INTERCEPTOR_POINT.CELL_CONTENT, {
+                id: 'should-skip',
+                priority: 100,
+                handler(_cell, location: ISheetLocation, next: (v: Nullable<ICellData>) => Nullable<ICellData>) {
+                    if (location.row === 0 && location.col === 0) {
+                        return { v: 'intercepted A' };
+                    }
+
+                    return next();
+                },
+            });
+
+            interceptorService.intercept(INTERCEPTOR_POINT.CELL_CONTENT, {
+                id: 'should-not-skip',
+                priority: 0,
+                handler(_cell, location: ISheetLocation, next: (v: Nullable<ICellData>) => Nullable<ICellData>) {
+                    if (location.row === 0 && location.col === 0) {
+                        return { v: 'intercepted B' };
+                    }
+
+                    return next();
+                },
+            });
+
+            expect(getCell(0, 0)).toEqual({ v: 'intercepted A' });
+            expect(getCell(0, 1)).toEqual({ v: 'A2' });
+            expect(getCell(0, 0, 'cache-filter-key', (interceptor) => interceptor.id !== 'should-skip')).toEqual({ v: 'intercepted B' });
         });
     });
 
@@ -113,13 +146,13 @@ describe('Test SheetInterceptorService', () => {
             });
 
             expect(getRowFiltered(1)).toBeFalsy();
-            expect(getRowRawVisible(1)).toBeTruthy();
+            expect(getRowVisible(1)).toBeTruthy();
 
             realFiltered = true;
             expect(getRowFiltered(1)).toBeTruthy();
-            expect(getRowRawVisible(1)).toBeFalsy();
+            expect(getRowVisible(1)).toBeFalsy();
             expect(getRowFiltered(2)).toBeFalsy();
-            expect(getRowRawVisible(2)).toBeTruthy();
+            expect(getRowVisible(2)).toBeTruthy();
         });
     });
 
@@ -198,17 +231,4 @@ describe('Test SheetInterceptorService', () => {
             expect(result).toBe('zero');
         });
     });
-
-    // it('Test SheetInterceptorService', () => {
-    //     it('getLastRowWithContent', () => {
-    //         const univerInstanceService = get(IUniverInstanceService);
-    //         const sheet = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()!;
-    //         expect(sheet.getLastRowWithContent()).toBe(3);
-    //     });
-    //     it('getLastColumnWithContent', () => {
-    //         const univerInstanceService = get(IUniverInstanceService);
-    //         const sheet = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()!;
-    //         expect(sheet.getLastColumnWithContent()).toBe(3);
-    //     });
-    // });
 });

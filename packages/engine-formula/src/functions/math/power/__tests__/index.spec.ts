@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,27 +16,29 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { ErrorType } from '../../../../basics/error-type';
+import { ArrayValueObject, transformToValueObject } from '../../../../engine/value-object/array-value-object';
+import { NumberValueObject, StringValueObject } from '../../../../engine/value-object/primitive-object';
+import { getObjectValue } from '../../../__tests__/create-function-test-bed';
 import { FUNCTION_NAMES_MATH } from '../../function-names';
 import { Power } from '../index';
-import { NumberValueObject, StringValueObject } from '../../../../engine/value-object/primitive-object';
-import { ArrayValueObject, transformToValue, transformToValueObject } from '../../../../engine/value-object/array-value-object';
-import { ErrorType } from '../../../../basics/error-type';
 
 describe('Test power function', () => {
-    const textFunction = new Power(FUNCTION_NAMES_MATH.POWER);
+    const testFunction = new Power(FUNCTION_NAMES_MATH.POWER);
 
     describe('Power', () => {
         it('Number is single cell, power is single cell', () => {
             const number = NumberValueObject.create(5);
             const power = NumberValueObject.create(2);
-            const result = textFunction.calculate(number, power);
-            expect(result.getValue()).toBe(25);
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toBe(25);
         });
+
         it('Number is single string number, power is single string number', () => {
             const number = new StringValueObject('5');
             const power = new StringValueObject('2');
-            const result = textFunction.calculate(number, power);
-            expect(result.getValue()).toBe(25);
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toBe(25);
         });
 
         it('Number is single cell, power is array', () => {
@@ -53,8 +55,8 @@ describe('Test power function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(number, power);
-            expect(transformToValue(result.getArrayValue())).toStrictEqual([
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toStrictEqual([
                 [2, ErrorType.VALUE, 2.3456698984637576, 2, 1, 1],
                 [1, 1.2676506002282294e+30, 5.063026375881119, ErrorType.VALUE, 0.125, ErrorType.VALUE],
             ]);
@@ -74,10 +76,10 @@ describe('Test power function', () => {
                 column: 0,
             });
             const power = NumberValueObject.create(2);
-            const result = textFunction.calculate(number, power);
-            expect(transformToValue(result.getArrayValue())).toStrictEqual([
-                [1, ErrorType.VALUE, 1.5128999999999999, 1, 0, 0],
-                [0, 10000, 5.4755999999999991, ErrorType.VALUE, 9, ErrorType.VALUE],
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toStrictEqual([
+                [1, ErrorType.VALUE, 1.5129, 1, 0, 0],
+                [0, 10000, 5.475599999999999, ErrorType.VALUE, 9, ErrorType.VALUE],
             ]);
         });
 
@@ -107,12 +109,27 @@ describe('Test power function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(number, power);
-            expect(transformToValue(result.getArrayValue())).toStrictEqual([
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toStrictEqual([
                 [1, ErrorType.VALUE, 1.23, 1, 0, 0],
-                [0, 10000, 5.4755999999999991, ErrorType.VALUE, 9, ErrorType.VALUE],
+                [0, 10000, 5.475599999999999, ErrorType.VALUE, 9, ErrorType.VALUE],
                 [ErrorType.NA, ErrorType.NA, ErrorType.NA, ErrorType.NA, ErrorType.NA, ErrorType.NA],
             ]);
+        });
+
+        it('Number is 0', () => {
+            const number = NumberValueObject.create(0);
+            const power = NumberValueObject.create(2);
+            const result = testFunction.calculate(number, power);
+            expect(getObjectValue(result)).toBe(0);
+
+            const power2 = NumberValueObject.create(0);
+            const result2 = testFunction.calculate(number, power2);
+            expect(getObjectValue(result2)).toBe(ErrorType.NUM);
+
+            const power3 = NumberValueObject.create(-1);
+            const result3 = testFunction.calculate(number, power3);
+            expect(getObjectValue(result3)).toBe(ErrorType.DIV_BY_ZERO);
         });
     });
 });

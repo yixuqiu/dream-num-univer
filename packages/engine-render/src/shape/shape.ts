@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,23 @@
  * limitations under the License.
  */
 
-import type { IKeyValue, IScale, Nullable } from '@univerjs/core';
+import type { IKeyValue, IOffset, IScale, ISize, Nullable } from '@univerjs/core';
 
-import { BASE_OBJECT_ARRAY, BaseObject } from '../base-object';
-import { SHAPE_TYPE } from '../basics/const';
 import type { IObjectFullState } from '../basics/interfaces';
-import type { IViewportBound, Vector2 } from '../basics/vector2';
+import type { IViewportInfo, Vector2 } from '../basics/vector2';
 import type { UniverRenderingContext } from '../context';
+import { BASE_OBJECT_ARRAY, BaseObject, ObjectType } from '../base-object';
+import { SHAPE_TYPE } from '../basics/const';
 
 export type LineJoin = 'round' | 'bevel' | 'miter';
 export type LineCap = 'butt' | 'round' | 'square';
 export type PaintFirst = 'fill' | 'stroke';
 
-export interface IShapeProps extends IObjectFullState {
+const BASE_OBJECT_ARRAY_Set = new Set(BASE_OBJECT_ARRAY);
+export interface IShapeProps extends IObjectFullState, ISize, IOffset, IScale {
+    rotateEnabled?: boolean;
+    resizeEnabled?: boolean;
+    borderEnabled?: boolean;
     hoverCursor?: Nullable<string>;
     moveCursor?: string | null;
     fillRule?: string;
@@ -84,7 +88,7 @@ export const SHAPE_OBJECT_ARRAY = [
     'strokeMiterLimit',
 ];
 
-export abstract class Shape<T> extends BaseObject {
+export abstract class Shape<T extends IShapeProps> extends BaseObject {
     private _hoverCursor: Nullable<string>;
 
     private _moveCursor: string | null = null;
@@ -132,6 +136,8 @@ export abstract class Shape<T> extends BaseObject {
     private _strokeMiterLimit: number = 0;
 
     private _type: SHAPE_TYPE = SHAPE_TYPE.RECT;
+
+    override objectType = ObjectType.SHAPE;
 
     constructor(key?: string, props?: T) {
         super(key);
@@ -269,35 +275,32 @@ export abstract class Shape<T> extends BaseObject {
      * @param {UniverRenderingContext} ctx SheetContext to render on
      */
     private static _renderStroke(ctx: UniverRenderingContext, props: IShapeProps) {
-        const { stroke, strokeWidth, shadowEnabled, shadowForStrokeEnabled, strokeScaleEnabled, parent } = props;
+        const { stroke, strokeWidth, strokeScaleEnabled } = props;
 
         // let { scaleX, scaleY } = props;
-        let { scaleX, scaleY } = ctx.getScale();
+        // const { scaleX = 1, scaleY = 1 } = ctx.getScale();
         if (!stroke || strokeWidth === 0) {
             return;
         }
 
-        if (shadowEnabled && !shadowForStrokeEnabled) {
-            this._removeShadow(ctx);
-        }
-
         ctx.save();
-        if (strokeScaleEnabled === false) {
-            scaleX = scaleX ?? 1;
-            scaleY = scaleY ?? 1;
-            ctx.scale(1 / scaleX, 1 / scaleY);
-        }
-        this._setLineDash(ctx);
+        // if (strokeScaleEnabled === false) {
+        //     scaleX = scaleX === 0 ? 1 : scaleX;
+        //     scaleY = scaleY === 0 ? 1 : scaleY;
+        //     ctx.scale(1 / scaleX, 1 / scaleY);
+        // }
+        // this._setLineDash(ctx);
         this._setStrokeStyles(ctx, props);
+
         ctx.stroke();
         ctx.restore();
     }
 
-    private static _getObjectScaling() {
-        return { scaleX: 1, scaleY: 1 };
-    }
+    // private static _getObjectScaling() {
+    //     return { scaleX: 1, scaleY: 1 };
+    // }
 
-    private static _removeShadow(ctx: UniverRenderingContext) {}
+    private static _removeShadow(ctx: UniverRenderingContext) { }
 
     private static _setFillStyles(ctx: UniverRenderingContext, props: IShapeProps) {
         ctx.fillStyle = props.fill!;
@@ -313,9 +316,7 @@ export abstract class Shape<T> extends BaseObject {
         ctx.strokeStyle = stroke!;
     }
 
-    private static _setLineDash(ctx: UniverRenderingContext) {}
-
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;
@@ -337,29 +338,32 @@ export abstract class Shape<T> extends BaseObject {
 
         const m = this.transform.getMatrix();
         mainCtx.save();
-
         mainCtx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
-        this._draw(mainCtx);
+        this._draw(mainCtx, bounds);
         mainCtx.restore();
         this.makeDirty(false);
         return this;
     }
 
-    setProps(props?: T) {
+    /**
+     * if BASE_OBJECT_ARRAY_Set.has(key) not exist, then this[_key] = props[key],
+     * @param props
+     */
+    setProps(props?: T): Shape<T> {
         if (!props) {
-            return;
+            return this;
         }
 
         const themeKeys = Object.keys(props);
         if (themeKeys.length === 0) {
-            return;
+            return this;
         }
         themeKeys.forEach((key) => {
             if ((props as IKeyValue)[key] === undefined) {
                 return true;
             }
 
-            if (BASE_OBJECT_ARRAY.indexOf(key) === -1) {
+            if (!BASE_OBJECT_ARRAY_Set.has(key)) {
                 (this as IKeyValue)[`_${key}`] = (props as IKeyValue)[key];
             }
         });
@@ -380,7 +384,7 @@ export abstract class Shape<T> extends BaseObject {
         };
     }
 
-    protected _draw(ctx: UniverRenderingContext) {
+    protected _draw(ctx: UniverRenderingContext, bounds?: IViewportInfo) {
         /** abstract */
     }
 
@@ -396,12 +400,31 @@ export abstract class Shape<T> extends BaseObject {
 
         const transformState: IObjectFullState = {};
         let hasTransformState = false;
+
+        const hasRotateEnabled = props?.rotateEnabled !== undefined;
+        const hasResizeEnabled = props?.resizeEnabled !== undefined;
+        const hasBorderEnabled = props?.borderEnabled !== undefined;
+
+        if (hasRotateEnabled || hasResizeEnabled || hasBorderEnabled) {
+            const transformerConfig = this.transformerConfig || {};
+            if (hasRotateEnabled) {
+                transformerConfig.rotateEnabled = props?.rotateEnabled;
+            }
+            if (hasResizeEnabled) {
+                transformerConfig.resizeEnabled = props?.resizeEnabled;
+            }
+            if (hasBorderEnabled) {
+                transformerConfig.borderEnabled = props?.borderEnabled;
+            }
+            this.transformerConfig = { ...transformerConfig };
+        }
+
         themeKeys.forEach((key) => {
             if ((props as IKeyValue)[key] === undefined) {
                 return true;
             }
 
-            if (BASE_OBJECT_ARRAY.indexOf(key) > -1) {
+            if (BASE_OBJECT_ARRAY_Set.has(key)) {
                 transformState[key as keyof IObjectFullState] = (props as IKeyValue)[key];
                 hasTransformState = true;
             } else {

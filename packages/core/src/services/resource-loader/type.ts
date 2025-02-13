@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,10 @@
  * limitations under the License.
  */
 
-import { createIdentifier } from '@wendellhu/redi';
-import type { Workbook } from '../../sheets/workbook';
-import type { IWorkbookData } from '../../types/interfaces/i-workbook-data';
-import { LifecycleStages, runOnLifecycle } from '../lifecycle/lifecycle';
+import type { IResources } from '../resource-manager/type';
+import { createIdentifier } from '../../common/di';
 
-export interface IResourceLoaderService {
-    saveWorkbook: (workbook: Workbook) => IWorkbookData;
-}
 export const IResourceLoaderService = createIdentifier<IResourceLoaderService>('resource-loader-service');
-runOnLifecycle(LifecycleStages.Ready, IResourceLoaderService);
+export interface IResourceLoaderService {
+    saveUnit<T = object>(unitId: string): T & { resources: IResources } | null;
+}

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-import type enUS from './en-US';
-
-const zLocale: typeof enUS = {
+const locale = {
     'sheets-filter': {
         toolbar: {
             'smart-toggle-filter-tooltip': '筛选',
@@ -64,7 +62,24 @@ const zLocale: typeof enUS = {
             'not-between': '不介于',
             custom: '自定义',
         },
+        msg: {
+            'filter-header-forbidden': '无法移动筛选行头',
+        },
+        date: {
+            1: '1月',
+            2: '2月',
+            3: '3月',
+            4: '4月',
+            5: '5月',
+            6: '6月',
+            7: '7月',
+            8: '8月',
+            9: '9月',
+            10: '10月',
+            11: '11月',
+            12: '12月',
+        },
     },
 };
 
-export default zLocale;
+export default locale;

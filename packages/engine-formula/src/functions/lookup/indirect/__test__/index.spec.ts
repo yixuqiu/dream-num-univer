@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-import type { Injector } from '@wendellhu/redi';
-import { beforeEach, describe, expect, it } from 'vitest';
-
-import { ErrorType } from '../../../../basics/error-type';
-import { Lexer } from '../../../../engine/analysis/lexer';
+import type { Injector } from '@univerjs/core';
 import type { LexerNode } from '../../../../engine/analysis/lexer-node';
-import { AstTreeBuilder } from '../../../../engine/analysis/parser';
+
 import type { BaseAstNode } from '../../../../engine/ast-node/base-ast-node';
-import { Interpreter } from '../../../../engine/interpreter/interpreter';
 import type { BaseReferenceObject } from '../../../../engine/reference-object/base-reference-object';
 import type { ArrayValueObject } from '../../../../engine/value-object/array-value-object';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ErrorType } from '../../../../basics/error-type';
+import { Lexer } from '../../../../engine/analysis/lexer';
+import { AstTreeBuilder } from '../../../../engine/analysis/parser';
+import { Interpreter } from '../../../../engine/interpreter/interpreter';
+import { generateExecuteAstNodeData } from '../../../../engine/utils/ast-node-tool';
 import { IFormulaCurrentConfigService } from '../../../../services/current-data.service';
 import { IFunctionService } from '../../../../services/function.service';
 import { IFormulaRuntimeService } from '../../../../services/runtime.service';
@@ -35,7 +36,7 @@ import { FUNCTION_NAMES_LOOKUP } from '../../function-names';
 import { Indirect } from '../index';
 
 describe('Test indirect', () => {
-    // const textFunction = new Makearray(FUNCTION_NAMES_LOGICAL.MAKEARRAY);
+    // const testFunction = new Makearray(FUNCTION_NAMES_LOGICAL.MAKEARRAY);
     let get: Injector['get'];
     let lexer: Lexer;
     let astTreeBuilder: AstTreeBuilder;
@@ -59,6 +60,7 @@ describe('Test indirect', () => {
         formulaCurrentConfigService.load({
             formulaData: {},
             arrayFormulaCellData: {},
+            arrayFormulaRange: {},
             forceCalculate: false,
             dirtyRanges: [],
             dirtyNameMap: {},
@@ -89,32 +91,32 @@ describe('Test indirect', () => {
     });
 
     describe('normal', () => {
-        it('string', async () => {
+        it('string', () => {
             const lexerNode = lexer.treeBuilder('=Indirect("B2")');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseReferenceObject).toArrayValueObject().toValue()).toStrictEqual([[4]]);
         });
 
-        it('ref', async () => {
+        it('ref', () => {
             const lexerNode = lexer.treeBuilder('=Indirect(C2)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseReferenceObject).toArrayValueObject().toValue()).toStrictEqual([[4]]);
         });
 
-        it('array', async () => {
+        it('array', () => {
             const lexerNode = lexer.treeBuilder('=Indirect(A1:D3)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as ArrayValueObject).toValue()).toStrictEqual([
                 [ErrorType.VALUE, ErrorType.VALUE, ErrorType.VALUE, ErrorType.VALUE],
@@ -125,22 +127,22 @@ describe('Test indirect', () => {
     });
 
     describe('r1c1', () => {
-        it('r1c1 string', async () => {
+        it('r1c1 string', () => {
             const lexerNode = lexer.treeBuilder('=Indirect("R2C2", 0)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseReferenceObject).toArrayValueObject().toValue()).toStrictEqual([[4]]);
         });
 
-        it('r1c1 ref', async () => {
+        it('r1c1 ref', () => {
             const lexerNode = lexer.treeBuilder('=Indirect(D2, 0)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseReferenceObject).toArrayValueObject().toValue()).toStrictEqual([[4]]);
         });

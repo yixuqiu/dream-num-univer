@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
+import type { IAccessor, ICommand } from '@univerjs/core';
+import type { ISetWorksheetNameMutationParams } from '../mutations/set-worksheet-name.mutation';
+
 import {
     CommandType,
     ICommandService,
@@ -22,10 +24,7 @@ import {
     IUniverInstanceService,
     sequenceExecute,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
 import { SheetInterceptorService } from '../../services/sheet-interceptor/sheet-interceptor.service';
-import type { ISetWorksheetNameMutationParams } from '../mutations/set-worksheet-name.mutation';
 import { SetWorksheetNameMutation, SetWorksheetNameMutationFactory } from '../mutations/set-worksheet-name.mutation';
 import { getSheetCommandTarget } from './utils/target-util';
 
@@ -42,7 +41,7 @@ export const SetWorksheetNameCommand: ICommand = {
     type: CommandType.COMMAND,
     id: 'sheet.command.set-worksheet-name',
 
-    handler: async (accessor: IAccessor, params: ISetWorksheetNameCommandParams) => {
+    handler: (accessor: IAccessor, params: ISetWorksheetNameCommandParams) => {
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const sheetInterceptorService = accessor.get(SheetInterceptorService);
@@ -66,10 +65,18 @@ export const SetWorksheetNameCommand: ICommand = {
             params,
         });
 
-        const redos = [...(interceptorCommands.preRedos ?? []), { id: SetWorksheetNameMutation.id, params: redoMutationParams }, ...interceptorCommands.redos];
-        const undos = [...(interceptorCommands.preUndos ?? []), { id: SetWorksheetNameMutation.id, params: undoMutationParams }, ...interceptorCommands.undos];
+        const redos = [
+            ...(interceptorCommands.preRedos ?? []),
+            { id: SetWorksheetNameMutation.id, params: redoMutationParams },
+            ...interceptorCommands.redos,
+        ];
+        const undos = [
+            ...(interceptorCommands.preUndos ?? []),
+            { id: SetWorksheetNameMutation.id, params: undoMutationParams },
+            ...interceptorCommands.undos,
+        ];
 
-        const result = await sequenceExecute(redos, commandService).result;
+        const result = sequenceExecute(redos, commandService).result;
         if (result) {
             undoRedoService.pushUndoRedo({
                 unitID: unitId,
@@ -79,19 +86,5 @@ export const SetWorksheetNameCommand: ICommand = {
             return true;
         }
         return false;
-
-        // const result = commandService.syncExecuteCommand(SetWorksheetNameMutation.id, redoMutationParams);
-
-        // if (result) {
-        //     undoRedoService.pushUndoRedo({
-        //         unitID: unitId,
-        //         undoMutations: [{ id: SetWorksheetNameMutation.id, params: undoMutationParams }],
-        //         redoMutations: [{ id: SetWorksheetNameMutation.id, params: redoMutationParams }],
-        //     });
-
-        //     return true;
-        // }
-
-        // return false;
     },
 };

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,27 @@
  * limitations under the License.
  */
 
-import { getMenuHiddenObservable, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
+import type { IAccessor } from '@univerjs/core';
 import type { IMenuButtonItem, IMenuSelectorItem } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
-import { SheetsFilterService } from '@univerjs/sheets-filter';
 import { UniverInstanceType } from '@univerjs/core';
+import { RangeProtectionPermissionViewPoint, WorksheetFilterPermission, WorksheetViewPermission } from '@univerjs/sheets';
+import { ClearSheetsFilterCriteriaCommand, ReCalcSheetsFilterCommand, SheetsFilterService, SmartToggleSheetsFilterCommand } from '@univerjs/sheets-filter';
 
+import { getCurrentRangeDisable$, getObservableWithExclusiveRange$ } from '@univerjs/sheets-ui';
+import { getMenuHiddenObservable, MenuItemType } from '@univerjs/ui';
 import { map, of, switchMap } from 'rxjs';
-import { ClearSheetsFilterCriteriaCommand, ReCalcSheetsFilterCommand, SmartToggleSheetsFilterCommand } from '../commands/sheets-filter.command';
 
 export function SmartToggleFilterMenuItemFactory(accessor: IAccessor): IMenuSelectorItem {
     const sheetsFilterService = accessor.get(SheetsFilterService);
 
     return {
         id: SmartToggleSheetsFilterCommand.id,
-        group: MenuGroup.TOOLBAR_FORMULAS_INSERT,
         type: MenuItemType.BUTTON_SELECTOR,
         icon: 'FilterSingle',
         tooltip: 'sheets-filter.toolbar.smart-toggle-filter-tooltip',
-        positions: [MenuPosition.TOOLBAR_START],
         hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
         activated$: sheetsFilterService.activeFilterModel$.pipe(map((model) => !!model)),
+        disabled$: getObservableWithExclusiveRange$(accessor, getCurrentRangeDisable$(accessor, { worksheetTypes: [WorksheetFilterPermission, WorksheetViewPermission], rangeTypes: [RangeProtectionPermissionViewPoint] })),
     };
 }
 
@@ -43,10 +43,8 @@ export function ClearFilterCriteriaMenuItemFactory(accessor: IAccessor): IMenuBu
 
     return {
         id: ClearSheetsFilterCriteriaCommand.id,
-        group: MenuGroup.TOOLBAR_OTHERS,
         type: MenuItemType.BUTTON,
         title: 'sheets-filter.toolbar.clear-filter-criteria',
-        positions: [SmartToggleSheetsFilterCommand.id],
         hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
         disabled$: sheetsFilterService.activeFilterModel$.pipe(switchMap((model) => model?.hasCriteria$.pipe(map((m) => !m)) ?? of(true))),
     };
@@ -57,10 +55,8 @@ export function ReCalcFilterMenuItemFactory(accessor: IAccessor): IMenuButtonIte
 
     return {
         id: ReCalcSheetsFilterCommand.id,
-        group: MenuGroup.TOOLBAR_OTHERS,
         type: MenuItemType.BUTTON,
         title: 'sheets-filter.toolbar.re-calc-filter-conditions',
-        positions: [SmartToggleSheetsFilterCommand.id],
         hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
         disabled$: sheetsFilterService.activeFilterModel$.pipe(switchMap((model) => model?.hasCriteria$.pipe(map((m) => !m)) ?? of(true))),
     };

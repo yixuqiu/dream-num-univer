@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,26 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDisposable } from '@univerjs/core';
 import type { Subject } from 'rxjs';
-
 import type { ISidebarMethodOptions } from '../../views/components/sidebar/interface';
 
-export const ISidebarService = createIdentifier<ISidebarService>('univer.sidebar-service');
+import { createIdentifier } from '@univerjs/core';
 
 export interface ISidebarService {
     readonly sidebarOptions$: Subject<ISidebarMethodOptions>;
+    readonly scrollEvent$: Subject<Event>;
 
     open(params: ISidebarMethodOptions): IDisposable;
+    close(id?: string): void;
 
-    set(params: ISidebarMethodOptions): void;
+    get visible(): boolean;
 
-    close(): void;
+    get options(): ISidebarMethodOptions;
+
+    getContainer(): HTMLElement | undefined;
+    setContainer(element?: HTMLElement): void;
 }
+
+export const ILeftSidebarService = createIdentifier<ISidebarService>('ui.left-sidebar.service');
+export const ISidebarService = createIdentifier<ISidebarService>('ui.sidebar.service');

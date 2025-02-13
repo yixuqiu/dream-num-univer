@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { Subject } from 'rxjs';
-import type { IDisposable } from '@wendellhu/redi';
-import { Inject } from '@wendellhu/redi';
-import type { ISheetLocation } from '@univerjs/sheets';
+import type { IDisposable } from '@univerjs/core';
+import type { ISheetLocationBase } from '@univerjs/sheets';
+import { Disposable, Inject } from '@univerjs/core';
 import { IRenderManagerService } from '@univerjs/engine-render';
+import { Subject } from 'rxjs';
 import { CELL_ALERT_KEY } from '../views/cell-alert';
 import { SheetCanvasPopManagerService } from './canvas-pop-manager.service';
 
@@ -32,13 +32,13 @@ export interface ICellAlert {
     type: CellAlertType;
     title: React.ReactNode;
     message: React.ReactNode;
-    location: ISheetLocation;
+    location: ISheetLocationBase;
     width: number;
     height: number;
     key: string;
 }
 
-export class CellAlertManagerService {
+export class CellAlertManagerService extends Disposable {
     private _currentAlert$ = new Subject<[string, { alert: ICellAlert; dispose: IDisposable }][]>();
     private _currentAlert: Map<string, { alert: ICellAlert; dispose: IDisposable }> = new Map();
 
@@ -51,18 +51,28 @@ export class CellAlertManagerService {
     constructor(
         @IRenderManagerService private readonly _renderManagerService: IRenderManagerService,
         @Inject(SheetCanvasPopManagerService) private readonly _canvasPopManagerService: SheetCanvasPopManagerService
-    ) {}
+    ) {
+        super();
+
+        this.disposeWithMe(() => {
+            this._currentAlert$.complete();
+        });
+    }
 
     showAlert(alert: ICellAlert) {
         let lastPopup = this._currentAlert.get(alert.key);
-        lastPopup && lastPopup.dispose.dispose();
+        if (lastPopup) {
+            lastPopup.dispose.dispose();
+        };
         if (lastPopup) {
             lastPopup.dispose.dispose();
         } else {
             lastPopup = {
                 alert,
                 dispose: {
-                    dispose() {},
+                    dispose() {
+                        // empty
+                    },
                 },
             };
             this._currentAlert.set(alert.key, lastPopup);

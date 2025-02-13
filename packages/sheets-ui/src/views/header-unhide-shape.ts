@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,9 +52,9 @@ export class HeaderUnhideShape<T extends IHeaderUnhideShapeProps = IHeaderUnhide
             this.setShapeProps(props);
         }
 
-        this.onPointerEnterObserver.add(() => this.setShapeProps({ hovered: true }));
-        this.onPointerLeaveObserver.add(() => this.setShapeProps({ hovered: false }));
-        this.onPointerDownObserver.add(() => onClick?.());
+        this.onPointerEnter$.subscribeEvent(() => this.setShapeProps({ hovered: true }));
+        this.onPointerLeave$.subscribeEvent(() => this.setShapeProps({ hovered: false }));
+        this.onPointerDown$.subscribeEvent(() => onClick?.());
     }
 
     setShapeProps(props: Partial<IHeaderUnhideShapeProps>): void {

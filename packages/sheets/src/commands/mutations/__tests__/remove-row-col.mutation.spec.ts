@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-import type { Workbook } from '@univerjs/core';
-import { BooleanNumber, ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
-import { beforeEach, describe, expect, it } from 'vitest';
-
+import type { Injector, Workbook } from '@univerjs/core';
 import type {
     IRemoveColMutationParams,
     IRemoveRowsMutationParams,
 } from '../../../basics/interfaces/mutation-interface';
+import { BooleanNumber, ICommandService, IUniverInstanceService, UniverInstanceType } from '@univerjs/core';
+
+import { beforeEach, describe, expect, it } from 'vitest';
 import { InsertColMutation, InsertRowMutation } from '../insert-row-col.mutation';
 import {
     RemoveColMutation,
@@ -34,16 +33,17 @@ import { createCommandTestBed } from './create-command-test-bed';
 
 describe('Test moving rows & cols', () => {
     let get: Injector['get'];
+    let has: Injector['has'];
     const getWorksheet = () => {
         const univerInstanceService = get(IUniverInstanceService);
         const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet;
     };
     const getId = () => {
         const univerInstanceService = get(IUniverInstanceService);
         const workbook = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return {
             unitId: workbook.getUnitId(),
             subUnitId: worksheet.getSheetId(),
@@ -52,6 +52,7 @@ describe('Test moving rows & cols', () => {
     beforeEach(() => {
         const bed = createCommandTestBed();
         get = bed.get;
+        has = bed.has;
         const commandService = get(ICommandService);
         const commandList = [InsertColMutation, InsertRowMutation, RemoveColMutation, RemoveRowMutation];
         commandList.forEach((cm) => commandService.registerCommand(cm));
@@ -89,7 +90,7 @@ describe('Test moving rows & cols', () => {
                     rangeType: 2,
                 },
             };
-            const undoDeleteParams = RemoveColMutationFactory({ get }, deleteCol);
+            const undoDeleteParams = RemoveColMutationFactory({ get, has }, deleteCol);
 
             expect(undoDeleteParams).toEqual({
                 ...getId(),

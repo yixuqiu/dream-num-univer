@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,18 @@
  */
 
 import type { IRange, IScale } from '@univerjs/core';
-import { Range } from '@univerjs/core';
 import type { SpreadsheetSkeleton, UniverRenderingContext } from '@univerjs/engine-render';
-import { FIX_ONE_PIXEL_BLUR_OFFSET, SheetExtension } from '@univerjs/engine-render';
 import type { IDataBarCellData } from './type';
+import { Range } from '@univerjs/core';
+import { FIX_ONE_PIXEL_BLUR_OFFSET, SheetExtension, SpreadsheetExtensionRegistry } from '@univerjs/engine-render';
 
 export const dataBarUKey = 'sheet-conditional-rule-data-bar';
-const EXTENSION_Z_INDEX = 35;
+export const defaultDataBarPositiveColor = '#ffbe38';
+export const defaultDataBarNativeColor = '#abd91a';
+
+export const defaultPlaceholderColor = '#000';
+
+const EXTENSION_Z_INDEX = 34;
 
 export class DataBar extends SheetExtension {
     private _paddingRightAndLeft = 2;
@@ -30,28 +35,29 @@ export class DataBar extends SheetExtension {
 
     override Z_INDEX = EXTENSION_Z_INDEX;
     _radius = 1;
+
+    // eslint-disable-next-line max-lines-per-function
     override draw(
         ctx: UniverRenderingContext,
-        parentScale: IScale,
+        _parentScale: IScale,
         spreadsheetSkeleton: SpreadsheetSkeleton,
-        diffRanges?: IRange[]
+        diffRanges: IRange[]
     ) {
-        const { rowHeightAccumulation, columnWidthAccumulation, worksheet, dataMergeCache } =
-        spreadsheetSkeleton;
+        const { worksheet } = spreadsheetSkeleton;
+
         if (!worksheet) {
             return false;
         }
         ctx.save();
-        ctx.globalCompositeOperation = 'destination-over';
+        // ctx.globalCompositeOperation = 'destination-over';
         Range.foreach(spreadsheetSkeleton.rowColumnSegment, (row, col) => {
+            if (!worksheet.getRowVisible(row) || !worksheet.getColVisible(col)) {
+                return;
+            }
             const cellData = worksheet.getCell(row, col) as IDataBarCellData;
             if (cellData && cellData.dataBar) {
-                if (!worksheet.getColVisible(col) || !worksheet.getRowRawVisible(row)) {
-                    return;
-                }
-
                 const { color, value, startPoint, isGradient } = cellData.dataBar;
-                const cellInfo = this.getCellIndex(row, col, rowHeightAccumulation, columnWidthAccumulation, dataMergeCache);
+                const cellInfo = spreadsheetSkeleton.getCellWithCoordByIndex(row, col, false);
                 let { isMerged, isMergedMainCell, mergeInfo, startY, endY, startX, endX } = cellInfo;
                 if (isMerged) {
                     return;
@@ -150,3 +156,5 @@ export class DataBar extends SheetExtension {
         ctx.fill();
     }
 }
+
+SpreadsheetExtensionRegistry.add(DataBar);

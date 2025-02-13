@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,33 +14,35 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
 import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
-import { ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { BaseFunction } from '../../base-function';
 
 export class Power extends BaseFunction {
+    override minParams = 2;
+
+    override maxParams = 2;
+
     override calculate(number: BaseValueObject, power: BaseValueObject) {
-        if (number == null || power == null) {
-            return ErrorValueObject.create(ErrorType.NA);
+        let _number = number;
+
+        if (_number.isString()) {
+            _number = _number.convertToNumberObjectValue();
         }
 
-        if (number.isString()) {
-            number = number.convertToNumberObjectValue();
+        if (_number.isError()) {
+            return _number;
         }
 
-        if (number.isError()) {
-            return number;
+        let _power = power;
+
+        if (_power.isString()) {
+            _power = _power.convertToNumberObjectValue();
         }
 
-        if (power.isString()) {
-            power = power.convertToNumberObjectValue();
+        if (_power.isError()) {
+            return _power;
         }
 
-        if (power.isError()) {
-            return power;
-        }
-
-        return number.pow(power);
+        return _number.pow(_power);
     }
 }

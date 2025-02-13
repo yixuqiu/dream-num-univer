@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,19 @@
  * limitations under the License.
  */
 
-import type { IViewportBound } from '../../basics/vector2';
+import type { IViewportInfo } from '../../basics/vector2';
 import type { UniverRenderingContext } from '../../context';
-import { Rect } from '../../shape';
-import { Liquid } from './liquid';
+import type { IPathProps } from '../../shape';
 import type { IDocumentsConfig } from './doc-component';
-import { DocComponent } from './doc-component';
 import type { DocumentSkeleton } from './layout/doc-skeleton';
+import { DocumentFlavor } from '@univerjs/core';
+import { Path, Rect } from '../../shape';
+import { DocComponent } from './doc-component';
+import { Liquid } from './liquid';
 
 const PAGE_STROKE_COLOR = 'rgba(198, 198, 198, 1)';
 const PAGE_FILL_COLOR = 'rgba(255, 255, 255, 1)';
+const MARGIN_STROKE_COLOR = 'rgba(158, 158, 158, 1)';
 
 export class DocBackground extends DocComponent {
     private _drawLiquid: Liquid;
@@ -40,10 +43,17 @@ export class DocBackground extends DocComponent {
         return new DocBackground(oKey, documentSkeleton, config);
     }
 
-    override draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    override draw(ctx: UniverRenderingContext, bounds?: IViewportInfo) {
         const skeletonData = this.getSkeleton()?.getSkeletonData();
+        const docDataModel = this.getSkeleton()?.getViewModel().getDataModel();
 
-        if (skeletonData == null) {
+        if (skeletonData == null || docDataModel == null) {
+            return;
+        }
+
+        const { documentFlavor } = docDataModel.getSnapshot().documentStyle;
+
+        if (documentFlavor !== DocumentFlavor.TRADITIONAL) {
             return;
         }
 
@@ -67,15 +77,16 @@ export class DocBackground extends DocComponent {
                 );
                 pageLeft += x;
                 pageTop += y;
+
                 continue;
             }
 
-            // Draw background.
-            const { width, pageWidth, height, pageHeight } = page;
+            // Draw background and margin identifier.
+            const { width, pageWidth, height, pageHeight, originMarginTop, originMarginBottom, marginLeft, marginRight } = page;
 
             ctx.save();
             ctx.translate(pageLeft - 0.5, pageTop - 0.5);
-            const options = {
+            const backgroundOptions = {
                 width: pageWidth ?? width,
                 height: pageHeight ?? height,
                 strokeWidth: 1,
@@ -83,7 +94,52 @@ export class DocBackground extends DocComponent {
                 fill: PAGE_FILL_COLOR,
                 zIndex: 3,
             };
-            Rect.drawWith(ctx, options);
+
+            Rect.drawWith(ctx, backgroundOptions);
+
+            const IDENTIFIER_WIDTH = 15;
+            const marginIdentification: IPathProps = {
+                dataArray: [{
+                    command: 'M',
+                    points: [marginLeft - IDENTIFIER_WIDTH, originMarginTop],
+                }, {
+                    command: 'L',
+                    points: [marginLeft, originMarginTop],
+                }, {
+                    command: 'L',
+                    points: [marginLeft, originMarginTop - IDENTIFIER_WIDTH],
+                }, {
+                    command: 'M',
+                    points: [pageWidth - marginRight + IDENTIFIER_WIDTH, originMarginTop],
+                }, {
+                    command: 'L',
+                    points: [pageWidth - marginRight, originMarginTop],
+                }, {
+                    command: 'L',
+                    points: [pageWidth - marginRight, originMarginTop - IDENTIFIER_WIDTH],
+                }, {
+                    command: 'M',
+                    points: [marginLeft - IDENTIFIER_WIDTH, pageHeight - originMarginBottom],
+                }, {
+                    command: 'L',
+                    points: [marginLeft, pageHeight - originMarginBottom],
+                }, {
+                    command: 'L',
+                    points: [marginLeft, pageHeight - originMarginBottom + IDENTIFIER_WIDTH],
+                }, {
+                    command: 'M',
+                    points: [pageWidth - marginRight + IDENTIFIER_WIDTH, pageHeight - originMarginBottom],
+                }, {
+                    command: 'L',
+                    points: [pageWidth - marginRight, pageHeight - originMarginBottom],
+                }, {
+                    command: 'L',
+                    points: [pageWidth - marginRight, pageHeight - originMarginBottom + IDENTIFIER_WIDTH],
+                }] as unknown as IPathProps['dataArray'],
+                strokeWidth: 1.5,
+                stroke: MARGIN_STROKE_COLOR,
+            };
+            Path.drawWith(ctx, marginIdentification);
             ctx.restore();
 
             const { x, y } = this._drawLiquid.translatePage(
@@ -92,6 +148,7 @@ export class DocBackground extends DocComponent {
                 this.pageMarginLeft,
                 this.pageMarginTop
             );
+
             pageLeft += x;
             pageTop += y;
         }
@@ -103,7 +160,7 @@ export class DocBackground extends DocComponent {
         return this;
     }
 
-    protected override _draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    protected override _draw(ctx: UniverRenderingContext, bounds?: IViewportInfo) {
         this.draw(ctx, bounds);
     }
 }

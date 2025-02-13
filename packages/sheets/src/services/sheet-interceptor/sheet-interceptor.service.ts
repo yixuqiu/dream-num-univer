@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,49 +14,95 @@
  * limitations under the License.
  */
 
+/* eslint-disable ts/no-explicit-any */
+
 import type {
     ICellData,
+    ICellDataForSheetInterceptor,
+    ICellInterceptor,
     ICommandInfo,
+    IComposeInterceptors,
+    IDisposable,
     IInterceptor,
+    IRange,
     IUndoRedoCommandInfosByInterceptor,
     Nullable,
     Workbook,
     Worksheet,
 } from '@univerjs/core';
+import type { ISheetLocation } from './utils/interceptor';
+
 import {
     composeInterceptors,
+    createInterceptorKey,
     Disposable,
     DisposableCollection,
+    InterceptorEffectEnum,
+    InterceptorManager,
     IUniverInstanceService,
-    LifecycleStages,
-    OnLifecycle,
     remove,
     toDisposable,
+    Tools,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-
 import { INTERCEPTOR_POINT } from './interceptor-const';
+
+export interface IBeforeCommandInterceptor {
+    priority?: number;
+    performCheck(info: ICommandInfo): Promise<boolean>;
+}
 
 export interface ICommandInterceptor {
     priority?: number;
     getMutations(command: ICommandInfo): IUndoRedoCommandInfosByInterceptor;
 }
 
+export interface IRangesInfo {
+    unitId: string;
+    subUnitId: string;
+    ranges: IRange[];
+}
+
+export interface IRangeInterceptors {
+    priority?: number;
+    getMutations(rangesInfo: IRangesInfo): IUndoRedoCommandInfosByInterceptor;
+}
+
+interface ISheetLocationForEditor extends ISheetLocation {
+    origin: Nullable<ICellData>;
+}
+
+export const BEFORE_CELL_EDIT = createInterceptorKey<ICellDataForSheetInterceptor, ISheetLocationForEditor>('BEFORE_CELL_EDIT');
+export const AFTER_CELL_EDIT = createInterceptorKey<ICellDataForSheetInterceptor, ISheetLocationForEditor>('AFTER_CELL_EDIT');
+export const AFTER_CELL_EDIT_ASYNC = createInterceptorKey<Promise<Nullable<ICellDataForSheetInterceptor>>, ISheetLocationForEditor>('AFTER_CELL_EDIT_ASYNC');
+
 /**
  * This class expose methods for sheet features to inject code to sheet underlying logic.
- *
- * It would inject Workbook & Worksheet.
  */
-@OnLifecycle(LifecycleStages.Starting, SheetInterceptorService)
 export class SheetInterceptorService extends Disposable {
     private _interceptorsByName: Map<string, Array<IInterceptor<unknown, unknown>>> = new Map();
     private _commandInterceptors: ICommandInterceptor[] = [];
+    private _rangeInterceptors: IRangeInterceptors[] = [];
+
+    private _beforeCommandInterceptor: IBeforeCommandInterceptor[] = [];
+    private _afterCommandInterceptors: ICommandInterceptor[] = [];
 
     private readonly _workbookDisposables = new Map<string, IDisposable>();
     private readonly _worksheetDisposables = new Map<string, IDisposable>();
 
-    constructor(@IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService) {
+    private _interceptorsDirty = false;
+    private _composedInterceptorByKey: Map<string, ReturnType<IComposeInterceptors<any, any>>> = new Map();
+
+    readonly writeCellInterceptor = new InterceptorManager({
+        BEFORE_CELL_EDIT,
+        AFTER_CELL_EDIT,
+        AFTER_CELL_EDIT_ASYNC,
+    });
+
+    /** @ignore */
+    constructor(
+        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService
+    ) {
         super();
 
         // When a workbook is created or a worksheet is added after when workbook is created,
@@ -72,6 +118,7 @@ export class SheetInterceptorService extends Disposable {
         // register default viewModel interceptor
         this.intercept(INTERCEPTOR_POINT.CELL_CONTENT, {
             priority: -1,
+            effect: InterceptorEffectEnum.Style | InterceptorEffectEnum.Value,
             handler(value, context): Nullable<ICellData> {
                 const rawData = context.worksheet.getCellRaw(context.row, context.col);
                 if (value) {
@@ -81,6 +128,21 @@ export class SheetInterceptorService extends Disposable {
                 return rawData;
             },
         });
+
+        this.disposeWithMe(this.writeCellInterceptor.intercept(AFTER_CELL_EDIT, {
+            priority: -1,
+            handler: (_value) => _value,
+        }));
+
+        this.disposeWithMe(this.writeCellInterceptor.intercept(BEFORE_CELL_EDIT, {
+            priority: -1,
+            handler: (_value) => _value,
+        }));
+
+        this.disposeWithMe(this.writeCellInterceptor.intercept(AFTER_CELL_EDIT_ASYNC, {
+            priority: -1,
+            handler: (_value) => _value,
+        }));
     }
 
     override dispose(): void {
@@ -89,8 +151,20 @@ export class SheetInterceptorService extends Disposable {
         this._workbookDisposables.forEach((disposable) => disposable.dispose());
         this._workbookDisposables.clear();
         this._worksheetDisposables.clear();
+
+        this._interceptorsByName.clear();
     }
 
+    // #region intercept command execution
+
+    /**
+     * Add a listener function to a specific command to add affiliated mutations. It should be called in controllers.
+     *
+     * Pairs with {@link onCommandExecute}.
+     *
+     * @param interceptor
+     * @returns
+     */
     interceptCommand(interceptor: ICommandInterceptor): IDisposable {
         if (this._commandInterceptors.includes(interceptor)) {
             throw new Error('[SheetInterceptorService]: Interceptor already exists!');
@@ -107,8 +181,8 @@ export class SheetInterceptorService extends Disposable {
      * @param command
      * @returns
      */
-    onCommandExecute(command: ICommandInfo): IUndoRedoCommandInfosByInterceptor {
-        const infos = this._commandInterceptors.map((i) => i.getMutations(command));
+    onCommandExecute(info: ICommandInfo): IUndoRedoCommandInfosByInterceptor {
+        const infos = this._commandInterceptors.map((i) => i.getMutations(info));
 
         return {
             preUndos: infos.map((i) => i.preUndos ?? []).flat(),
@@ -118,26 +192,168 @@ export class SheetInterceptorService extends Disposable {
         };
     }
 
-    intercept<T extends IInterceptor<any, any>>(name: T, interceptor: T) {
+    interceptAfterCommand(interceptor: ICommandInterceptor): IDisposable {
+        if (this._afterCommandInterceptors.includes(interceptor)) {
+            throw new Error('[SheetInterceptorService]: Interceptor already exists!');
+        }
+
+        this._afterCommandInterceptors.push(interceptor);
+        this._afterCommandInterceptors.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+        return this.disposeWithMe(toDisposable(() => remove(this._afterCommandInterceptors, interceptor)));
+    }
+
+    afterCommandExecute(info: ICommandInfo): IUndoRedoCommandInfosByInterceptor {
+        const infos = this._afterCommandInterceptors.map((i) => i.getMutations(info));
+
+        return {
+            undos: infos.map((i) => i.undos).flat(),
+            redos: infos.map((i) => i.redos).flat(),
+        };
+    }
+
+    /**
+     * Add a listener function to a specific command to determine if the command can execute mutations. It should be
+     * called in controllers.
+     *
+     * Pairs with {@link beforeCommandExecute}.
+     *
+     * @param interceptor
+     * @returns
+     */
+    interceptBeforeCommand(interceptor: IBeforeCommandInterceptor): IDisposable {
+        if (this._beforeCommandInterceptor.includes(interceptor)) {
+            throw new Error('[SheetInterceptorService]: Interceptor already exists!');
+        }
+
+        this._beforeCommandInterceptor.push(interceptor);
+        this._beforeCommandInterceptor.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+        return this.disposeWithMe(toDisposable(() => remove(this._beforeCommandInterceptor, interceptor)));
+    }
+
+    /**
+     * before command execute, call this method to get the flag of whether it can be executed the command，
+     * @param info ICommandInfo
+     * @returns Promise<boolean>
+     */
+    async beforeCommandExecute(info: ICommandInfo): Promise<boolean> {
+        const allPerformCheckRes = await Promise.all(this._beforeCommandInterceptor.map((i) => i.performCheck(info)));
+        return allPerformCheckRes.every((perform) => perform);
+    }
+
+    // #endregion
+
+    // #region intercept ranges - mainly for pivot table currently (2024/10/28).
+
+    /**
+     * By adding callbacks to some Ranges can get some additional mutations, such as clearing all plugin data in a certain area.
+     * @param interceptor IRangeInterceptors
+     * @returns IDisposable
+     */
+    interceptRanges(interceptor: IRangeInterceptors): IDisposable {
+        if (this._rangeInterceptors.includes(interceptor)) {
+            throw new Error('[SheetInterceptorService]: Interceptor already exists!');
+        }
+
+        this._rangeInterceptors.push(interceptor);
+        this._rangeInterceptors.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+        return this.disposeWithMe(toDisposable(() => remove(this._rangeInterceptors, interceptor)));
+    }
+
+    generateMutationsByRanges(info: IRangesInfo): IUndoRedoCommandInfosByInterceptor {
+        const infos = this._rangeInterceptors.map((i) => i.getMutations(info));
+
+        return {
+            preUndos: infos.map((i) => i.preUndos ?? []).flat(),
+            undos: infos.map((i) => i.undos).flat(),
+            preRedos: infos.map((i) => i.preRedos ?? []).flat(),
+            redos: infos.map((i) => i.redos).flat(),
+        };
+    }
+
+    // #endregion
+
+    // #region intercept on writing cell
+
+    async onWriteCell(workbook: Workbook, worksheet: Worksheet, row: number, col: number, cellData: ICellData) {
+        const context = {
+            subUnitId: worksheet.getSheetId(),
+            unitId: workbook.getUnitId(),
+            workbook: workbook!,
+            worksheet,
+            row,
+            col,
+            origin: Tools.deepClone(cellData),
+        };
+
+        const cell = this.writeCellInterceptor.fetchThroughInterceptors(AFTER_CELL_EDIT)(cellData, context);
+        const finalCell = await this.writeCellInterceptor.fetchThroughInterceptors(AFTER_CELL_EDIT_ASYNC)(Promise.resolve(cell), context);
+        return finalCell;
+    }
+
+    // #endregion
+
+    intercept<T extends IInterceptor<any, any>>(name: T, interceptor: T): IDisposable {
         const key = name as unknown as string;
         if (!this._interceptorsByName.has(key)) {
             this._interceptorsByName.set(key, []);
         }
+
         const interceptors = this._interceptorsByName.get(key)!;
         interceptors.push(interceptor);
+        const sortedInterceptors = interceptors.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
-        this._interceptorsByName.set(
-            key,
-            interceptors.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
-        );
+        this._interceptorsDirty = true;
 
-        return this.disposeWithMe(toDisposable(() => remove(this._interceptorsByName.get(key)!, interceptor)));
+        if (key === INTERCEPTOR_POINT.CELL_CONTENT as unknown as string) {
+            const JOINED_EFFECT = InterceptorEffectEnum.Style | InterceptorEffectEnum.Value;
+            this._interceptorsByName.set(`${key}-${JOINED_EFFECT}`, sortedInterceptors);
+
+            const BOTH_EFFECT = InterceptorEffectEnum.Style | InterceptorEffectEnum.Value;
+            this._interceptorsByName.set(
+                `${key}-${(InterceptorEffectEnum.Style)}`,
+                (sortedInterceptors as ICellInterceptor<unknown, unknown>[]).filter((i) => ((i.effect || BOTH_EFFECT) & InterceptorEffectEnum.Style) > 0)
+            );
+            this._interceptorsByName.set(
+                `${key}-${(InterceptorEffectEnum.Value)}`,
+                (sortedInterceptors as ICellInterceptor<unknown, unknown>[]).filter((i) => ((i.effect || BOTH_EFFECT) & InterceptorEffectEnum.Value) > 0)
+            );
+
+            return this.disposeWithMe(toDisposable(() => {
+                remove(this._interceptorsByName.get(key)!, interceptor);
+                remove(this._interceptorsByName.get(`${key}-${JOINED_EFFECT}`)!, interceptor);
+                remove(this._interceptorsByName.get(`${key}-${(InterceptorEffectEnum.Style)}`)!, interceptor);
+                remove(this._interceptorsByName.get(`${key}-${(InterceptorEffectEnum.Value)}`)!, interceptor);
+            }));
+        } else {
+            this._interceptorsByName.set(key, sortedInterceptors);
+            return this.disposeWithMe(toDisposable(() => remove(this._interceptorsByName.get(key)!, interceptor)));
+        }
     }
 
-    fetchThroughInterceptors<T, C>(name: IInterceptor<T, C>) {
-        const key = name as unknown as string;
-        const interceptors = this._interceptorsByName.get(key) as unknown as Array<typeof name>;
-        return composeInterceptors<T, C>(interceptors || []);
+    fetchThroughInterceptors<T, C>(
+        name: IInterceptor<T, C>,
+        effect?: InterceptorEffectEnum,
+        _key?: string,
+        filter?: (interceptor: IInterceptor<any, any>) => boolean
+    ): ReturnType<IComposeInterceptors<T, C>> {
+        const byNamesKey = effect === undefined ? name as unknown as string : `${name as unknown as string}-${effect}`;
+        const key = _key ?? byNamesKey;
+        let composed = this._composedInterceptorByKey.get(key);
+
+        if (!composed || this._interceptorsDirty) {
+            let interceptors = this._interceptorsByName.get(byNamesKey) as unknown as Array<IInterceptor<any, any>> | undefined;
+            if (interceptors && filter) {
+                interceptors = interceptors.filter(filter);
+            }
+
+            composed = composeInterceptors<T, C>(interceptors || []);
+            this._composedInterceptorByKey.set(key, composed);
+        }
+
+        return composed;
     }
 
     private _interceptWorkbook(workbook: Workbook): void {
@@ -153,9 +369,16 @@ export class SheetInterceptorService extends Disposable {
                 sheetInterceptorService._worksheetDisposables.set(getWorksheetDisposableID(unitId, worksheet), sheetDisposables);
 
                 sheetDisposables.add(viewModel.registerCellContentInterceptor({
-                    getCell(row: number, col: number): Nullable<ICellData> {
-                        return sheetInterceptorService.fetchThroughInterceptors(INTERCEPTOR_POINT.CELL_CONTENT)(
-                            worksheet.getCellRaw(row, col),
+                    getCell(
+                        row: number,
+                        col: number,
+                        effect: InterceptorEffectEnum,
+                        key?: string,
+                        filter?: (interceptor: IInterceptor<any, any>) => boolean
+                    ): Nullable<ICellData> {
+                        const rawData = worksheet.getCellRaw(row, col);
+                        return sheetInterceptorService.fetchThroughInterceptors(INTERCEPTOR_POINT.CELL_CONTENT, effect, key, filter)(
+                            rawData,
                             {
                                 unitId,
                                 subUnitId,
@@ -163,8 +386,8 @@ export class SheetInterceptorService extends Disposable {
                                 col,
                                 worksheet,
                                 workbook,
-                            }
-                        );
+                                rawData,
+                            });
                     },
                 }));
 
@@ -188,12 +411,12 @@ export class SheetInterceptorService extends Disposable {
         // We should intercept all instantiated worksheet and should subscribe to
         // worksheet creation event to intercept newly created worksheet.
         workbook.getSheets().forEach((worksheet) => interceptViewModel(worksheet));
-        disposables.add(toDisposable(workbook.sheetCreated$.subscribe((worksheet) => interceptViewModel(worksheet))));
+        disposables.add(workbook.sheetCreated$.subscribe((worksheet) => interceptViewModel(worksheet)));
 
         // Dispose all underlying interceptors when workbook is disposed.
         disposables.add(toDisposable(() => workbook.getSheets().forEach((worksheet) => this._disposeSheetInterceptor(unitId, worksheet))));
         // Dispose interceptor when a worksheet is destroyed.
-        disposables.add(toDisposable(workbook.sheetDisposed$.subscribe((worksheet) => this._disposeSheetInterceptor(unitId, worksheet))));
+        disposables.add(workbook.sheetDisposed$.subscribe((worksheet) => this._disposeSheetInterceptor(unitId, worksheet)));
 
         this._workbookDisposables.set(unitId, disposables);
     }

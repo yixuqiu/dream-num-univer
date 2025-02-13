@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import type { EventState, ICellData, IPageElement } from '@univerjs/core';
-import { IContextService, LocaleService, ObjectMatrix, PageElementType, Styles, Worksheet } from '@univerjs/core';
+import type { EventState, IPageElement } from '@univerjs/core';
 import type { IScrollObserverParam, IWheelEvent } from '@univerjs/engine-render';
+import { IConfigService, IContextService, Inject, Injector, LocaleService, PageElementType, Styles, Worksheet } from '@univerjs/core';
 import {
-    EVENT_TYPE,
     getColor,
     Rect,
     Scene,
@@ -30,8 +29,6 @@ import {
     SpreadsheetSkeleton,
     Viewport,
 } from '@univerjs/engine-render';
-import type { Injector } from '@wendellhu/redi';
-import { Inject } from '@wendellhu/redi';
 
 import { CanvasObjectProviderRegistry, ObjectAdaptor } from '../adaptor';
 
@@ -55,7 +52,9 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
 
     constructor(
         @Inject(LocaleService) private readonly _localeService: LocaleService,
-        @IContextService private readonly _contextService: IContextService
+        @IContextService private readonly _contextService: IContextService,
+        @IConfigService private readonly _configService: IConfigService,
+        @Inject(Injector) private readonly _injector: Injector
     ) {
         super();
     }
@@ -91,23 +90,18 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
 
         const { worksheet, styles } = spreadsheetModel;
 
-        const { cellData } = worksheet;
-
-        const cellDataMatrix = new ObjectMatrix<ICellData>(cellData);
         const styleModel = new Styles(styles);
         const spreadsheetSkeleton = new SpreadsheetSkeleton(
             new Worksheet(id, worksheet, styleModel), // FIXME: worksheet in slide doesn't has a Worksheet object
-            worksheet,
-            cellDataMatrix,
             styleModel,
             this._localeService,
-            this._contextService
+            this._contextService,
+            this._configService,
+            this._injector
         );
 
         const { rowTotalHeight, columnTotalWidth, rowHeaderWidth, columnHeaderHeight } = spreadsheetSkeleton;
-
         const allWidth = columnTotalWidth + worksheet.rowHeader.width || 0;
-
         const allHeight = rowTotalHeight + worksheet.columnHeader.height || 0;
 
         const sv = new SceneViewer(SHEET_VIEW_KEY.SCENE_VIEWER + id, {
@@ -123,7 +117,6 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
             skewY,
             flipX,
             flipY,
-            isTransformer: true,
             forceRender: true,
         });
         const scene = new Scene(SHEET_VIEW_KEY.SCENE + id, sv, {
@@ -154,6 +147,7 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
         return sv;
     }
 
+    // eslint-disable-next-line max-lines-per-function
     private _updateViewport(
         id: string,
         rowHeaderWidth: number,
@@ -172,6 +166,8 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
             top: columnHeaderHeightScale,
             bottom: 0,
             right: 0,
+            explicitViewportWidthSet: false,
+            explicitViewportHeightSet: false,
             isWheelPreventDefaultX: true,
         });
         const viewTop = new Viewport(SHEET_VIEW_KEY.VIEW_TOP + id, scene, {
@@ -179,6 +175,7 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
             height: columnHeaderHeightScale,
             top: 0,
             right: 0,
+            explicitViewportWidthSet: false,
             isWheelPreventDefaultX: true,
         });
         const viewLeft = new Viewport(SHEET_VIEW_KEY.VIEW_LEFT + id, scene, {
@@ -186,10 +183,11 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
             bottom: 0,
             top: columnHeaderHeightScale,
             width: rowHeaderWidthScale,
+            explicitViewportHeightSet: false,
             isWheelPreventDefaultX: true,
         });
 
-        new Viewport(SHEET_VIEW_KEY.VIEW_LEFT_TOP + id, scene, {
+        const VIEW_LEFT_TOP = new Viewport(SHEET_VIEW_KEY.VIEW_LEFT_TOP + id, scene, {
             left: 0,
             top: 0,
             width: rowHeaderWidthScale,
@@ -198,19 +196,19 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
         });
         // viewMain.linkToViewport(viewLeft, LINK_VIEW_PORT_TYPE.Y);
         // viewMain.linkToViewport(viewTop, LINK_VIEW_PORT_TYPE.X);
-        viewMain.onScrollAfterObserver.add((param: IScrollObserverParam) => {
-            const { scrollX, scrollY, actualScrollX, actualScrollY } = param;
+        viewMain.onScrollAfter$.subscribeEvent((param: IScrollObserverParam) => {
+            const { scrollX, scrollY, viewportScrollX, viewportScrollY } = param;
 
             viewTop
-                .updateScroll({
+                .updateScrollVal({
                     scrollX,
-                    actualScrollX,
+                    viewportScrollX,
                 });
 
             viewLeft
-                .updateScroll({
+                .updateScrollVal({
                     scrollY,
-                    actualScrollY,
+                    viewportScrollY,
                 });
         });
 
@@ -221,7 +219,7 @@ export class SpreadsheetAdaptor extends ObjectAdaptor {
         });
 
         // 鼠标滚轮缩放
-        scene.on(EVENT_TYPE.wheel, (evt: unknown, state: EventState) => {
+        scene.onMouseWheel$.subscribeEvent((evt: unknown, state: EventState) => {
             const e = evt as IWheelEvent;
             if (e.ctrlKey) {
                 const deltaFactor = Math.abs(e.deltaX);

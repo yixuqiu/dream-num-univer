@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import type { BooleanNumber, IMutation, IObjectArrayPrimitiveType, IRange, Nullable } from '@univerjs/core';
 import { CommandType, IUniverInstanceService } from '@univerjs/core';
-import type { IRowAutoHeightInfo } from '@univerjs/engine-render';
-import type { IAccessor } from '@wendellhu/redi';
+import type { BooleanNumber, IMutation, IObjectArrayPrimitiveType, IRange, IRowAutoHeightInfo, Nullable, Worksheet } from '@univerjs/core';
+import { getSheetCommandTarget } from '../commands/utils/target-util';
 
 const MAXIMUM_ROW_HEIGHT = 2000;
 
@@ -42,17 +41,10 @@ export interface ISetWorksheetRowAutoHeightMutationParams {
 }
 
 export const SetWorksheetRowHeightMutationFactory = (
-    accessor: IAccessor,
-    params: ISetWorksheetRowHeightMutationParams
+    params: ISetWorksheetRowHeightMutationParams,
+    worksheet: Worksheet
 ): ISetWorksheetRowHeightMutationParams => {
     const { unitId, subUnitId, ranges } = params;
-    const univerInstanceService = accessor.get(IUniverInstanceService);
-    const workbook = univerInstanceService.getUniverSheetInstance(unitId);
-    const worksheet = workbook?.getSheetBySheetId(subUnitId);
-
-    if (worksheet == null) {
-        throw new Error('worksheet is null error!');
-    }
 
     const rowHeight: IObjectArrayPrimitiveType<Nullable<number>> = {};
     const manager = worksheet.getRowManager();
@@ -73,14 +65,10 @@ export const SetWorksheetRowHeightMutationFactory = (
 };
 
 export const SetWorksheetRowIsAutoHeightMutationFactory = (
-    accessor: IAccessor,
-    params: ISetWorksheetRowIsAutoHeightMutationParams
+    params: ISetWorksheetRowIsAutoHeightMutationParams,
+    worksheet: Worksheet
 ): ISetWorksheetRowIsAutoHeightMutationParams => {
     const { unitId, subUnitId, ranges } = params;
-
-    const univerInstanceService = accessor.get(IUniverInstanceService);
-    const workbook = univerInstanceService.getUniverSheetInstance(unitId)!;
-    const worksheet = workbook.getSheetBySheetId(subUnitId)!;
 
     const autoHeightHash: IObjectArrayPrimitiveType<Nullable<BooleanNumber>> = {};
     const manager = worksheet.getRowManager();
@@ -102,25 +90,18 @@ export const SetWorksheetRowIsAutoHeightMutationFactory = (
 };
 
 export const SetWorksheetRowAutoHeightMutationFactory = (
-    accessor: IAccessor,
-    params: ISetWorksheetRowAutoHeightMutationParams
+    params: ISetWorksheetRowAutoHeightMutationParams,
+    worksheet: Worksheet
 ): ISetWorksheetRowAutoHeightMutationParams => {
     const { unitId, subUnitId, rowsAutoHeightInfo } = params;
-    const univerInstanceService = accessor.get(IUniverInstanceService);
-    const workbook = univerInstanceService.getUniverSheetInstance(unitId);
-    const worksheet = workbook?.getSheetBySheetId(subUnitId);
-
     const results: IRowAutoHeightInfo[] = [];
-    const manager = worksheet!.getRowManager();
+    const manager = worksheet.getRowManager();
 
     for (const rowInfo of rowsAutoHeightInfo) {
         const { row } = rowInfo;
         const { ah } = manager.getRowOrCreate(row);
 
-        results.push({
-            row,
-            autoHeight: ah,
-        });
+        results.push({ row, autoHeight: ah });
     }
 
     return {
@@ -134,18 +115,14 @@ export const SetWorksheetRowHeightMutation: IMutation<ISetWorksheetRowHeightMuta
     id: 'sheet.mutation.set-worksheet-row-height',
     type: CommandType.MUTATION,
     handler: (accessor, params) => {
-        const { unitId, subUnitId, ranges, rowHeight } = params;
+        const { ranges, rowHeight } = params;
         const univerInstanceService = accessor.get(IUniverInstanceService);
-        const workbook = univerInstanceService.getUniverSheetInstance(unitId);
+        const target = getSheetCommandTarget(univerInstanceService, params);
+        if (!target) return false;
 
-        const worksheet = workbook?.getSheetBySheetId(subUnitId);
-        if (!worksheet) {
-            return false;
-        }
-
-        const defaultRowHeight = worksheet.getConfig().defaultRowHeight;
+        const { worksheet } = target;
         const manager = worksheet.getRowManager();
-
+        const defaultRowHeight = worksheet.getConfig().defaultRowHeight;
         for (const { startRow, endRow } of ranges) {
             for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
                 const row = manager.getRowOrCreate(rowIndex);
@@ -153,7 +130,7 @@ export const SetWorksheetRowHeightMutation: IMutation<ISetWorksheetRowHeightMuta
                 if (typeof rowHeight === 'number') {
                     row.h = rowHeight;
                 } else {
-                    row.h = rowHeight[rowIndex] ?? defaultRowHeight;
+                    row.h = rowHeight[rowIndex] ?? defaultRowHeight; // Start from startRow
                 }
 
                 row.h = Math.min(MAXIMUM_ROW_HEIGHT, row.h);
@@ -168,18 +145,12 @@ export const SetWorksheetRowIsAutoHeightMutation: IMutation<ISetWorksheetRowIsAu
     id: 'sheet.mutation.set-worksheet-row-is-auto-height',
     type: CommandType.MUTATION,
     handler: (accessor, params) => {
-        const { unitId, subUnitId, ranges, autoHeightInfo } = params;
+        const { ranges, autoHeightInfo } = params;
         const univerInstanceService = accessor.get(IUniverInstanceService);
-        const workbook = univerInstanceService.getUniverSheetInstance(unitId);
+        const target = getSheetCommandTarget(univerInstanceService, params);
+        if (!target) return false;
 
-        const worksheet = workbook?.getSheetBySheetId(subUnitId);
-        if (!worksheet) {
-            return false;
-        }
-
-        const defaultRowIsAutoHeight = undefined;
-        const manager = worksheet.getRowManager();
-
+        const manager = target.worksheet.getRowManager();
         for (const { startRow, endRow } of ranges) {
             for (let rowIndex = startRow; rowIndex <= endRow; rowIndex++) {
                 const row = manager.getRowOrCreate(rowIndex);
@@ -187,7 +158,7 @@ export const SetWorksheetRowIsAutoHeightMutation: IMutation<ISetWorksheetRowIsAu
                 if (typeof autoHeightInfo === 'number') {
                     row.ia = autoHeightInfo;
                 } else {
-                    row.ia = autoHeightInfo[rowIndex - startRow] ?? defaultRowIsAutoHeight;
+                    row.ia = autoHeightInfo[rowIndex] ?? undefined;
                 }
             }
         }
@@ -200,16 +171,12 @@ export const SetWorksheetRowAutoHeightMutation: IMutation<ISetWorksheetRowAutoHe
     id: 'sheet.mutation.set-worksheet-row-auto-height',
     type: CommandType.MUTATION,
     handler: (accessor, params) => {
-        const { unitId, subUnitId, rowsAutoHeightInfo } = params;
+        const { rowsAutoHeightInfo } = params;
         const univerInstanceService = accessor.get(IUniverInstanceService);
-        const workbook = univerInstanceService.getUniverSheetInstance(unitId);
-        const worksheet = workbook?.getSheetBySheetId(subUnitId);
+        const target = getSheetCommandTarget(univerInstanceService, params);
+        if (!target) return false;
 
-        if (!worksheet || !workbook) {
-            return false;
-        }
-
-        const rowManager = worksheet.getRowManager();
+        const rowManager = target.worksheet.getRowManager();
 
         for (const { row, autoHeight } of rowsAutoHeightInfo) {
             const curRow = rowManager.getRowOrCreate(row);

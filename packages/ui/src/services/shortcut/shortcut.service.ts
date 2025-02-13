@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,61 +14,126 @@
  * limitations under the License.
  */
 
-import { Disposable, ICommandService, IContextService, toDisposable } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier, Optional } from '@wendellhu/redi';
+import type { IDisposable } from '@univerjs/core';
 import type { Observable } from 'rxjs';
+import type { KeyCode } from './keycode';
+import { createIdentifier, Disposable, ICommandService, IContextService, Optional, toDisposable } from '@univerjs/core';
 import { Subject } from 'rxjs';
-
 import { fromGlobalEvent } from '../../common/lifecycle';
 import { ILayoutService } from '../layout/layout.service';
 import { IPlatformService } from '../platform/platform.service';
 import { KeyCodeToChar, MetaKeys } from './keycode';
 
+/**
+ * A shortcut item that could be registered to the {@link IShortcutService}.
+ */
 export interface IShortcutItem<P extends object = object> {
-    /** This should reuse the corresponding command's id. */
+    /** Id of the shortcut item. It should reuse the corresponding {@link ICommand}'s id. */
     id: string;
+
     /** Description of the shortcut. */
     description?: string;
 
     /** If two shortcuts have the same binding, the one with higher priority would be check first. */
     priority?: number;
-    /** A callback that will be triggered to examine if the shortcut should be invoked. */
+
+    /**
+     * A callback that will be triggered to examine if the shortcut should be invoked. The `{@link IContextService}`
+     * would be passed to the callback.
+     */
     preconditions?: (contextService: IContextService) => boolean;
 
-    /** A command can be bound to several bindings, with different static parameters perhaps. */
-    binding: number;
+    /**
+     * The binding of the shortcut. It should be a combination of {@link KeyCode} and {@link MetaKeys}.
+     *
+     * A command can be bound to several bindings, with different static parameters perhaps.
+     *
+     * @example { binding: KeyCode.ENTER | MetaKeys.ALT }
+     */
+    binding: KeyCode | number;
+    /**
+     * The binding of the shortcut for macOS. If the property is not specified, the default binding would be used.
+     */
     mac?: number;
+    /**
+     * The binding of the shortcut for Windows. If the property is not specified, the default binding would be used.
+     */
     win?: number;
+    /**
+     * The binding of the shortcut for Linux. If the property is not specified, the default binding would be used.
+     */
     linux?: number;
 
     /**
      * The group of the menu item should belong to. The shortcut item would be rendered in the
      * panel if this is set.
+     *
+     * @example { group: '10_global-shortcut' }
      */
     group?: string;
 
-    /** Static parameters of this shortcut. Would be send to `CommandService.executeCommand`. */
+    /**
+     * Static parameters of this shortcut. Would be send to {@link ICommandService.executeCommand} as the second
+     * parameter when the corresponding command is executed.
+     *
+     * You can define multi shortcuts with the same command id but different static parameters.
+     */
     staticParameters?: P;
 }
 
+/**
+ * The dependency injection identifier of the {@link IShortcutService}.
+ */
+export const IShortcutService = createIdentifier<IShortcutService>('ui.shortcut.service');
+/**
+ * The interface of the shortcut service.
+ */
 export interface IShortcutService {
+    /**
+     * An observable that emits when the shortcuts are changed.
+     */
     shortcutChanged$: Observable<void>;
 
+    /**
+     * Make the shortcut service ignore all keyboard events.
+     * @returns {IDisposable} a disposable that could be used to cancel the force escaping.
+     */
     forceEscape(): IDisposable;
-    // registerCaptureSelector(selector: string): IDisposable;
-    // registerEscapeSelector(selector: string): IDisposable;
 
+    /**
+     * Dispatch a keyboard event to the shortcut service and check if there is a shortcut that matches the event.
+     * @param e - the keyboard event to be dispatched.
+     */
+    dispatch(e: KeyboardEvent): IShortcutItem<object> | undefined;
+    /**
+     * Register a shortcut item to the shortcut service.
+     * @param {IShortcutItem} shortcut - the shortcut item to be registered.
+     * @returns {IDisposable} a disposable that could be used to unregister the shortcut.
+     */
     registerShortcut(shortcut: IShortcutItem): IDisposable;
+    /**
+     * Get the display string of the shortcut item.
+     * @param shortcut - the shortcut item to get the display string.
+     * @returns {string} the display string of the shortcut. For example `Ctrl+Enter`.
+     */
     getShortcutDisplay(shortcut: IShortcutItem): string;
+    /**
+     * Get the display string of the shortcut of the command.
+     * @param id the id of the command to get the shortcut display.
+     * @returns {string | null} the display string of the shortcut. For example `Ctrl+Enter`.
+     */
     getShortcutDisplayOfCommand(id: string): string | null;
+    /**
+     * Get all the shortcuts registered in the shortcut service.
+     * @returns {IShortcutItem[]} all the shortcuts registered in the shortcut service.
+     */
     getAllShortcuts(): IShortcutItem[];
-    setDisable(disable: boolean): void;
 }
 
-export const IShortcutService = createIdentifier<IShortcutService>('univer.shortcut');
-
-export class DesktopShortcutService extends Disposable implements IShortcutService {
+/**
+ * @ignore
+ */
+export class ShortcutService extends Disposable implements IShortcutService {
     private readonly _shortCutMapping = new Map<number, Set<IShortcutItem>>();
     private readonly _commandIDMapping = new Map<string, Set<IShortcutItem>>();
 
@@ -76,8 +141,6 @@ export class DesktopShortcutService extends Disposable implements IShortcutServi
     readonly shortcutChanged$ = this._shortcutChanged$.asObservable();
 
     private _forceEscaped = false;
-
-    private _disable = false;
 
     constructor(
         @ICommandService private readonly _commandService: ICommandService,
@@ -95,10 +158,6 @@ export class DesktopShortcutService extends Disposable implements IShortcutServi
                 capture: true,
             })
         );
-    }
-
-    setDisable(disable: boolean): void {
-        this._disable = disable;
     }
 
     getAllShortcuts(): IShortcutItem[] {
@@ -148,7 +207,12 @@ export class DesktopShortcutService extends Disposable implements IShortcutServi
             return null;
         }
 
-        return this.getShortcutDisplay(set.values().next().value);
+        const shortcut = set.values().next().value;
+        if (shortcut) {
+            return this.getShortcutDisplay(shortcut);
+        }
+
+        return null;
     }
 
     getShortcutDisplay(shortcut: IShortcutItem): string {
@@ -176,17 +240,19 @@ export class DesktopShortcutService extends Disposable implements IShortcutServi
     }
 
     private _resolveKeyboardEvent(e: KeyboardEvent): void {
+        const candidate = this.dispatch(e);
+        if (candidate) {
+            this._commandService.executeCommand(candidate.id, candidate.staticParameters);
+            e.preventDefault();
+        }
+    }
+
+    dispatch(e: KeyboardEvent): IShortcutItem<object> | undefined {
         // Should get the container element of the Univer instance and see if
         // the event target is a descendant of the container element.
         // Also we should check through escape list and force catching list.
-        // if the target is not focused on the univer instance we should ingore the keyboard event
-        if (this._forceEscaped) {
-            return;
-        }
-
-        if (this._disable) {
-            return;
-        }
+        // if the target is not focused on the univer instance we should ignore the keyboard event
+        if (this._forceEscaped) return;
 
         if (
             this._layoutService &&
@@ -194,34 +260,21 @@ export class DesktopShortcutService extends Disposable implements IShortcutServi
         ) {
             return;
         }
-
-        const shouldPreventDefault = this._dispatch(e);
-        if (shouldPreventDefault) {
-            e.preventDefault();
-        }
-    }
-
-    private _dispatch(e: KeyboardEvent) {
         const binding = this._deriveBindingFromEvent(e);
         if (binding === null) {
-            return false;
+            return undefined;
         }
 
         const shortcuts = this._shortCutMapping.get(binding);
         if (shortcuts === undefined) {
-            return false;
+            return undefined;
         }
 
-        const shouldTrigger = Array.from(shortcuts)
+        const candidateShortcut = Array.from(shortcuts)
             .sort((s1, s2) => (s2.priority ?? 0) - (s1.priority ?? 0))
             .find((s) => s.preconditions?.(this._contextService) ?? true);
 
-        if (shouldTrigger) {
-            this._commandService.executeCommand(shouldTrigger.id, shouldTrigger.staticParameters);
-            return true;
-        }
-
-        return false;
+        return candidateShortcut;
     }
 
     private _getBindingFromItem(item: IShortcutItem): number {

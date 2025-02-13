@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import type { ITextStyle } from '@univerjs/core';
 import { BaselineOffset, BooleanNumber, ColorKit } from '@univerjs/core';
 import { pixelToPt } from '@univerjs/engine-render';
 
+// eslint-disable-next-line max-lines-per-function, complexity
 export function extractNodeStyle(node: HTMLElement): ITextStyle {
     const styles = node.style;
     const docStyles: ITextStyle = {};
@@ -63,7 +64,7 @@ export function extractNodeStyle(node: HTMLElement): ITextStyle {
 
         switch (cssRule) {
             case 'font-family': {
-                docStyles.ff = cssValue;
+                docStyles.ff = cssValue.replace(/^"/g, '').replace(/"$/g, '');
 
                 break;
             }
@@ -94,7 +95,7 @@ export function extractNodeStyle(node: HTMLElement): ITextStyle {
             case 'font-weight': {
                 const MIDDLE_FONT_WEIGHT = 400;
 
-                if (Number(cssValue) > MIDDLE_FONT_WEIGHT) {
+                if (Number(cssValue) > MIDDLE_FONT_WEIGHT || String(cssValue) === 'bold') {
                     docStyles.bl = BooleanNumber.TRUE;
                 }
 
@@ -121,12 +122,17 @@ export function extractNodeStyle(node: HTMLElement): ITextStyle {
             }
 
             case 'color': {
-                const color = new ColorKit(cssValue);
+                try {
+                    const color = new ColorKit(cssValue);
 
-                if (color.isValid) {
-                    docStyles.cl = {
-                        rgb: color.toRgbString(),
-                    };
+                    if (color.isValid) {
+                        docStyles.cl = {
+                            rgb: color.toRgbString(),
+                        };
+                    }
+                // eslint-disable-next-line unused-imports/no-unused-vars
+                } catch (_e) {
+                    // ignore
                 }
 
                 break;

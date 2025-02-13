@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,29 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { ErrorType } from '../../../../basics/error-type';
+import { ArrayValueObject, transformToValue, transformToValueObject } from '../../../../engine/value-object/array-value-object';
+import { ErrorValueObject } from '../../../../engine/value-object/base-value-object';
+import { NumberValueObject, StringValueObject } from '../../../../engine/value-object/primitive-object';
 import { FUNCTION_NAMES_LOGICAL } from '../../function-names';
 import { Iferror } from '../index';
-import { ArrayValueObject, transformToValue, transformToValueObject } from '../../../../engine/value-object/array-value-object';
-import { NumberValueObject, StringValueObject } from '../../../../engine/value-object/primitive-object';
-import { ErrorValueObject } from '../../../../engine/value-object/base-value-object';
-import { ErrorType } from '../../../../basics/error-type';
 
 describe('Test iferror function', () => {
-    const textFunction = new Iferror(FUNCTION_NAMES_LOGICAL.IFERROR);
+    const testFunction = new Iferror(FUNCTION_NAMES_LOGICAL.IFERROR);
 
     describe('Iferror', () => {
         it('Value is normal', () => {
             const value = NumberValueObject.create(1);
             const valueIfError = StringValueObject.create('error');
-            const result = textFunction.calculate(value, valueIfError);
+            const result = testFunction.calculate(value, valueIfError);
             expect(result.getValue()).toBe(1);
         });
 
         it('Value is error', () => {
             const value = ErrorValueObject.create(ErrorType.NA);
             const valueIfError = StringValueObject.create('error');
-            const result = textFunction.calculate(value, valueIfError);
-            expect(result.getValue()).toBe(ErrorType.NA);
+            const result = testFunction.calculate(value, valueIfError);
+            expect(result.getValue()).toBe('error');
         });
 
         it('Value is array', () => {
@@ -56,7 +56,7 @@ describe('Test iferror function', () => {
                 column: 0,
             });
             const valueIfError = StringValueObject.create('error');
-            const result = textFunction.calculate(value, valueIfError);
+            const result = testFunction.calculate(value, valueIfError);
             expect(transformToValue(result.getArrayValue())).toStrictEqual([
                 [1],
                 ['error'],
@@ -89,7 +89,7 @@ describe('Test iferror function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(value, valueIfError);
+            const result = testFunction.calculate(value, valueIfError);
             expect(transformToValue(result.getArrayValue())).toStrictEqual([[1, 1, 1], ['a1', 'a2', 'a3'], ['a1', 'a2', 'a3']]);
         });
     });

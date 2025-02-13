@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from 'vitest';
-import { act, renderHook } from '@testing-library/react-hooks';
-import { of, Subject } from 'rxjs';
 import type { Observable } from 'rxjs';
-
-import { useState } from 'react';
-import { useObservable } from '../observable';
+import { renderHook } from '@testing-library/react';
+import { act, useState } from 'react';
+import { of, Subject } from 'rxjs';
+import { describe, expect, it } from 'vitest';
+import { useObservable } from '../../../utils/di';
 
 // New to testing React Hooks? You can refer to https://mayashavin.com/articles/test-react-hooks-with-vitest .
 

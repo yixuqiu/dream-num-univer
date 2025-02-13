@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import { BooleanValueObject, NumberValueObject } from '../primitive-object';
 import type { BaseValueObject } from '../base-value-object';
 import { ErrorValueObject } from '../base-value-object';
 import { ErrorType } from '../../../basics/error-type';
+import { stripErrorMargin } from '../../utils/math-kit';
 
 describe('arrayValueObject test', () => {
     const originArrayValueObject = ArrayValueObject.create({
@@ -71,7 +72,7 @@ describe('arrayValueObject test', () => {
             ]);
         });
 
-        it('row==0,1,;column=,,2', () => {
+        it('row==0,1,;column=,,2,first undefined', () => {
             expect(originArrayValueObject.slice(undefined, [2, 3])?.toValue()).toStrictEqual([[3], [8], [13]]);
         });
 
@@ -125,17 +126,17 @@ describe('arrayValueObject test', () => {
         it('CountBlank', () => {
             const originValueObject = ArrayValueObject.create({
                 calculateValueList: transformToValueObject([
-                    [1, ' ', 1.23, true, false],
-                    [0, '100', '2.34', 'test', -3],
+                    [1, ' ', 1.23, true, false, '', null],
+                    [0, '100', '2.34', 'test', -3, ErrorType.VALUE, null],
                 ]),
                 rowCount: 2,
-                columnCount: 5,
+                columnCount: 7,
                 unitId: '',
                 sheetId: '',
                 row: 0,
                 column: 0,
             });
-            expect(originValueObject.countBlank()?.getValue()).toBe(0);
+            expect(originValueObject.countBlank()?.getValue()).toBe(3);
         });
     });
 
@@ -219,7 +220,7 @@ describe('arrayValueObject test', () => {
                 column: 0,
             });
 
-            expect(originValueObject.sum().getValue()).toStrictEqual(101.57);
+            expect(stripErrorMargin(Number(originValueObject.sum().getValue()))).toStrictEqual(101.57);
         });
     });
 
@@ -475,6 +476,12 @@ describe('arrayValueObject test', () => {
             // transpose
             const transpose = arrayValueObject.transpose();
             expect(transpose.getFirstCell().getValue()).toStrictEqual(false);
+        });
+    });
+    describe('Test utils', () => {
+        it('ArrayValueObject static createByArray', () => {
+            const arrayValueObject = ArrayValueObject.createByArray([['cell1', 2, null], ['1', false, true]]);
+            expect(arrayValueObject.toValue()).toStrictEqual([['cell1', 2, 0], [1, false, true]]);
         });
     });
 });

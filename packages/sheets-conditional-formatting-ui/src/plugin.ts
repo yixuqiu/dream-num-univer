@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,22 @@
  * limitations under the License.
  */
 
-import { ICommandService, Plugin, UniverInstanceType } from '@univerjs/core';
-import { Inject, Injector } from '@wendellhu/redi';
-import { SHEET_CONDITIONAL_FORMATTING_PLUGIN, SheetsConditionalFormattingPlugin } from '@univerjs/sheets-conditional-formatting';
+import type { IUniverSheetsConditionalFormattingUIConfig } from './controllers/config.schema';
+import {
+    DependentOn,
+    ICommandService,
+    IConfigService,
+    Inject,
+    Injector,
+    merge,
+    Plugin,
+    registerDependencies,
+    touchDependencies,
+    UniverInstanceType,
+} from '@univerjs/core';
+import { SHEET_CONDITIONAL_FORMATTING_PLUGIN, UniverSheetsConditionalFormattingPlugin } from '@univerjs/sheets-conditional-formatting';
 import { AddAverageCfCommand } from './commands/commands/add-average-cf.command';
+import { AddCfCommand } from './commands/commands/add-cf.command';
 import { AddColorScaleConditionalRuleCommand } from './commands/commands/add-color-scale-cf.command';
 import { AddDataBarConditionalRuleCommand } from './commands/commands/add-data-bar-cf.command';
 import { AddDuplicateValuesCfCommand } from './commands/commands/add-duplicate-values-cf.command';
@@ -28,66 +40,113 @@ import { AddTimePeriodCfCommand } from './commands/commands/add-time-period-cf.c
 import { AddUniqueValuesCfCommand } from './commands/commands/add-unique-values-cf.command';
 import { ClearRangeCfCommand } from './commands/commands/clear-range-cf.command';
 import { ClearWorksheetCfCommand } from './commands/commands/clear-worksheet-cf.command';
-import { OpenConditionalFormattingOperator } from './commands/operations/open-conditional-formatting-panel';
 import { DeleteCfCommand } from './commands/commands/delete-cf.command';
+import { MoveCfCommand } from './commands/commands/move-cf.command';
 import { SetCfCommand } from './commands/commands/set-cf.command';
-import { moveCfCommand } from './commands/commands/move-cf.command';
-import { AddCfCommand } from './commands/commands/add-cf.command';
 
-import { RenderController } from './controllers/cf.render.controller';
-import { ConditionalFormattingCopyPasteController } from './controllers/cf.copy-paste.controller';
+import { OpenConditionalFormattingOperator } from './commands/operations/open-conditional-formatting-panel';
 import { ConditionalFormattingAutoFillController } from './controllers/cf.auto-fill.controller';
-import { ConditionalFormattingMenuController } from './controllers/cf.menu.controller';
-import { ConditionalFormattingI18nController } from './controllers/cf.i18n.controller';
-import { RefRangeController } from './controllers/cf.ref-range.controller';
-import { ConditionalFormattingEditorController } from './controllers/cf.editor.controller';
 import { ConditionalFormattingClearController } from './controllers/cf.clear.controller';
+import { ConditionalFormattingCopyPasteController } from './controllers/cf.copy-paste.controller';
+import { ConditionalFormattingEditorController } from './controllers/cf.editor.controller';
+import { ConditionalFormattingI18nController } from './controllers/cf.i18n.controller';
+import { ConditionalFormattingMenuController } from './controllers/cf.menu.controller';
+import { ConditionalFormattingPainterController } from './controllers/cf.painter.controller';
+import { ConditionalFormattingPanelController } from './controllers/cf.panel.controller';
+import { ConditionalFormattingPermissionController } from './controllers/cf.permission.controller';
+import { SheetsCfRefRangeController } from './controllers/cf.ref-range.controller';
+import { SheetsCfRenderController } from './controllers/cf.render.controller';
+import { ConditionalFormattingViewportController } from './controllers/cf.viewport.controller';
+import { defaultPluginConfig, SHEETS_CONDITIONAL_FORMATTING_UI_PLUGIN_CONFIG_KEY } from './controllers/config.schema';
 
+@DependentOn(UniverSheetsConditionalFormattingPlugin)
 export class UniverSheetsConditionalFormattingUIPlugin extends Plugin {
-    static override pluginName = SHEET_CONDITIONAL_FORMATTING_PLUGIN;
+    static override pluginName = `${SHEET_CONDITIONAL_FORMATTING_PLUGIN}_UI_PLUGIN`;
     static override type = UniverInstanceType.UNIVER_SHEET;
 
-    static commandList = [
-        AddAverageCfCommand,
-        AddColorScaleConditionalRuleCommand,
-        AddDataBarConditionalRuleCommand,
-        AddDuplicateValuesCfCommand,
-        AddNumberCfCommand,
-        AddRankCfCommand,
-        AddTextCfCommand,
-        AddTimePeriodCfCommand,
-        AddUniqueValuesCfCommand,
-        OpenConditionalFormattingOperator,
-        DeleteCfCommand,
-        SetCfCommand,
-        moveCfCommand,
-        AddCfCommand,
-        ClearRangeCfCommand,
-        ClearWorksheetCfCommand,
-    ];
-
     constructor(
-        _config: unknown,
+        private readonly _config: Partial<IUniverSheetsConditionalFormattingUIConfig> = defaultPluginConfig,
         @Inject(Injector) override readonly _injector: Injector,
-        @Inject(ICommandService) private _commandService: ICommandService
+        @Inject(ICommandService) private _commandService: ICommandService,
+        @IConfigService private readonly _configService: IConfigService
     ) {
         super();
+
+        // Manage the plugin configuration.
+        const { menu, ...rest } = merge(
+            {},
+            defaultPluginConfig,
+            this._config
+        );
+        if (menu) {
+            this._configService.setConfig('menu', menu, { merge: true });
+        }
+        this._configService.setConfig(SHEETS_CONDITIONAL_FORMATTING_UI_PLUGIN_CONFIG_KEY, rest);
+
         this._initCommand();
-        SheetsConditionalFormattingPlugin.dependencyList.forEach((dependency) => {
-            this._injector.add(dependency);
-        });
-        this._injector.add([RenderController]);
-        this._injector.add([RefRangeController]);
-        this._injector.add([ConditionalFormattingCopyPasteController]);
-        this._injector.add([ConditionalFormattingAutoFillController]);
-        this._injector.add([ConditionalFormattingMenuController]);
-        this._injector.add([ConditionalFormattingI18nController]);
-        this._injector.add([ConditionalFormattingEditorController]);
-        this._injector.add([ConditionalFormattingClearController]);
     }
 
-    _initCommand() {
-        [...SheetsConditionalFormattingPlugin.mutationList, ...UniverSheetsConditionalFormattingUIPlugin.commandList].forEach((m) => {
+    override onStarting(): void {
+        registerDependencies(this._injector, [
+            [SheetsCfRenderController],
+            [SheetsCfRefRangeController],
+            [ConditionalFormattingCopyPasteController],
+            [ConditionalFormattingAutoFillController],
+            [ConditionalFormattingPermissionController],
+            [ConditionalFormattingPanelController],
+            [ConditionalFormattingMenuController],
+            [ConditionalFormattingI18nController],
+            [ConditionalFormattingEditorController],
+            [ConditionalFormattingClearController],
+            [ConditionalFormattingPainterController],
+            [ConditionalFormattingViewportController],
+        ]);
+
+        touchDependencies(this._injector, [
+            [SheetsCfRenderController],
+        ]);
+    }
+
+    override onReady(): void {
+        touchDependencies(this._injector, [
+            [ConditionalFormattingMenuController],
+            [ConditionalFormattingPanelController],
+        ]);
+    }
+
+    override onRendered(): void {
+        touchDependencies(this._injector, [
+            [ConditionalFormattingAutoFillController],
+            [ConditionalFormattingClearController],
+            [ConditionalFormattingCopyPasteController],
+            [ConditionalFormattingEditorController],
+            [ConditionalFormattingI18nController],
+            [ConditionalFormattingPainterController],
+            [ConditionalFormattingPermissionController],
+            [SheetsCfRefRangeController],
+            [ConditionalFormattingViewportController],
+        ]);
+    }
+
+    private _initCommand() {
+        [
+            AddAverageCfCommand,
+            AddColorScaleConditionalRuleCommand,
+            AddDataBarConditionalRuleCommand,
+            AddDuplicateValuesCfCommand,
+            AddNumberCfCommand,
+            AddRankCfCommand,
+            AddTextCfCommand,
+            AddTimePeriodCfCommand,
+            AddUniqueValuesCfCommand,
+            OpenConditionalFormattingOperator,
+            DeleteCfCommand,
+            SetCfCommand,
+            MoveCfCommand,
+            AddCfCommand,
+            ClearRangeCfCommand,
+            ClearWorksheetCfCommand,
+        ].forEach((m) => {
             this._commandService.registerCommand(m);
         });
     }

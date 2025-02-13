@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,12 @@
  */
 
 import type { IContextService } from '@univerjs/core';
-import { Disposable, FOCUSING_UNIVER_EDITOR, ICommandService, LifecycleStages, OnLifecycle, RedoCommand, UndoCommand } from '@univerjs/core';
-import { Inject, Injector } from '@wendellhu/redi';
-
-import { CopyCommand, CutCommand, PasteCommand } from '../services/clipboard/clipboard.command';
-import { IMenuService } from '../services/menu/menu.service';
-import { KeyCode, MetaKeys } from '../services/shortcut/keycode';
 import type { IShortcutItem } from '../services/shortcut/shortcut.service';
+
+import { Disposable, EDITOR_ACTIVATED, FOCUSING_FX_BAR_EDITOR, FOCUSING_UNIVER_EDITOR, ICommandService, RedoCommand, UndoCommand } from '@univerjs/core';
+import { CopyCommand, CutCommand, PasteCommand } from '../services/clipboard/clipboard.command';
+import { KeyCode, MetaKeys } from '../services/shortcut/keycode';
 import { IShortcutService } from '../services/shortcut/shortcut.service';
-import { SetEditorResizeOperation } from '../commands/operations/editor/set-editor-resize.operation';
-import { RedoMenuItemFactory, UndoMenuItemFactory } from './menus/menus';
 
 // Not that the clipboard shortcut items would only be invoked when the browser fully supports clipboard API.
 // If not, the corresponding shortcut would not be triggered and we will perform clipboard operations
@@ -32,6 +28,13 @@ import { RedoMenuItemFactory, UndoMenuItemFactory } from './menus/menus';
 
 function whenEditorFocused(contextService: IContextService): boolean {
     return contextService.getContextValue(FOCUSING_UNIVER_EDITOR);
+}
+
+function whenEditorFocusedButNotCellEditor(contextService: IContextService): boolean {
+    return (
+        contextService.getContextValue(FOCUSING_UNIVER_EDITOR) &&
+        !(contextService.getContextValue(EDITOR_ACTIVATED) || contextService.getContextValue(FOCUSING_FX_BAR_EDITOR))
+    );
 }
 
 export const CopyShortcutItem: IShortcutItem = {
@@ -76,7 +79,7 @@ export const UndoShortcutItem: IShortcutItem = {
     description: 'shortcut.undo',
     group: '1_common-edit',
     binding: KeyCode.Z | MetaKeys.CTRL_COMMAND,
-    preconditions: whenEditorFocused,
+    preconditions: whenEditorFocusedButNotCellEditor,
 };
 
 export const RedoShortcutItem: IShortcutItem = {
@@ -84,17 +87,14 @@ export const RedoShortcutItem: IShortcutItem = {
     description: 'shortcut.redo',
     group: '1_common-edit',
     binding: KeyCode.Y | MetaKeys.CTRL_COMMAND,
-    preconditions: whenEditorFocused,
+    preconditions: whenEditorFocusedButNotCellEditor,
 };
 
 /**
  * Define shared UI behavior across Univer business. Including undo / redo and clipboard operations.
  */
-@OnLifecycle(LifecycleStages.Ready, SharedController)
 export class SharedController extends Disposable {
     constructor(
-        @Inject(Injector) private readonly _injector: Injector,
-        @IMenuService private readonly _menuService: IMenuService,
         @IShortcutService private readonly _shortcutService: IShortcutService,
         @ICommandService private readonly _commandService: ICommandService
     ) {
@@ -106,17 +106,10 @@ export class SharedController extends Disposable {
     initialize(): void {
         this._registerCommands();
         this._registerShortcuts();
-        this._registerMenus();
-    }
-
-    private _registerMenus(): void {
-        [UndoMenuItemFactory, RedoMenuItemFactory].forEach((factory) => {
-            this.disposeWithMe(this._menuService.addMenuItem(this._injector.invoke(factory)));
-        });
     }
 
     private _registerCommands(): void {
-        [CutCommand, CopyCommand, PasteCommand, SetEditorResizeOperation].forEach((command) =>
+        [CutCommand, CopyCommand, PasteCommand].forEach((command) =>
             this.disposeWithMe(this._commandService.registerMultipleCommand(command))
         );
     }

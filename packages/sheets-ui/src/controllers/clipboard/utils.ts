@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import type { ICellData, IDocumentBody, IMutationInfo, IParagraph, IRange, Nullable } from '@univerjs/core';
-import { cellToRange, IUniverInstanceService, ObjectMatrix, Range, Rectangle, Tools } from '@univerjs/core';
+/* eslint-disable max-lines-per-function */
+
+import type { IAccessor, IBorderData, ICellData, ICustomRange, IDocumentBody, IMutationInfo, IParagraph, IRange, IStyleData, Nullable } from '@univerjs/core';
 import type {
     IAddWorksheetMergeMutationParams,
     IMoveRangeMutationParams,
@@ -23,28 +24,37 @@ import type {
     ISetRangeValuesMutationParams,
     ISetSelectionsOperationParams,
 } from '@univerjs/sheets';
+import type { ICellDataWithSpanInfo, ICopyPastePayload, ISheetDiscreteRangeLocation } from '../../services/clipboard/type';
+import { cellToRange, CustomRangeType, DEFAULT_STYLES, generateRandomId, IUniverInstanceService, numfmt, ObjectMatrix, Range, Rectangle, Tools } from '@univerjs/core';
+
+import { DEFAULT_PADDING_DATA } from '@univerjs/engine-render';
 import {
     AddMergeUndoMutationFactory,
     AddWorksheetMergeMutation,
     getAddMergeMutationRangeByType,
     MoveRangeCommand,
     MoveRangeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RemoveMergeUndoMutationFactory,
     RemoveWorksheetMergeMutation,
+    SelectionMoveType,
     SetRangeValuesMutation,
     SetRangeValuesUndoMutationFactory,
     SetSelectionsOperation,
     SheetInterceptorService,
 } from '@univerjs/sheets';
-import type { IAccessor } from '@wendellhu/redi';
-
-import numfmt from '@univerjs/engine-numfmt';
-import type { ICellDataWithSpanInfo, ICopyPastePayload, ISheetDiscreteRangeLocation } from '../../services/clipboard/type';
 import { COPY_TYPE } from '../../services/clipboard/type';
+import { isRichText } from '../editor/editing.render-controller';
 import { discreteRangeToRange, type IDiscreteRange, virtualizeDiscreteRanges } from '../utils/range-tools';
 
 // if special paste need append mutations instead of replace the default, it can use this function to generate default mutations.
+/**
+ *
+ * @param pasteFrom
+ * @param pasteTo
+ * @param data
+ * @param payload
+ * @param accessor
+ */
 export function getDefaultOnPasteCellMutations(
     pasteFrom: ISheetDiscreteRangeLocation,
     pasteTo: ISheetDiscreteRangeLocation,
@@ -64,15 +74,22 @@ export function getDefaultOnPasteCellMutations(
         redoMutationsInfo.push(...clearStyleRedos);
         undoMutationsInfo.push(...clearStyleUndos);
 
+        // clear value
+        const { undos: clearValueUndos, redos: clearValueRedos } = getClearCellValueMutations(pasteTo, data, accessor);
+        redoMutationsInfo.push(...clearValueRedos);
+        undoMutationsInfo.push(...clearValueUndos);
+
         // set values
         const { undos: setValuesUndos, redos: setValuesRedos } = getSetCellValueMutations(pasteTo, pasteFrom, data, accessor);
         redoMutationsInfo.push(...setValuesRedos);
         undoMutationsInfo.push(...setValuesUndos);
 
         // set styles
-        const { undos: setStyleUndos, redos: setStyleRedos } = getSetCellStyleMutations(pasteTo, data, accessor);
+        const { undos: setStyleUndos, redos: setStyleRedos } = getSetCellStyleMutations(pasteTo, data, accessor, true);
         redoMutationsInfo.push(...setStyleRedos);
         undoMutationsInfo.push(...setStyleUndos);
+
+        // Do not process the custom attribute here, users can extend the paste event by themselves
 
         // clear and add merge
         const { undos: clearMergeUndos, redos: clearMergeRedos } = getClearAndSetMergeMutations(
@@ -89,6 +106,18 @@ export function getDefaultOnPasteCellMutations(
     };
 }
 
+/**
+ *
+ * @param from
+ * @param from.unitId
+ * @param from.subUnitId
+ * @param from.range
+ * @param to
+ * @param to.unitId
+ * @param to.subUnitId
+ * @param to.range
+ * @param accessor
+ */
 export function getMoveRangeMutations(
     from: {
         unitId: string;
@@ -141,6 +170,8 @@ export function getMoveRangeMutations(
             });
 
             const doMoveRangeMutation: IMoveRangeMutationParams = {
+                fromRange,
+                toRange,
                 from: {
                     value: newFromCellValue.getMatrix(),
                     subUnitId: fromSubUnitId,
@@ -152,6 +183,8 @@ export function getMoveRangeMutations(
                 unitId,
             };
             const undoMoveRangeMutation: IMoveRangeMutationParams = {
+                fromRange: toRange,
+                toRange: fromRange,
                 from: {
                     value: fromCellValue.getMatrix(),
                     subUnitId: fromSubUnitId,
@@ -177,9 +210,7 @@ export function getMoveRangeMutations(
                 .map((mergeRange) => Rectangle.getRelativeRange(mergeRange, fromRange))
                 .map((relativeRange) => Rectangle.getPositionRange(relativeRange, toRange));
 
-            const addMergeCellRanges = getAddMergeMutationRangeByType(willMoveToMergeRanges).filter(
-                (range) => !toMergeData.some((mergeRange) => Rectangle.equals(range, mergeRange))
-            );
+            const addMergeCellRanges = getAddMergeMutationRangeByType(willMoveToMergeRanges);
 
             const mergeRedos: Array<{
                 id: string;
@@ -250,8 +281,8 @@ export function getMoveRangeMutations(
                     params: {
                         unitId,
                         subUnitId: toSubUnitId,
-                        pluginName: NORMAL_SELECTION_PLUGIN_NAME,
                         selections: [{ range: toRange }],
+                        type: SelectionMoveType.MOVE_END,
                     } as ISetSelectionsOperationParams,
                 },
             ];
@@ -263,8 +294,8 @@ export function getMoveRangeMutations(
                     id: SetSelectionsOperation.id,
                     params: {
                         unitId,
-                        sheetId: fromSubUnitId,
-                        pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+                        subUnitId: fromSubUnitId,
+                        type: SelectionMoveType.MOVE_END,
                         selections: [{ range: fromRange }],
                     },
                 },
@@ -278,6 +309,13 @@ export function getMoveRangeMutations(
     };
 }
 
+/**
+ *
+ * @param pasteTo
+ * @param pasteFrom
+ * @param matrix
+ * @param accessor
+ */
 export function getSetCellValueMutations(
     pasteTo: ISheetDiscreteRangeLocation,
     pasteFrom: Nullable<ISheetDiscreteRangeLocation>,
@@ -291,19 +329,21 @@ export function getSetCellValueMutations(
     const valueMatrix = new ObjectMatrix<ICellData>();
 
     matrix.forValue((row, col, value) => {
+        let originNumberValue;
         if (!value.p && value.v && !pasteFrom) {
             const content = String(value.v);
-            const numfmtValue = numfmt.parseDate(content) || numfmt.parseTime(content) || numfmt.parseNumber(content);
-            if (numfmtValue?.v && typeof numfmtValue.v === 'number') {
-                value.v = numfmtValue.v;
+            const numfmtValue = numfmt.parseValue(content);
+            if (numfmtValue?.v !== undefined && typeof numfmtValue.v === 'number') {
+                originNumberValue = numfmtValue.v;
             }
         }
         const { row: realRow, col: realCol } = mapFunc(row, col);
 
-        if (value.p?.body) {
-            valueMatrix.setValue(realRow, realCol, Tools.deepClone({ p: value.p, v: value.v }));
+        if (value.p?.body && isRichText(value.p.body)) {
+            const newValue = Tools.deepClone({ p: value.p, v: originNumberValue ?? value.v });
+            valueMatrix.setValue(realRow, realCol, newValue);
         } else {
-            valueMatrix.setValue(realRow, realCol, Tools.deepClone({ v: value.v }));
+            valueMatrix.setValue(realRow, realCol, Tools.deepClone({ v: originNumberValue ?? value.v, t: value.t }));
         }
     });
     // set cell value and style
@@ -334,10 +374,18 @@ export function getSetCellValueMutations(
     };
 }
 
+/**
+ *
+ * @param pasteTo
+ * @param matrix
+ * @param accessor
+ * @param withRichFormat
+ */
 export function getSetCellStyleMutations(
     pasteTo: ISheetDiscreteRangeLocation,
     matrix: ObjectMatrix<ICellDataWithSpanInfo>,
-    accessor: IAccessor
+    accessor: IAccessor,
+    withRichFormat = false
 ) {
     const redoMutationsInfo: IMutationInfo[] = [];
     const undoMutationsInfo: IMutationInfo[] = [];
@@ -348,10 +396,42 @@ export function getSetCellStyleMutations(
 
     matrix.forValue((row, col, value) => {
         const newValue: ICellData = {
-            s: value.s,
+            s: Object.assign({}, {
+                ...DEFAULT_STYLES,
+                pd: DEFAULT_PADDING_DATA,
+                bg: null,
+                cl: null,
+            }, value.s),
         };
-        if (value.p?.body) {
-            newValue.p = value.p;
+
+        // Here I don't know why when setting the border, an empty object is also assigned to the adjacent cells without borders.
+        // This is the fundamental cause of the problem. This should be unreasonable, so I bypassed this problem first.
+        const cellBd = (newValue.s as IStyleData).bd as IBorderData;
+        if (cellBd) {
+            const isValid = Object.keys(cellBd).length > 0;
+            if (!isValid) {
+                (newValue.s as IStyleData)!.bd = {
+                    b: null,
+                    l: null,
+                    r: null,
+                    t: null,
+                };
+            }
+        }
+
+        const content = String(value.v);
+        const numfmtValue = numfmt.parseValue(content);
+        if (numfmtValue?.z) {
+            if (!newValue.s) {
+                newValue.s = {};
+            }
+            if (typeof newValue.s === 'object') {
+                if (!newValue.s?.n) {
+                    newValue.s.n = { pattern: numfmtValue.z };
+                } else {
+                    newValue.s.n.pattern = numfmtValue.z;
+                }
+            }
         }
         const { row: actualRow, col: actualCol } = mapFunc(row, col);
         valueMatrix.setValue(actualRow, actualCol, newValue);
@@ -384,6 +464,12 @@ export function getSetCellStyleMutations(
     };
 }
 
+/**
+ *
+ * @param pasteTo
+ * @param matrix
+ * @param accessor
+ */
 export function getClearCellStyleMutations(
     pasteTo: ISheetDiscreteRangeLocation,
     matrix: ObjectMatrix<ICellDataWithSpanInfo>,
@@ -395,14 +481,12 @@ export function getClearCellStyleMutations(
     const { unitId, subUnitId, range } = pasteTo;
     const { mapFunc } = virtualizeDiscreteRanges([range]);
 
-    matrix.forValue((row, col, value) => {
-        // NOTE: When pasting, the original cell may contain a default style that is not explicitly carried, resulting in the failure to overwrite the style of the target cell.
-        // If the original cell has a style (lack of other default styles) or is undefined (all default styles), we need to clear the existing styles in the target area
-        // If the original cell style is "", it is to handle the situation where the target area contains merged cells. The style is not overwritten, only the value is overwritten. There is no need to clear the existing style of the target area.
-        if (value.s) {
-            const { row: actualRow, col: actualCol } = mapFunc(row, col);
+    matrix.forEach((rowIndex, row) => {
+        Object.keys(row).forEach((colIndexStr) => {
+            const colIndex = Number(colIndexStr);
+            const { row: actualRow, col: actualCol } = mapFunc(rowIndex, colIndex);
             clearStyleMatrix.setValue(actualRow, actualCol, { s: null });
-        }
+        });
     });
     // clear style
     if (clearStyleMatrix.getLength() > 0) {
@@ -431,6 +515,59 @@ export function getClearCellStyleMutations(
     return { undos: undoMutationsInfo, redos: redoMutationsInfo };
 }
 
+/**
+ *
+ * @param pasteTo
+ * @param matrix
+ * @param accessor
+ */
+export function getClearCellValueMutations(
+    pasteTo: ISheetDiscreteRangeLocation,
+    matrix: ObjectMatrix<ICellDataWithSpanInfo>,
+    accessor: IAccessor
+) {
+    const redoMutationsInfo: IMutationInfo[] = [];
+    const undoMutationsInfo: IMutationInfo[] = [];
+    const clearValueMatrix = new ObjectMatrix<ICellData>();
+    const { unitId, subUnitId, range } = pasteTo;
+    const { mapFunc } = virtualizeDiscreteRanges([range]);
+
+    matrix.forValue((row, col, _value) => {
+        const { row: actualRow, col: actualCol } = mapFunc(row, col);
+        clearValueMatrix.setValue(actualRow, actualCol, { v: null, p: null });
+    });
+    if (clearValueMatrix.getLength() > 0) {
+        const clearMutation: ISetRangeValuesMutationParams = {
+            subUnitId,
+            unitId,
+            cellValue: Tools.deepClone(clearValueMatrix.getMatrix()),
+        };
+        redoMutationsInfo.push({
+            id: SetRangeValuesMutation.id,
+            params: clearMutation,
+        });
+
+        // undo
+        const undoClearMutation: ISetRangeValuesMutationParams = SetRangeValuesUndoMutationFactory(
+            accessor,
+            clearMutation
+        );
+
+        undoMutationsInfo.push({
+            id: SetRangeValuesMutation.id,
+            params: undoClearMutation,
+        });
+    }
+
+    return { undos: undoMutationsInfo, redos: redoMutationsInfo };
+}
+
+/**
+ *
+ * @param pasteTo
+ * @param matrix
+ * @param accessor
+ */
 export function getClearAndSetMergeMutations(
     pasteTo: ISheetDiscreteRangeLocation,
     matrix: ObjectMatrix<ICellDataWithSpanInfo>,
@@ -527,7 +664,33 @@ export function getClearAndSetMergeMutations(
     return { undos: undoMutationsInfo, redos: redoMutationsInfo };
 }
 
+/**
+ *
+ * @param text
+ */
 export function generateBody(text: string): IDocumentBody {
+    if (!text.includes('\r') && Tools.isLegalUrl(text)) {
+        const id = generateRandomId();
+        const urlText = `${text}`;
+        const range: ICustomRange = {
+            startIndex: 0,
+            endIndex: urlText.length - 1,
+            rangeId: id,
+            rangeType: CustomRangeType.HYPERLINK,
+            properties: {
+                url: text,
+            },
+        };
+
+        return {
+            dataStream: `${urlText}\r\n`,
+            paragraphs: [{
+                startIndex: urlText.length,
+            }],
+            customRanges: [range],
+        };
+    }
+
     // Convert all \n to \r, because we use \r to indicate paragraph break.
     let dataStream = text.replace(/(\r\n|\n)/g, '\r');
     if (!dataStream.endsWith('\r\n')) {

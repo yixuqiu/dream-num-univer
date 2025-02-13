@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,54 +14,74 @@
  * limitations under the License.
  */
 
+import type { ISidebarMethodOptions } from './interface';
 import { CloseSingle } from '@univerjs/icons';
-import { useDependency } from '@wendellhu/redi/react-bindings';
 import clsx from 'clsx';
-import React, { useEffect, useMemo, useState } from 'react';
-
+import React, { useEffect, useMemo, useRef } from 'react';
 import { CustomLabel } from '../../../components/custom-label/CustomLabel';
 import { ISidebarService } from '../../../services/sidebar/sidebar.service';
+import { useDependency, useObservable } from '../../../utils/di';
 import styles from './index.module.less';
-import type { ISidebarMethodOptions } from './interface';
 
 export function Sidebar() {
     const sidebarService = useDependency(ISidebarService);
+    const sidebarOptions = useObservable<ISidebarMethodOptions>(sidebarService.sidebarOptions$);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
-    const [sidebarOptions, setSidebarOptions] = useState<ISidebarMethodOptions>({});
+    const options = useMemo(() => {
+        if (!sidebarOptions) {
+            return null;
+        }
 
-    useEffect(() => {
-        const subscribtion = sidebarService.sidebarOptions$.subscribe((options: ISidebarMethodOptions) => {
-            setSidebarOptions(options);
-        });
-
-        return () => {
-            subscribtion.unsubscribe();
+        const copy = { ...sidebarOptions } as Omit<ISidebarMethodOptions, 'children'> & {
+            children?: React.ReactNode;
+            header?: React.ReactNode;
+            footer?: React.ReactNode;
         };
-    }, []);
 
-    const options = sidebarOptions as Omit<ISidebarMethodOptions, 'children'> & {
-        children?: React.ReactNode;
-        header?: React.ReactNode;
-        footer?: React.ReactNode;
-    };
-    for (const key of ['children', 'header', 'footer']) {
-        const k = key as keyof ISidebarMethodOptions;
+        for (const key of ['children', 'header', 'footer']) {
+            const k = key as keyof ISidebarMethodOptions;
 
-        if (sidebarOptions[k]) {
-            const props = sidebarOptions[k] as any;
+            if (sidebarOptions[k]) {
+                const props = sidebarOptions[k] as any;
 
-            if (props) {
-                (options as any)[k] = <CustomLabel {...props} />;
+                if (props) {
+                    (copy as any)[k] = <CustomLabel {...props} />;
+                }
             }
         }
-    }
+
+        return copy;
+    }, [sidebarOptions]);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            sidebarService.setContainer(scrollRef.current);
+        }
+        return () => {
+            sidebarService.setContainer(undefined);
+        };
+    }, [sidebarService]);
+    useEffect(() => {
+        const handleScroll = (e: Event) => {
+            sidebarService.scrollEvent$.next(e);
+        };
+        const scrollElement = scrollRef.current;
+        if (scrollElement) {
+            scrollElement.addEventListener('scroll', handleScroll);
+        }
+
+        return () => {
+            scrollElement?.removeEventListener('scroll', handleScroll);
+        };
+    }, [sidebarService]);
 
     const _className = clsx(styles.sidebar, {
-        [styles.sidebarOpen]: options.visible,
+        [styles.sidebarOpen]: options?.visible,
     });
 
     const width = useMemo(() => {
-        if (!options.visible) return 0;
+        if (!options?.visible) return 0;
 
         if (typeof options.width === 'number') {
             return `${options.width}px`;
@@ -76,14 +96,13 @@ export function Sidebar() {
             visible: false,
         };
 
-        setSidebarOptions(options);
+        sidebarService.options.visible = false;
         sidebarService.sidebarOptions$.next(options);
         options?.onClose?.();
     }
-
     return (
         <section className={_className} style={{ width }}>
-            <section className={styles.sidebarContainer}>
+            <section className={styles.sidebarContainer} ref={scrollRef}>
                 <header className={styles.sidebarHeader}>
                     {options?.header}
 
@@ -92,7 +111,7 @@ export function Sidebar() {
                     </a>
                 </header>
 
-                <section className={styles.sidebarBody}>{options?.children}</section>
+                <section className={styles.sidebarBody} style={options?.bodyStyle}>{options?.children}</section>
 
                 {options?.footer && <footer className={styles.sidebarFooter}>{options.footer}</footer>}
             </section>

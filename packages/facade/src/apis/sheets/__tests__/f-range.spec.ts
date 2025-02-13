@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-import type { ICellData, IStyleData, Nullable } from '@univerjs/core';
-import { HorizontalAlign, ICommandService, IUniverInstanceService, VerticalAlign, WrapStrategy } from '@univerjs/core';
-import { SetHorizontalTextAlignCommand, SetRangeValuesCommand, SetRangeValuesMutation, SetStyleCommand, SetTextWrapCommand, SetVerticalTextAlignCommand } from '@univerjs/sheets';
-import type { Injector } from '@wendellhu/redi';
-import { beforeEach, describe, expect, it } from 'vitest';
+/* eslint-disable ts/no-non-null-asserted-optional-chain */
 
-import { FormulaDataModel } from '@univerjs/engine-formula';
-import type { FUniver } from '../../facade';
-import { createTestBed } from '../../__tests__/create-test-bed';
+import type { ICellData, Injector, IRange, IStyleData, Nullable } from '@univerjs/core';
+import type { FUniver } from '../../everything';
+import { DataValidationType, HorizontalAlign, ICommandService, IUniverInstanceService, VerticalAlign, WrapStrategy } from '@univerjs/core';
+import { AddWorksheetMergeCommand, SetHorizontalTextAlignCommand, SetRangeValuesCommand, SetRangeValuesMutation, SetStyleCommand, SetTextWrapCommand, SetVerticalTextAlignCommand } from '@univerjs/sheets';
+import { AddSheetDataValidationCommand } from '@univerjs/sheets-data-validation';
+import { ClearSheetsFilterCriteriaCommand, RemoveSheetFilterCommand, SetSheetFilterRangeCommand, SetSheetsFilterCriteriaCommand } from '@univerjs/sheets-filter';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { createFacadeTestBed } from '../../__tests__/create-test-bed';
 
 describe('Test FRange', () => {
     let get: Injector['get'];
@@ -42,8 +43,9 @@ describe('Test FRange', () => {
     ) => Nullable<IStyleData>;
 
     beforeEach(() => {
-        const testBed = createTestBed();
+        const testBed = createFacadeTestBed();
         get = testBed.get;
+
         univerAPI = testBed.univerAPI;
 
         commandService = get(ICommandService);
@@ -53,6 +55,8 @@ describe('Test FRange', () => {
         commandService.registerCommand(SetVerticalTextAlignCommand);
         commandService.registerCommand(SetHorizontalTextAlignCommand);
         commandService.registerCommand(SetTextWrapCommand);
+        commandService.registerCommand(AddSheetDataValidationCommand);
+        commandService.registerCommand(AddWorksheetMergeCommand);
 
         getValueByPosition = (
             startRow: number,
@@ -80,10 +84,38 @@ describe('Test FRange', () => {
         };
     });
 
+    it('Range getRow', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0, 1, 1);
+
+        expect(range?.getRow()).toBe(0);
+    });
+
+    it('Range getColumn', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0, 1, 1);
+
+        expect(range?.getColumn()).toBe(0);
+    });
+
+    it('Range getWidth', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0, 1, 1);
+
+        expect(range?.getWidth()).toBe(1);
+    });
+
+    it('Range getHeight', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0, 1, 1);
+
+        expect(range?.getHeight()).toBe(1);
+    });
+
     it('Range setValue', () => {
         const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
 
-        // A1 sets the number
+        // // A1 sets the number
         const range1 = activeSheet?.getRange(0, 0, 1, 1);
         range1?.setValue(1);
 
@@ -177,11 +209,96 @@ describe('Test FRange', () => {
         expect(getStyleByPosition(3, 4, 3, 4)?.bg?.rgb).toBe('red');
     });
 
+    it('Range getValues', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+
+        // Set different types of values
+        activeSheet?.getRange(0, 0, 4, 4)?.setValues([
+            [1, 'text', true, ''],
+            [2.5, '', false, ''],
+            ['', '=SUM(A1:A2)', '', 0],
+            ['', '', '', ''],
+        ]);
+
+        // Test getting values for the entire range
+        const range1 = activeSheet?.getRange(0, 0, 4, 4);
+        const values1 = range1?.getValues();
+        expect(values1).toEqual([
+            [1, 'text', 1, ''],
+            [2.5, '', 0, ''],
+            ['', null, '', 0],
+            ['', '', '', ''],
+        ]);
+
+        // Test getting values for a partial range
+        const range2 = activeSheet?.getRange(1, 1, 2, 2);
+        const values2 = range2?.getValues();
+        expect(values2).toEqual([
+            ['', 0],
+            [null, ''],
+        ]);
+
+        // Test getting value for a single cell
+        const range3 = activeSheet?.getRange(0, 0, 1, 1);
+        const values3 = range3?.getValues();
+        expect(values3).toEqual([[1]]);
+
+        // Test getting values for an empty area
+        const range4 = activeSheet?.getRange(5, 5, 2, 2);
+        const values4 = range4?.getValues();
+        expect(values4).toEqual([
+            [null, null],
+            [null, null],
+        ]);
+
+        // Test getting values for a range containing merged cells
+        activeSheet?.getRange(6, 0, 2, 2)?.merge();
+        activeSheet?.getRange(6, 0)?.setValue('Merged');
+        const range5 = activeSheet?.getRange(6, 0, 3, 3);
+        const values5 = range5?.getValues();
+        expect(values5).toEqual([
+            ['Merged', null, null],
+            [null, null, null],
+            [null, null, null],
+        ]);
+    });
+
     it('Range getCellData', () => {
         const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet();
         activeSheet?.getRange(0, 0)?.setValue(1);
         const range = activeSheet?.getRange(0, 0);
         expect(range?.getCellData()?.v).toBe(1);
+    });
+
+    it('Range getCell', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet();
+        const range = activeSheet?.getRange(2, 3);
+        const cell = range?.getCell()!;
+        expect(cell.actualColumn).toBe(3);
+        expect(cell.actualRow).toBe(2);
+    });
+
+    it('Range getCellRect', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0);
+        const cell = range?.getCell()!;
+        const rect = range?.getCellRect()!;
+        expect(rect.x).toBe(cell.startX);
+        expect(rect.y).toBe(cell.startY);
+        expect(rect.width).toBe(cell.endX - cell.startX);
+        expect(rect.height).toBe(cell.endY - cell.startY);
+        expect(rect.toJSON()).toContain(rect.height);
+    });
+
+    it('Range isMerged', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet()!;
+        const range = activeSheet!.getRange(2, 3);
+        const isMerged = range?.isMerged()!;
+        expect(isMerged).toBe(false);
+
+        const range2 = activeSheet!.getRange(2, 3, 3, 3)!;
+        const isMerged2 = range2.isMerged()!;
+        expect(isMerged2).toBe(false);
     });
 
     it('Range getCellStyleData', () => {
@@ -190,15 +307,11 @@ describe('Test FRange', () => {
         activeSheet?.getRange(0, 0)?.setBackgroundColor('red');
         const range = activeSheet?.getRange(0, 0);
         expect(range?.getCellStyleData()?.bg?.rgb).toBe('red');
-
         activeSheet?.getRange(0, 0, 2, 2)?.setFontWeight('bold');
         expect(range?.getCellStyleData()?.bl).toBe(1);
     });
 
     it('Range getFormulas', () => {
-        const formulaDataModel = get(FormulaDataModel);
-        formulaDataModel.initFormulaData();
-
         const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
         const formulas = activeSheet?.getRange(0, 3, 5, 1)?.getFormulas();
         expect(formulas).toStrictEqual([
@@ -208,6 +321,13 @@ describe('Test FRange', () => {
             ['=SUM(A4)'],
             [''],
         ]);
+    });
+
+    it('Range getWrap', async () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+        const range = activeSheet?.getRange(0, 0);
+        await range?.setWrap(true);
+        expect(range?.getWrap()).toBe(true);
     });
 
     it('Range setFontWeight', () => {
@@ -486,5 +606,217 @@ describe('Test FRange', () => {
         expect(getStyleByPosition(0, 0, 0, 0)?.tb).toBe(WrapStrategy.WRAP);
         await range!.setWrapStrategy(WrapStrategy.CLIP);
         expect(getStyleByPosition(0, 0, 0, 0)?.tb).toBe(WrapStrategy.CLIP);
+    });
+
+    it('Range set data validation', async () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet()!;
+        const range = activeSheet.getRange(0, 0, 10, 10);
+        const range2 = activeSheet.getRange(11, 11, 2, 2);
+        await range.setDataValidation(univerAPI.newDataValidation().requireCheckbox().build());
+        await range2?.setDataValidation(univerAPI.newDataValidation().requireNumberEqualTo(1).build());
+        const range3 = activeSheet.getRange(0, 0, 100, 100);
+
+        expect(range.getDataValidation()).toBeTruthy();
+        expect(range.getDataValidation()?.rule.ranges).toEqual([{
+            unitId: univerAPI.getActiveWorkbook()?.getId(),
+            sheetId: activeSheet.getSheetId(),
+            startRow: 0,
+            endRow: 9,
+            startColumn: 0,
+            endColumn: 9,
+        }]);
+        expect(range.getDataValidation()?.getCriteriaType()).toEqual(DataValidationType.CHECKBOX);
+        expect(range.getDataValidations().length).toEqual(1);
+        expect(range3?.getDataValidations().length).toEqual(2);
+
+        expect(activeSheet?.getDataValidations().length).toEqual(2);
+    });
+
+    // #region Filter
+
+    describe('FFilter', () => {
+        beforeEach(() => {
+            commandService.registerCommand(SetSheetsFilterCriteriaCommand);
+            commandService.registerCommand(ClearSheetsFilterCriteriaCommand);
+            commandService.registerCommand(SetSheetFilterRangeCommand);
+            commandService.registerCommand(RemoveSheetFilterCommand);
+        });
+
+        it('create, modify and clear filters with Facade API', async () => {
+            const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet();
+            expect(activeSheet.getFilter()).toBeNull();
+            expect(activeSheet.getRange(0, 0, 1, 1).getFilter()).toBeNull();
+
+            const range = activeSheet.getRange(0, 0, 10, 10);
+            const filter = (await range.createFilter())!;
+
+            expect(filter).not.toBeNull();
+            expect(activeSheet.getFilter()).not.toBeNull();
+            expect(activeSheet.getRange(0, 0, 1, 1).getFilter()).not.toBeNull();
+            expect(filter.getRange().getRange()).toStrictEqual({
+                unitId: univerAPI.getActiveWorkbook()?.getId(),
+                sheetId: activeSheet.getSheetId(),
+                startColumn: 0,
+                startRow: 0,
+                endColumn: 9,
+                endRow: 9,
+            } as IRange);
+
+            expect(await filter.setColumnFilterCriteria(1, { colId: 1, filters: { blank: true } })).toBeTruthy();
+            expect(filter.getColumnFilterCriteria(1)).toEqual({ colId: 1, filters: { blank: true } });
+
+            expect(await filter.setColumnFilterCriteria(2, { colId: 2, filters: { filters: ['a'] } })).toBeTruthy();
+            expect(filter.getColumnFilterCriteria(2)).toEqual({ colId: 2, filters: { filters: ['a'] } });
+
+            expect(await filter.removeColumnFilterCriteria(1)).toBeTruthy();
+            expect(filter.getColumnFilterCriteria(1)).toBeFalsy();
+
+            expect(await filter.removeFilterCriteria()).toBeTruthy();
+            expect(filter.getColumnFilterCriteria(2)).toBeFalsy();
+
+            expect(await filter.remove()).toBeTruthy();
+            expect(activeSheet.getFilter()).toBeNull();
+        });
+    });
+
+    // #endregion
+
+    // #region Merge cells
+    it('test Merge', async () => {
+        let hasError = false;
+        try {
+            const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet()!;
+            let range = activeSheet.getRange(0, 2, 0, 2);
+            expect(activeSheet.getMergedRanges().length).toBe(0);
+            range = await range.merge();
+            expect(activeSheet.getMergedRanges().length).toBe(1);
+            range = range.breakApart();
+            expect(activeSheet.getMergedRanges().length).toBe(0);
+            range = await range.mergeAcross();
+            expect(activeSheet.getMergedRanges().length).toBe(3);
+            expect(activeSheet.getMergedRanges()[0].getRange()).toStrictEqual({ startRow: 0, endRow: 0, startColumn: 0, endColumn: 2 });
+            range = range.breakApart();
+            expect(activeSheet.getMergedRanges().length).toBe(0);
+            await range.mergeVertically();
+            expect(activeSheet.getMergedRanges().length).toBe(3);
+            expect(activeSheet.getMergedRanges()[0].getRange()).toStrictEqual({ startRow: 0, endRow: 2, startColumn: 0, endColumn: 0 });
+            const range2 = activeSheet.getRange(0, 2, 0, 0);
+            expect(range2.isPartOfMerge()).toBeTruthy();
+            const range3 = activeSheet.getRange(0, 5, 0, 5);
+            await range3.merge();
+        } catch (error) {
+            hasError = true;
+        }
+        expect(hasError).toBeTruthy();
+    });
+    //#endregion
+
+    // Add these new test cases
+    it('Range getRow, getColumn, getWidth, getHeight with A1 notation', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+
+        // Test range with A1 notation
+        const rangeA1D5 = activeSheet?.getRange('A1:D5');
+        expect(rangeA1D5?.getRow()).toBe(0);
+        expect(rangeA1D5?.getColumn()).toBe(0);
+        expect(rangeA1D5?.getWidth()).toBe(4);
+        expect(rangeA1D5?.getHeight()).toBe(5);
+
+        // Test single cell with A1 notation
+        const rangeB3 = activeSheet?.getRange('B3');
+        expect(rangeB3?.getRow()).toBe(2);
+        expect(rangeB3?.getColumn()).toBe(1);
+        expect(rangeB3?.getWidth()).toBe(1);
+        expect(rangeB3?.getHeight()).toBe(1);
+
+        // Test range with only column letters
+        const rangeAD = activeSheet?.getRange('A:D');
+        expect(rangeAD?.getRow()).toBe(0);
+        expect(rangeAD?.getColumn()).toBe(0);
+        expect(rangeAD?.getWidth()).toBe(4);
+        expect(rangeAD?.getHeight()).toBe(100);
+
+        // Test range with only row numbers
+        const range15 = activeSheet?.getRange('1:5');
+        expect(range15?.getRow()).toBe(0);
+        expect(range15?.getColumn()).toBe(0);
+        // Width should be the maximum number of columns in the sheet
+        expect(range15?.getWidth()).toBeGreaterThan(0);
+        expect(range15?.getHeight()).toBe(5);
+
+        // Test with sheet name
+        const rangeWithSheet = activeSheet?.getRange('sheet1!E6:G8');
+        expect(rangeWithSheet?.getRow()).toBe(5);
+        expect(rangeWithSheet?.getColumn()).toBe(4);
+        expect(rangeWithSheet?.getWidth()).toBe(3);
+        expect(rangeWithSheet?.getHeight()).toBe(3);
+
+        // Test case insensitivity
+        const rangeCaseInsensitive = activeSheet?.getRange('h10:J12');
+        expect(rangeCaseInsensitive?.getRow()).toBe(9);
+        expect(rangeCaseInsensitive?.getColumn()).toBe(7);
+        expect(rangeCaseInsensitive?.getWidth()).toBe(3);
+        expect(rangeCaseInsensitive?.getHeight()).toBe(3);
+
+        // Test invalid range
+        expect(() => activeSheet?.getRange('sheet_not_exist!A1:D5').getValues()).toThrow();
+    });
+
+    it('Range getValues with A1 notation', () => {
+        const activeSheet = univerAPI.getActiveWorkbook()?.getActiveSheet();
+
+        // Set up some test data
+        activeSheet?.getRange(0, 0, 5, 4)?.setValues([
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12],
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+        ]);
+
+        // Test single cell
+        expect(activeSheet?.getRange('A1').getValues()).toEqual([[1]]);
+
+        // Test range
+        expect(activeSheet?.getRange('A1:D5').getValues()).toEqual([
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12],
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+        ]);
+
+        // Test case insensitivity
+        expect(activeSheet?.getRange('a1:d5').getValues()).toEqual([
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12],
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+        ]);
+
+        // Test with sheet name
+        expect(activeSheet?.getRange('sheet1!A1:D5').getValues()).toEqual([
+            [1, 2, 3, 4],
+            [5, 6, 7, 8],
+            [9, 10, 11, 12],
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+        ]);
+
+        // Test out of bounds range
+        expect(activeSheet?.getRange('A1:Z100').getValues()).toEqual(expect.arrayContaining([
+            expect.arrayContaining([1, 2, 3, 4, null, null, null, null, null, null]),
+        ]));
+    });
+
+    it('Range setNumberFormat', () => {
+        univerAPI.getHooks().onRendered(() => {
+            const activeSheet = univerAPI.getActiveWorkbook()!.getActiveSheet();
+            const range = activeSheet.getRange(0, 0, 1, 1);
+            range.setValue(1234.5678);
+            range.setNumberFormat('#,###');
+            expect(range.getValue()).toBe('1,234.5678');
+        });
     });
 });

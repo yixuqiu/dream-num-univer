@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 import { LocaleService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
+import { useDependency } from '../../utils/di';
 
 export function useLocaleService() {
     return useDependency(LocaleService);

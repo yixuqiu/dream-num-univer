@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,15 @@
  */
 
 import type { Nullable } from '@univerjs/core';
-import { DataStreamTreeNodeType } from '@univerjs/core';
 import type { IDocumentSkeletonPage } from '../../../../basics/i-document-skeleton-cached';
 import type { ISectionBreakConfig } from '../../../../basics/interfaces';
 import type { DataStreamTreeNode } from '../../view-model/data-stream-tree-node';
 import type { DocumentViewModel } from '../../view-model/document-view-model';
 import type { ILayoutContext } from '../tools';
+import { DataStreamTreeNodeType } from '@univerjs/core';
 import { createSkeletonPage } from '../model/page';
 import { dealWithBlockError } from './block-error';
-import { dealWidthParagraph } from './paragraph/layout';
+import { dealWidthParagraph } from './paragraph/paragraph-layout';
 
 export function dealWithSection(
     ctx: ILayoutContext,
@@ -80,8 +80,6 @@ export function dealWithSection(
                 currentPageCache,
                 sectionBreakConfig
             );
-        } else if (paragraphNode.nodeType === DataStreamTreeNodeType.TABLE) {
-            // Table 表格
         }
 
         if (skeletonPages.length === 0) {
@@ -96,9 +94,11 @@ export function dealWithSection(
         }
     }
 
-    if (ctx.isDirty && ctx.layoutStartPointer.paragraphIndex != null) {
+    const { segmentId } = curPage;
+
+    if (ctx.isDirty && ctx.layoutStartPointer[segmentId] != null) {
         // Rollback the skeleton to the layout start point.
-        _rollbackPages(ctx.layoutStartPointer.paragraphIndex, allCurrentSkeletonPages);
+        _rollbackPages(ctx.layoutStartPointer[segmentId] as number, allCurrentSkeletonPages);
     }
 
     return {
@@ -130,7 +130,8 @@ function _rollbackPages(paragraphIndex: number, allCurrentSkeletonPages: IDocume
                 }
 
                 if (findFirstDirtyLine) {
-                    const columnSplitIndex = column.lines.length ? columnIndex + 1 : columnIndex;
+                    let columnSplitIndex = column.lines.length ? columnIndex + 1 : columnIndex;
+                    columnSplitIndex = Math.max(columnSplitIndex, 1);
                     const preColumnIndex = columnSplitIndex - 1;
                     if (preColumnIndex >= 0) {
                         section.columns[preColumnIndex].isFull = false;
@@ -141,15 +142,17 @@ function _rollbackPages(paragraphIndex: number, allCurrentSkeletonPages: IDocume
             }
 
             if (findFirstDirtyLine) {
-                const sectionSplitIndex = section.columns.length ? sectionIndex + 1 : sectionIndex;
+                const sectionSplitIndex = sectionIndex + 1;
                 page.sections.splice(sectionSplitIndex);
                 break;
             }
         }
 
         if (findFirstDirtyLine) {
-            const pageSplitIndex = page.sections.length ? pageIndex + 1 : pageIndex;
-            allCurrentSkeletonPages.splice(pageSplitIndex);
+            // Even if all the rows are removed, leave an empty page with an empty section and column.
+            // This is because this keeps the image cache(skeDrawings) on the page.
+            const pageSplitIndex = pageIndex + 1;
+            allCurrentSkeletonPages.splice(Math.max(pageSplitIndex, 1));
             break;
         }
     }
@@ -166,6 +169,3 @@ function _pushPage(allCurrentSkeletonPages: IDocumentSkeletonPage[], blockSkelet
 
     allCurrentSkeletonPages.push(...blockSkeletonPages);
 }
-
-// 当本节有多个列，且下一节为连续节类型的时候，需要按照列数分割，重新计算lines
-export function dealWidthBlocksByMultiColumnAndContinuous() {}

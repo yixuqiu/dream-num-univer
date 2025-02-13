@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-import { DisposableCollection, sortRules, toDisposable } from '@univerjs/core';
-
-import type { IDisposable } from '@wendellhu/redi';
-import { BaseObject } from '../base-object';
-import type { IViewportBound } from '../basics/vector2';
+import type { IDisposable } from '@univerjs/core';
+import type { IViewportInfo } from '../basics/vector2';
 import type { UniverRenderingContext } from '../context';
 import type { ComponentExtension } from './extension';
+import { DisposableCollection, sortRules, toDisposable } from '@univerjs/core';
+import { BaseObject } from '../base-object';
 
 export class RenderComponent<T, U, V> extends BaseObject {
     private _extensions = new Map<string, ComponentExtension<T, U, V>>();
@@ -38,9 +37,12 @@ export class RenderComponent<T, U, V> extends BaseObject {
             disposableCollection.add(
                 toDisposable(() => {
                     this._extensions.delete(extension.uKey);
+                    extension.parent = null;
                 })
             );
         }
+
+        this.disposeWithMe(disposableCollection);
 
         return disposableCollection;
     }
@@ -56,7 +58,7 @@ export class RenderComponent<T, U, V> extends BaseObject {
         return this._extensions.get(uKey);
     }
 
-    draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    draw(ctx: UniverRenderingContext, bounds?: IViewportInfo) {
         /* abstract */
     }
 

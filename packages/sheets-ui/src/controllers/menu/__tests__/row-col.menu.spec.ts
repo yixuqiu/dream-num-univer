@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,13 @@ import type { Univer, Workbook } from '@univerjs/core';
 import {
     DisposableCollection,
     ICommandService,
+    Injector,
     IUniverInstanceService,
     RANGE_TYPE,
     toDisposable,
     UniverInstanceType,
 } from '@univerjs/core';
 import {
-    NORMAL_SELECTION_PLUGIN_NAME,
-    SelectionManagerService,
     SetColHiddenCommand,
     SetColHiddenMutation,
     SetColVisibleMutation,
@@ -39,7 +38,6 @@ import {
     SetSpecificRowsVisibleCommand,
 } from '@univerjs/sheets';
 import type { ISetSelectionsOperationParams } from '@univerjs/sheets';
-import { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ShowColMenuItemFactory, ShowRowMenuItemFactory } from '../menu';
@@ -75,13 +73,6 @@ describe('Test row col menu items', () => {
         });
 
         disposableCollection = new DisposableCollection();
-
-        const selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
     });
 
     afterEach(() => univer.dispose());
@@ -89,26 +80,26 @@ describe('Test row col menu items', () => {
     function getRowCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getRowCount();
     }
 
     function getColCount(): number {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         return worksheet.getColumnCount();
     }
 
     async function selectRow(rowStart: number, rowEnd: number): Promise<boolean> {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         const endColumn = getColCount() - 1;
         return commandService.executeCommand<ISetSelectionsOperationParams, boolean>(SetSelectionsOperation.id, {
             unitId: workbook.getUnitId(),
             subUnitId: worksheet.getSheetId(),
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+
             selections: [
                 {
                     range: { startRow: rowStart, startColumn: 0, endColumn, endRow: rowEnd, rangeType: RANGE_TYPE.ROW },
@@ -131,12 +122,12 @@ describe('Test row col menu items', () => {
     async function selectColumn(columnStart: number, columnEnd: number): Promise<boolean> {
         const currentService = get(IUniverInstanceService);
         const workbook = currentService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!;
-        const worksheet = workbook.getActiveSheet();
+        const worksheet = workbook.getActiveSheet()!;
         const endRow = getRowCount() - 1;
         return commandService.executeCommand<ISetSelectionsOperationParams, boolean>(SetSelectionsOperation.id, {
             unitId: workbook.getUnitId(),
             subUnitId: worksheet.getSheetId(),
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+
             selections: [
                 {
                     range: {

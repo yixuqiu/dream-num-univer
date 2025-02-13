@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-import type { ISize, ITransformState } from '../../services/floating-object/floating-object-interfaces';
+import type { ISize } from '../../shared/shape';
 import type { IKeyType, Nullable } from '../../shared/types';
+import type { IWorksheetData } from '../../sheets/typedef';
 import type { LocaleType, ThemeColorType } from '../enum';
-import type { ShapeType } from '../enum/shape-type';
+import type { ShapeType } from '../enum/prst-geom-type';
 import type { ICustomBlock, IDocumentData, ILists } from './i-document-data';
-import type { IExtraModelData } from './i-extra-model-data';
+import type { ITransformState } from './i-drawing';
 import type { IImageProperties } from './i-image-properties';
 import type { IPlaceholder } from './i-placeholder';
 import type { IShapeProperties } from './i-shape-properties';
 import type { IColorStyle, IStyleBase, IStyleData } from './i-style-data';
-import type { IWorksheetData } from './i-worksheet-data';
 
-export interface ISlideData extends IReferenceSource, IExtraModelData {
+export interface ISlideData extends IReferenceSource {
     id: string; // unit id
     locale?: LocaleType;
     title: string;
@@ -87,7 +87,7 @@ interface IMasterProperties {
     name: string;
 }
 
-export interface IRichTextProps extends ITransformState, IStyleBase {
+export interface ISlideRichTextProps extends ITransformState, IStyleBase {
     text?: string;
     rich?: IDocumentData;
 }
@@ -116,12 +116,16 @@ export interface IPageElement {
     // elementGroup: IGroup;
     shape?: IShape;
     image?: IImage;
-    richText?: IRichTextProps;
+    richText?: ISlideRichTextProps;
+
+    /** @deprecated */
     spreadsheet?: {
         worksheet: IWorksheetData;
         styles: IKeyType<Nullable<IStyleData>>;
     };
+    /** @deprecated */
     document?: IDocumentData;
+    /** @deprecated */
     slide?: ISlideData;
     // video: IVideo;
     // line: ILine;
@@ -131,11 +135,11 @@ export interface IPageElement {
 }
 
 export enum PageType {
-    SLIDE, //	A slide page.
-    MASTER, //	A master slide page.
-    LAYOUT, //	A layout page.
-    HANDOUT_MASTER, //	A handout master page.
-    NOTES_MASTER, //	A notes master page.
+    SLIDE, // A slide page.
+    MASTER, // A master slide page.
+    LAYOUT, // A layout page.
+    HANDOUT_MASTER, // A handout master page.
+    NOTES_MASTER, // A notes master page.
 }
 
 export enum PageElementType {
@@ -171,9 +175,9 @@ interface ILink {
 }
 
 export enum RelativeSlideLink {
-    RELATIVE_SLIDE_LINK_UNSPECIFIED, //	An unspecified relative slide link.
-    NEXT_SLIDE, //	A link to the next slide.
-    PREVIOUS_SLIDE, //	A link to the previous slide.
-    FIRST_SLIDE, //	A link to the first slide in the presentation.
-    LAST_SLIDE, //	A link to the last slide in the presentation.
+    RELATIVE_SLIDE_LINK_UNSPECIFIED, // An unspecified relative slide link.
+    NEXT_SLIDE, // A link to the next slide.
+    PREVIOUS_SLIDE, // A link to the previous slide.
+    FIRST_SLIDE, // A link to the first slide in the presentation.
+    LAST_SLIDE, // A link to the last slide in the presentation.
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,48 +14,54 @@
  * limitations under the License.
  */
 
-import type { IViewportBound, Vector2 } from '../../basics/vector2';
+/* eslint-disable unused-imports/no-unused-vars */
+
+import type { Nullable } from '@univerjs/core';
+import type { IViewportInfo, Vector2 } from '../../basics/vector2';
 import type { UniverRenderingContext } from '../../context';
+import type { ColumnHeaderLayout, IColumnsHeaderCfgParam } from './extensions/column-header-layout';
+import type { SpreadsheetSkeleton } from './sheet.render-skeleton';
 import { SheetColumnHeaderExtensionRegistry } from '../extension';
-import type { ColumnHeaderLayout } from './extensions/column-header-layout';
 import { SpreadsheetHeader } from './sheet-component';
-import type { SpreadsheetSkeleton } from './sheet-skeleton';
 
 export class SpreadsheetColumnHeader extends SpreadsheetHeader {
+    override getDocuments(): void {
+        throw new Error('Method not implemented.');
+    }
+
+    override getNoMergeCellPositionByIndex(rowIndex: number, columnIndex: number): Nullable<{ startY: number; startX: number; endX: number; endY: number }> {
+        throw new Error('Method not implemented.');
+    }
+
+    override getSelectionBounding(startRow: number, startColumn: number, endRow: number, endColumn: number): Nullable<{ startRow: number; startColumn: number; endRow: number; endColumn: number }> {
+        throw new Error('Method not implemented.');
+    }
+
     private _columnHeaderLayoutExtension!: ColumnHeaderLayout;
 
     constructor(oKey: string, spreadsheetSkeleton?: SpreadsheetSkeleton) {
         super(oKey, spreadsheetSkeleton);
-
         this._initialDefaultExtension();
-
         this.makeDirty(true);
     }
 
-    get columnHeaderLayoutExtension() {
+    get columnHeaderLayoutExtension(): ColumnHeaderLayout {
         return this._columnHeaderLayoutExtension;
     }
 
-    override draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    override draw(ctx: UniverRenderingContext, bounds?: IViewportInfo): void {
         const spreadsheetSkeleton = this.getSkeleton();
-        if (!spreadsheetSkeleton) {
-            return;
-        }
+        if (!spreadsheetSkeleton) return;
 
         const parentScale = this.getParentScale();
-
-        spreadsheetSkeleton.calculateSegment(bounds);
-
+        spreadsheetSkeleton.updateVisibleRange(bounds);
         const segment = spreadsheetSkeleton.rowColumnSegment;
 
-        if (segment.startColumn === -1 && segment.endColumn === -1) {
-            return;
-        }
+        if (!segment) return;
+
+        if (segment.startColumn === -1 && segment.endColumn === -1) return;
 
         const { rowHeaderWidth } = spreadsheetSkeleton;
-
-        // const { left: fixTranslateLeft, top: fixTranslateTop } = getTranslateInSpreadContextWithPixelRatio();
-
         ctx.translateWithPrecision(rowHeaderWidth, 0);
 
         const extensions = this.getExtensionsByOrder();
@@ -65,7 +71,7 @@ export class SpreadsheetColumnHeader extends SpreadsheetHeader {
     }
 
     override isHit(coord: Vector2): boolean {
-        const oCoord = this._getInverseCoord(coord);
+        const oCoord = this.getInverseCoord(coord);
         const skeleton = this.getSkeleton();
         if (!skeleton) {
             return false;
@@ -77,12 +83,21 @@ export class SpreadsheetColumnHeader extends SpreadsheetHeader {
         return false;
     }
 
-    private _initialDefaultExtension() {
+    private _initialDefaultExtension(): void {
         SheetColumnHeaderExtensionRegistry.getData().forEach((extension) => {
             this.register(extension);
         });
         this._columnHeaderLayoutExtension = this.getExtensionByKey(
             'DefaultColumnHeaderLayoutExtension'
         ) as ColumnHeaderLayout;
+    }
+
+    /**
+     * Customize column header, such as custom header text and background.
+     * @param cfg
+     */
+    setCustomHeader(cfg: IColumnsHeaderCfgParam): void {
+        this.makeDirty(true);
+        this._columnHeaderLayoutExtension.configHeaderColumn(cfg);
     }
 }

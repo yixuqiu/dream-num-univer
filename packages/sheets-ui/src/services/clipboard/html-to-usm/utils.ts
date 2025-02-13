@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,15 @@
  * limitations under the License.
  */
 
-import type { IParagraph, IParagraphStyle, Nullable } from '@univerjs/core';
+import type { IParagraph, IParagraphStyle, ITextRun, Nullable } from '@univerjs/core';
+import type { ICellDataWithSpanInfo } from '../type';
 import { DataStreamTreeTokenType, Tools } from '@univerjs/core';
 import { ptToPixel } from '@univerjs/engine-render';
 
 export default function parseToDom(rawHtml: string) {
-    const parser = new DOMParser();
-    const html = `<x-univer id="univer-root">${rawHtml}</x-univer>`;
-    const doc = parser.parseFromString(html, 'text/html');
-
-    return doc.querySelector('#univer-root');
+    const template = document.createElement('body');
+    template.innerHTML = rawHtml;
+    return template;
 }
 
 // TODO: @JOCS, Complete other missing attributes that exist in IParagraphStyle
@@ -39,13 +38,13 @@ export function getParagraphStyle(el: HTMLElement): Nullable<IParagraphStyle> {
         switch (cssRule) {
             case 'margin-top': {
                 const marginTopValue = Number.parseInt(cssValue);
-                paragraphStyle.spaceAbove = /pt/.test(cssValue) ? ptToPixel(marginTopValue) : marginTopValue;
+                paragraphStyle.spaceAbove = { v: /pt/.test(cssValue) ? ptToPixel(marginTopValue) : marginTopValue };
                 break;
             }
 
             case 'margin-bottom': {
                 const marginBottomValue = Number.parseInt(cssValue);
-                paragraphStyle.spaceBelow = /pt/.test(cssValue) ? ptToPixel(marginBottomValue) : marginBottomValue;
+                paragraphStyle.spaceBelow = { v: /pt/.test(cssValue) ? ptToPixel(marginBottomValue) : marginBottomValue };
 
                 break;
             }
@@ -95,4 +94,33 @@ export function generateParagraphs(dataStream: string, prevParagraph?: IParagrap
     }
 
     return paragraphs;
+}
+
+export function convertToCellStyle(cell: ICellDataWithSpanInfo, dataStream: string, textRuns: ITextRun[] | undefined) {
+    const dataStreamLength = dataStream.length;
+    const textRunsLength = textRuns?.length ?? 0;
+    const canConvertToCellStyle = textRunsLength === 1 && textRuns![0].st === 0 && textRuns![0].ed === dataStreamLength;
+
+    if (cell.p) {
+        if (canConvertToCellStyle && cell.p.body?.textRuns?.length) {
+            cell.p.body.textRuns = [];
+            return {
+                ...cell,
+                s: textRuns![0].ts,
+            };
+        } else {
+            return cell;
+        }
+    } else {
+        if (canConvertToCellStyle) {
+            return {
+                ...cell,
+                s: textRuns![0].ts,
+            };
+        } else {
+            return cell;
+        }
+    }
+
+    return cell;
 }

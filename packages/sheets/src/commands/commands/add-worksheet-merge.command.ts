@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,32 +14,34 @@
  * limitations under the License.
  */
 
-import type { ICellData, ICommand, IMutationInfo, IRange, Nullable, Workbook, Worksheet } from '@univerjs/core';
+import type { IAccessor, ICellData, ICommand, IMutationInfo, Injector, IRange, Nullable, Workbook, Worksheet } from '@univerjs/core';
+import type {
+    IAddWorksheetMergeMutationParams,
+    IRemoveWorksheetMergeMutationParams,
+} from '../../basics/interfaces/mutation-interface';
+
+import type { ISetRangeValuesMutationParams } from '../mutations/set-range-values.mutation';
 import {
+    CellModeEnum,
     CommandType,
     Dimension,
     ICommandService,
     IUndoRedoService,
     IUniverInstanceService,
     ObjectMatrix,
+    Rectangle,
     sequenceExecute,
     UniverInstanceType,
 } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
-
-import type {
-    IAddWorksheetMergeMutationParams,
-    IRemoveWorksheetMergeMutationParams,
-} from '../../basics/interfaces/mutation-interface';
 import { getAddMergeMutationRangeByType } from '../../controllers/merge-cell.controller';
-import { SelectionManagerService } from '../../services/selection-manager.service';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
 import { AddMergeUndoMutationFactory, AddWorksheetMergeMutation } from '../mutations/add-worksheet-merge.mutation';
 import {
     RemoveMergeUndoMutationFactory,
     RemoveWorksheetMergeMutation,
 } from '../mutations/remove-worksheet-merge.mutation';
-import type { ISetRangeValuesMutationParams } from '../mutations/set-range-values.mutation';
 import { SetRangeValuesMutation, SetRangeValuesUndoMutationFactory } from '../mutations/set-range-values.mutation';
+import { getSheetCommandTarget } from './utils/target-util';
 
 export interface IAddMergeCommandParams {
     value?: Dimension.ROWS | Dimension.COLUMNS;
@@ -104,7 +106,7 @@ function getClearContentMutationParamsForRanges(
 
 function getClearContentMutationParamForRange(worksheet: Worksheet, range: IRange): ObjectMatrix<Nullable<ICellData>> {
     const { startRow, startColumn, endColumn, endRow } = range;
-    const cellMatrix = worksheet.getMatrixWithMergedCells(startRow, startColumn, endRow, endColumn);
+    const cellMatrix = worksheet.getMatrixWithMergedCells(startRow, startColumn, endRow, endColumn, CellModeEnum.Intercepted);
     const redoMatrix = new ObjectMatrix<Nullable<ICellData>>();
     cellMatrix.forValue((row, col, cellData) => {
         if (cellData && (row !== startRow || col !== startColumn)) {
@@ -119,7 +121,7 @@ export const AddWorksheetMergeCommand: ICommand = {
     type: CommandType.COMMAND,
     id: 'sheet.command.add-worksheet-merge',
 
-    handler: async (accessor: IAccessor, params: IAddMergeCommandParams) => {
+    handler: (accessor: IAccessor, params: IAddMergeCommandParams) => {
         const commandService = accessor.get(ICommandService);
         const undoRedoService = accessor.get(IUndoRedoService);
         const univerInstanceService = accessor.get(IUniverInstanceService);
@@ -181,8 +183,8 @@ export const AddWorksheetMergeAllCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-all',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!selections?.length) {
             return false;
         }
@@ -210,8 +212,8 @@ export const AddWorksheetMergeVerticalCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-vertical',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!selections?.length) {
             return false;
         }
@@ -240,8 +242,8 @@ export const AddWorksheetMergeHorizontalCommand: ICommand = {
     id: 'sheet.command.add-worksheet-merge-horizontal',
     handler: async (accessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
-        const selections = selectionManagerService.getSelectionRanges();
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
+        const selections = selectionManagerService.getCurrentSelections()?.map((s) => s.range);
         if (!selections?.length) {
             return false;
         }
@@ -263,3 +265,26 @@ export const AddWorksheetMergeHorizontalCommand: ICommand = {
         } as IAddMergeCommandParams);
     },
 };
+
+export function addMergeCellsUtil(injector: Injector, unitId: string, subUnitId: string, ranges: IRange[], defaultMerge: boolean) {
+    const univerInstanceService = injector.get(IUniverInstanceService);
+    const target = getSheetCommandTarget(univerInstanceService, { unitId, subUnitId });
+    if (!target) return;
+    const { worksheet } = target;
+    const mergeData = worksheet.getMergeData();
+    const overlap = mergeData.some((mergeRange) => {
+        return ranges.some((range) => {
+            return Rectangle.intersects(range, mergeRange);
+        });
+    });
+    if (overlap) {
+        throw new Error('The ranges to be merged overlap with the existing merged cells');
+    }
+    const commandService = injector.get(ICommandService);
+    commandService.executeCommand(AddWorksheetMergeCommand.id, {
+        unitId,
+        subUnitId,
+        selections: ranges,
+        defaultMerge,
+    });
+}

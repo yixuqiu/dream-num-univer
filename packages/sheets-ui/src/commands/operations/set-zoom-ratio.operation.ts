@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
+import { CommandType } from '@univerjs/core';
+import { IRenderManagerService } from '@univerjs/engine-render';
 import type { IOperation } from '@univerjs/core';
-import { CommandType, IUniverInstanceService, Tools } from '@univerjs/core';
-import type { IAccessor } from '@wendellhu/redi';
+import { SheetsZoomRenderController } from '../../controllers/render-controllers/zoom.render-controller';
 
 export interface ISetZoomRatioOperationParams {
     zoomRatio: number;
@@ -24,32 +25,14 @@ export interface ISetZoomRatioOperationParams {
     subUnitId: string;
 }
 
-export const SetZoomRatioUndoMutationFactory = (
-    accessor: IAccessor,
-    params: ISetZoomRatioOperationParams
-): ISetZoomRatioOperationParams => {
-    const workbook = accessor.get(IUniverInstanceService).getUniverSheetInstance(params.unitId);
-    const worksheet = workbook!.getSheetBySheetId(params.subUnitId);
-    const old = worksheet!.getConfig().zoomRatio;
-    return {
-        ...Tools.deepClone(params),
-        zoomRatio: old,
-    };
-};
-
 export const SetZoomRatioOperation: IOperation<ISetZoomRatioOperationParams> = {
     id: 'sheet.operation.set-zoom-ratio',
     type: CommandType.OPERATION,
     handler: (accessor, params: ISetZoomRatioOperationParams) => {
-        const workbook = accessor.get(IUniverInstanceService).getUniverSheetInstance(params.unitId);
+        const renderManagerService = accessor.get(IRenderManagerService);
+        const renderUnit = renderManagerService.getRenderById(params.unitId);
+        if (!renderUnit) return false;
 
-        const worksheet = workbook?.getSheetBySheetId(params.subUnitId);
-        if (worksheet == null) {
-            return false;
-        }
-
-        worksheet.getConfig().zoomRatio = params.zoomRatio;
-
-        return true;
+        return renderUnit.with(SheetsZoomRenderController).updateZoom(params.subUnitId, params.zoomRatio);
     },
 };

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import type { ICommand, IMultiCommand } from '@univerjs/core';
+import type { IAccessor, ICommand, IMultiCommand } from '@univerjs/core';
 import { CommandType, ICommandService } from '@univerjs/core';
-import { CopyCommand, CutCommand, IClipboardInterfaceService, PasteCommand } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
+import { CopyCommand, CutCommand, IClipboardInterfaceService, PasteCommand, SheetPasteShortKeyCommandName } from '@univerjs/ui';
 
 import { whenSheetFocused } from '../../controllers/shortcuts/utils';
 import { ISheetClipboardService, PREDEFINED_HOOK_NAME } from '../../services/clipboard/clipboard.service';
@@ -54,6 +53,12 @@ export interface ISheetPasteParams {
     value: string;
 }
 
+export interface ISheetPasteByShortKeyParams {
+    htmlContent?: string;
+    textContent?: string;
+    files?: File[];
+}
+
 export const SheetPasteCommand: IMultiCommand = {
     id: PasteCommand.id,
     type: CommandType.COMMAND,
@@ -76,6 +81,18 @@ export const SheetPasteCommand: IMultiCommand = {
         }
 
         return false;
+    },
+};
+
+export const SheetPasteShortKeyCommand: ICommand = {
+    id: SheetPasteShortKeyCommandName,
+    type: CommandType.COMMAND,
+    handler: async (accessor: IAccessor, params: ISheetPasteByShortKeyParams) => {
+        const clipboardService = accessor.get(ISheetClipboardService);
+        const { htmlContent, textContent, files } = params;
+        clipboardService.legacyPaste(htmlContent, textContent, files);
+
+        return true;
     },
 };
 
@@ -118,5 +135,15 @@ export const SheetPasteBesidesBorderCommand: ICommand = {
         return commandService.executeCommand(SheetPasteCommand.id, {
             value: PREDEFINED_HOOK_NAME.SPECIAL_PASTE_BESIDES_BORDER,
         });
+    },
+};
+
+export const SheetOptionalPasteCommand: ICommand = {
+    id: 'sheet.command.optional-paste',
+    type: CommandType.COMMAND,
+    handler: async (accessor, { type }: { type: keyof typeof PREDEFINED_HOOK_NAME }) => {
+        const clipboardService = accessor.get(ISheetClipboardService);
+
+        return clipboardService.rePasteWithPasteType(type);
     },
 };

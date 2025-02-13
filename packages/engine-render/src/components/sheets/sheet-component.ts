@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,14 @@
 
 import type { IRange, Nullable } from '@univerjs/core';
 
-import { RENDER_CLASS_TYPE } from '../../basics/const';
-import type { IViewportBound, Vector2 } from '../../basics/vector2';
+import type { IViewportInfo, Vector2 } from '../../basics/vector2';
 import type { UniverRenderingContext } from '../../context';
-import { RenderComponent } from '../component';
 import type { SHEET_EXTENSION_TYPE } from './extensions/sheet-extension';
-import type { SpreadsheetSkeleton } from './sheet-skeleton';
+import type { SpreadsheetSkeleton } from './sheet.render-skeleton';
+import { RENDER_CLASS_TYPE } from '../../basics/const';
+import { RenderComponent } from '../component';
 
-export class SheetComponent extends RenderComponent<SpreadsheetSkeleton, SHEET_EXTENSION_TYPE, IRange[]> {
+export abstract class SheetComponent extends RenderComponent<SpreadsheetSkeleton, SHEET_EXTENSION_TYPE, IRange[]> {
     constructor(
         oKey: string,
         private _skeleton?: SpreadsheetSkeleton
@@ -37,9 +37,10 @@ export class SheetComponent extends RenderComponent<SpreadsheetSkeleton, SHEET_E
 
     updateSkeleton(spreadsheetSkeleton: SpreadsheetSkeleton) {
         this._skeleton = spreadsheetSkeleton;
+        this.getScene()?.updateTransformerZero(spreadsheetSkeleton.rowHeaderWidth, spreadsheetSkeleton.columnHeaderHeight);
     }
 
-    override render(mainCtx: UniverRenderingContext, bounds?: IViewportBound) {
+    override render(mainCtx: UniverRenderingContext, bounds?: IViewportInfo) {
         if (!this.visible) {
             this.makeDirty(false);
             return this;
@@ -64,27 +65,25 @@ export class SheetComponent extends RenderComponent<SpreadsheetSkeleton, SHEET_E
         };
     }
 
-    getDocuments(): any {}
+    abstract getDocuments(): any;
 
-    getNoMergeCellPositionByIndex(
+    abstract getNoMergeCellPositionByIndex(
         rowIndex: number,
         columnIndex: number
-    ): Nullable<{ startY: number; startX: number; endX: number; endY: number }> {}
+    ): Nullable<{ startY: number; startX: number; endX: number; endY: number }>;
 
     getScrollXYByRelativeCoords(coord: Vector2) {
         return { x: 0, y: 0 };
     }
 
-    getSelectionBounding(
+    abstract getSelectionBounding(
         startRow: number,
         startColumn: number,
         endRow: number,
         endColumn: number
-    ): Nullable<{ startRow: number; startColumn: number; endRow: number; endColumn: number }> {}
+    ): Nullable<{ startRow: number; startColumn: number; endRow: number; endColumn: number }>;
 
-    protected _draw(ctx: UniverRenderingContext, bounds?: IViewportBound) {
-        /* abstract */
-    }
+    protected abstract _draw(ctx: UniverRenderingContext, bounds?: IViewportInfo): void;
 
     /**
      * TODO: DR-Univer, fix as unknown as
@@ -95,8 +94,8 @@ export class SheetComponent extends RenderComponent<SpreadsheetSkeleton, SHEET_E
     }
 }
 
-export class SpreadsheetHeader extends SheetComponent {
-    protected override _draw(ctx: UniverRenderingContext, bounds?: IViewportBound): void {
+export abstract class SpreadsheetHeader extends SheetComponent {
+    protected override _draw(ctx: UniverRenderingContext, bounds?: IViewportInfo): void {
         this.draw(ctx, bounds);
     }
 }

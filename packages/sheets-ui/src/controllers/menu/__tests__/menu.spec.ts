@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,14 @@ import type { IRange, Univer } from '@univerjs/core';
 import {
     DisposableCollection,
     ICommandService,
-    RANGE_TYPE,
-} from '@univerjs/core';
+    Injector,
+    RANGE_TYPE } from '@univerjs/core';
 import {
-    NORMAL_SELECTION_PLUGIN_NAME,
-    SelectionManagerService,
     SetBoldCommand,
     SetRangeValuesMutation,
     SetStyleCommand,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
-import { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { BoldMenuItemFactory } from '../menu';
@@ -60,15 +58,10 @@ describe('test menu items', () => {
     });
 
     function select(range: IRange) {
-        const selectionManager = get(SelectionManagerService);
-        selectionManager.setCurrentSelection({
-            pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-            unitId: 'test',
-            sheetId: 'sheet1',
-        });
+        const selectionManager = get(SheetsSelectionsService);
 
         const { startColumn, startRow, endColumn, endRow } = range;
-        selectionManager.add([
+        selectionManager.addSelections([
             {
                 range: { startRow, startColumn, endColumn, endRow, rangeType: RANGE_TYPE.NORMAL },
                 primary: {
@@ -93,11 +86,10 @@ describe('test menu items', () => {
         disposableCollection.add(menuItem.activated$!.subscribe((v: boolean) => (activated = v)));
         disposableCollection.add(menuItem.disabled$!.subscribe((v: boolean) => (disabled = v)));
         expect(activated).toBeFalsy();
-        expect(disabled).toBeFalsy();
 
         select({ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 });
-
         expect(await commandService.executeCommand(SetBoldCommand.id)).toBeTruthy();
         expect(activated).toBe(true);
+        expect(disabled).toBeFalsy();
     });
 });

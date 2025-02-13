@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,32 +30,45 @@ import type {
     LocaleService,
 } from '@univerjs/core';
 
+import type { DataStreamTreeNode } from '../components/docs/view-model/data-stream-tree-node';
 import type { DocumentViewModel } from '../components/docs/view-model/document-view-model';
 import type {
+    DocumentSkeletonPageType,
     IDocumentSkeletonBullet,
     IDocumentSkeletonDrawing,
     IDocumentSkeletonDrawingAnchor,
     IDocumentSkeletonFontStyle,
-    IDocumentSkeletonFooter,
     IDocumentSkeletonGlyph,
-    IDocumentSkeletonHeader,
+    IDocumentSkeletonHeaderFooter,
+    IDocumentSkeletonTable,
 } from './i-document-skeleton-cached';
+import type { ITransformerConfig } from './transformer-config';
 import type { Vector2 } from './vector2';
 
 export interface IObjectFullState extends ITransformState {
     strokeWidth?: number;
     zIndex?: number;
-    isTransformer?: boolean;
     forceRender?: boolean;
     debounceParentDirty?: boolean;
+    transformerConfig?: ITransformerConfig;
+    printable?: boolean;
 }
 
 export interface IRect extends ISize, IOffset {
     points: Vector2[];
 }
 
+/**
+ * width
+ * height
+ * scaleX
+ * scaleY
+ */
 export interface ISceneTransformState extends ISize, IScale {}
 
+/**
+ * Bad design! should use Bit Flags!
+ */
 export enum TRANSFORM_CHANGE_OBSERVABLE_TYPE {
     translate,
     resize,
@@ -67,19 +80,9 @@ export enum TRANSFORM_CHANGE_OBSERVABLE_TYPE {
 
 export interface ITransformChangeState {
     type: TRANSFORM_CHANGE_OBSERVABLE_TYPE;
-    value:
-        | number
-        | string
-        | boolean
-        | { x: number | string | boolean; y: number | string | boolean }
-        | IObjectFullState
+    value: IObjectFullState
         | ISceneTransformState;
-    preValue:
-        | number
-        | string
-        | boolean
-        | { x: number | string | boolean; y: number | string | boolean }
-        | IObjectFullState
+    preValue: IObjectFullState
         | ISceneTransformState;
 }
 
@@ -111,21 +114,30 @@ export interface ISectionBreakConfig extends IDocStyleBase, ISectionBreakBase, I
     headerIds?: IHeaderIds;
     footerIds?: IFooterIds;
     useFirstPageHeaderFooter?: BooleanNumber;
-    useEvenPageHeaderFooter?: BooleanNumber;
+    evenAndOddHeaders?: BooleanNumber;
+}
+
+export interface IParagraphTableCache {
+    tableId: string;
+    table: IDocumentSkeletonTable;
+    hasPositioned: boolean;
+    isSlideTable: boolean;
+    tableNode: DataStreamTreeNode;
 }
 
 export interface IParagraphConfig {
     paragraphIndex: number;
-    paragraphAffectSkeDrawings?: Map<string, IDocumentSkeletonDrawing>;
+    paragraphNonInlineSkeDrawings?: Map<string, IDocumentSkeletonDrawing>;
     paragraphInlineSkeDrawings?: Map<string, IDocumentSkeletonDrawing>;
+    skeTablesInParagraph?: IParagraphTableCache[];
     // headerAndFooterAffectSkeDrawings?: Map<string, IDocumentSkeletonDrawing>;
     bulletSkeleton?: IDocumentSkeletonBullet;
     // pageContentWidth: number;
     // pageContentHeight: number;
     paragraphStyle?: IParagraphStyle;
-    skeHeaders: Map<string, Map<number, IDocumentSkeletonHeader>>;
-    skeFooters: Map<string, Map<number, IDocumentSkeletonFooter>>;
-    drawingAnchor?: Map<number, IDocumentSkeletonDrawingAnchor>;
+    skeHeaders: Map<string, Map<number, IDocumentSkeletonHeaderFooter>>;
+    skeFooters: Map<string, Map<number, IDocumentSkeletonHeaderFooter>>;
+    pDrawingAnchor?: Map<number, IDocumentSkeletonDrawingAnchor>;
     // sectionBreakConfig: ISectionBreakConfig;
 }
 
@@ -146,13 +158,15 @@ export interface IFontCreateConfig {
 //     footers?: IFooters;
 //     headers?: IHeaders;
 //     useFirstPageHeaderFooter?: boolean;
-//     useEvenPageHeaderFooter?: boolean;
+//     evenAndOddHeaders?: boolean;
 // }
 
 export interface INodeInfo {
     node: IDocumentSkeletonGlyph;
     ratioX: number;
     ratioY: number;
+    segmentId: string;
+    segmentPage: number; // The index of the page where node is located.
 }
 
 export interface INodeSearch {
@@ -162,8 +176,18 @@ export interface INodeSearch {
     column: number;
     section: number;
     page: number;
+    segmentPage: number; // The index of the page where the header and footer reside.
+    pageType: DocumentSkeletonPageType;
+    path: (string | number)[];
 }
 
 export interface INodePosition extends INodeSearch {
     isBack: boolean;
 }
+
+export interface IAfterRender$Info {
+    frameTimeMetric: Record<string, number | number[]>;
+    tags: { scrolling: boolean } & Record<string, any>;
+}
+
+export type ITimeMetric = [string, number];

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+// eslint-disable-next-line no-undef
 const activeSheet = univerAPI.getActiveWorkbook().getActiveSheet();
 
 // Set A1:B2 to bold

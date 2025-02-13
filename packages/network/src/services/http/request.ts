@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  */
 
 import type { HTTPHeaders } from './headers';
-import { ApplicationJSONType } from './headers';
 import type { HTTPResponseType } from './http';
 import type { HTTPParams } from './params';
+import { ApplicationJSONType } from './headers';
 
-export type HTTPRequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+export type HTTPRequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
+/**
+ * @internal
+ */
 export interface IHTTPRequestParams {
     // eslint-disable-next-line ts/no-explicit-any
     body?: any;
@@ -28,6 +31,7 @@ export interface IHTTPRequestParams {
     params?: HTTPParams;
     responseType: HTTPResponseType;
     withCredentials: boolean;
+    reportProgress?: boolean;
 }
 
 let HTTPRequestUID = 0;
@@ -39,7 +43,7 @@ export function __TEST_ONLY_RESET_REQUEST_UID_DO_NOT_USE_IN_PRODUCTION() {
 export class HTTPRequest {
     get headers(): HTTPHeaders { return this.requestParams!.headers; }
     get withCredentials(): boolean { return this.requestParams!.withCredentials; }
-    get responseType(): string { return this.requestParams!.responseType; }
+    get responseType(): HTTPResponseType { return this.requestParams!.responseType; }
 
     readonly uid = HTTPRequestUID++;
 
@@ -47,9 +51,7 @@ export class HTTPRequest {
         readonly method: HTTPRequestMethod,
         readonly url: string,
         readonly requestParams?: IHTTPRequestParams
-    ) {
-        // TODO@wzhudev: deal with `requestParams` is empty.
-    }
+    ) { }
 
     getUrlWithParams(): string {
         const params = this.requestParams?.params?.toString();
@@ -68,5 +70,10 @@ export class HTTPRequest {
         }
 
         return body ? `${body}` : null;
+    }
+
+    getHeadersInit(): HeadersInit {
+        const headersInit = this.headers.toHeadersInit();
+        return headersInit;
     }
 }

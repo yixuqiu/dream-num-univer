@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDisposable } from '@univerjs/core';
 import type { Subject } from 'rxjs';
-
 import type { IConfirmPartMethodOptions } from '../../views/components/confirm-part/interface';
 
-export const IConfirmService = createIdentifier<IConfirmService>('univer.confirm-service');
+import { createIdentifier } from '@univerjs/core';
 
+export const IConfirmService = createIdentifier<IConfirmService>('univer.confirm-service');
 export interface IConfirmService {
     readonly confirmOptions$: Subject<IConfirmPartMethodOptions[]>;
 

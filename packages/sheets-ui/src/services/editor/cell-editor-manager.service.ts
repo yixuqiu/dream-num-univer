@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import type { IPosition, Nullable } from '@univerjs/core';
-import type { IDisposable } from '@wendellhu/redi';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDisposable, IPosition, Nullable } from '@univerjs/core';
 import type { Observable } from 'rxjs';
+import { createIdentifier } from '@univerjs/core';
 import { BehaviorSubject } from 'rxjs';
 
 export interface ICellEditorManagerParam extends Partial<IPosition> {
@@ -67,7 +66,7 @@ export class CellEditorManagerService implements ICellEditorManagerService, IDis
         this._rect = null;
     }
 
-    setState(param: ICellEditorManagerParam) {
+    setState(param: ICellEditorManagerParam): void {
         this._state = param;
 
         this._refresh(param);

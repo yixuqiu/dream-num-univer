@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-import type { IAccessor } from '@wendellhu/redi';
-import type { IRange } from '@univerjs/core';
-import { Dimension } from '@univerjs/core';
+import type { IAccessor, IRange } from '@univerjs/core';
 import type { IAddMergeCommandParams } from '../commands/add-worksheet-merge.command';
-import { NORMAL_SELECTION_PLUGIN_NAME, SelectionManagerService } from '../../services/selection-manager.service';
 import type { ISetSelectionsOperationParams } from '../operations/selection.operation';
+import { Dimension } from '@univerjs/core';
+import { SheetsSelectionsService } from '../../services/selections/selection.service';
+import { SelectionMoveType } from '../../services/selections/type';
 import { SetSelectionsOperation } from '../operations/selection.operation';
 
 export const AddMergeRedoSelectionsOperationFactory = (accessor: IAccessor, params: IAddMergeCommandParams, ranges: IRange[]) => {
-    const selectionManagerService = accessor.get(SelectionManagerService);
-    const selectionsBeforeMutation = selectionManagerService.getSelections();
+    const selectionManagerService = accessor.get(SheetsSelectionsService);
+    const selectionsBeforeMutation = selectionManagerService.getCurrentSelections();
     const { value, selections, unitId, subUnitId } = params;
     if (selectionsBeforeMutation) {
         const lastSelectionBeforeMutation = selectionsBeforeMutation[selectionsBeforeMutation?.length - 1];
@@ -67,7 +67,7 @@ export const AddMergeRedoSelectionsOperationFactory = (accessor: IAccessor, para
             const setSelectionsParamByRedo: ISetSelectionsOperationParams = {
                 unitId,
                 subUnitId,
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+                type: SelectionMoveType.ONLY_SET,
                 selections: selectionsByRedo,
             };
             return {
@@ -81,8 +81,8 @@ export const AddMergeRedoSelectionsOperationFactory = (accessor: IAccessor, para
 };
 
 export const AddMergeUndoSelectionsOperationFactory = (accessor: IAccessor, params: IAddMergeCommandParams) => {
-    const selectionManagerService = accessor.get(SelectionManagerService);
-    const selectionsBeforeMutation = selectionManagerService.getSelections();
+    const selectionManagerService = accessor.get(SheetsSelectionsService);
+    const selectionsBeforeMutation = selectionManagerService.getCurrentSelections();
     const { unitId, subUnitId } = params;
     if (selectionsBeforeMutation) {
         const lastSelectionBeforeMutation = selectionsBeforeMutation[selectionsBeforeMutation?.length - 1];
@@ -91,7 +91,7 @@ export const AddMergeUndoSelectionsOperationFactory = (accessor: IAccessor, para
             const setSelectionsParamByUndo: ISetSelectionsOperationParams = {
                 unitId,
                 subUnitId,
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
+                type: SelectionMoveType.ONLY_SET,
                 selections: [...selectionsBeforeMutation],
             };
             return {

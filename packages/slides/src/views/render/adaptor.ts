@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-import type { IPageElement, PageElementType } from '@univerjs/core';
+import type { Injector, IPageElement, Nullable, PageElementType } from '@univerjs/core';
 import { Registry } from '@univerjs/core';
-import type { Scene } from '@univerjs/engine-render';
-import type { Injector } from '@wendellhu/redi';
+import type { BaseObject, Scene } from '@univerjs/engine-render';
 
-export class ObjectAdaptor {
+export abstract class ObjectAdaptor {
     zIndex = 0;
 
     viewKey: PageElementType | null = null;
@@ -31,9 +30,12 @@ export class ObjectAdaptor {
         return this;
     }
 
-    convert(pageElement: IPageElement, mainScene: Scene) {}
+    abstract convert(pageElement: IPageElement, mainScene: Scene): Nullable<BaseObject>;
 
-    create(injector: Injector) {}
+    create(injector: Injector): void {
+        // FIXME: should not be empty
+        // empty
+    }
 }
 
 export const CanvasObjectProviderRegistry = Registry.create();

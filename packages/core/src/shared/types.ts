@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,34 +14,29 @@
  * limitations under the License.
  */
 
+/**
+ * @ignore
+ */
 export type Nullable<T> = T | null | undefined | void;
-
-/**
- * wrap any
- */
-export type NoNeedCheckedType = any;
-
-/**
- * Class type
- */
-export interface Class<T> {
-    new (...param: any): T;
-}
 
 /**
  * Key value object
  *
- * @deprecated
+ * @ignore
+ * @deprecated As it has
  */
 export interface IKeyValue {
     [key: string]: any;
 }
 
 /**
- * Custom type of key
+ * @ignore
+ * @deprecated, use {@link Record} instead.
  */
 export interface IKeyType<T> {
     [key: string]: T;
 }
 
-export type AsyncFunction<T = void, R = void> = (value: T) => Promise<R>;
+export type DeepReadonly<T> = {
+    readonly [P in keyof T]: DeepReadonly<T[P]>;
+};

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,11 +48,13 @@ export enum FUNCTION_NAMES_ENGINEERING {
     IMCOS = 'IMCOS',
     IMCOSH = 'IMCOSH',
     IMCOT = 'IMCOT',
+    IMCOTH = 'IMCOTH',
     IMCSC = 'IMCSC',
     IMCSCH = 'IMCSCH',
     IMDIV = 'IMDIV',
     IMEXP = 'IMEXP',
     IMLN = 'IMLN',
+    IMLOG = 'IMLOG',
     IMLOG10 = 'IMLOG10',
     IMLOG2 = 'IMLOG2',
     IMPOWER = 'IMPOWER',
@@ -66,6 +68,7 @@ export enum FUNCTION_NAMES_ENGINEERING {
     IMSUB = 'IMSUB',
     IMSUM = 'IMSUM',
     IMTAN = 'IMTAN',
+    IMTANH = 'IMTANH',
     OCT2BIN = 'OCT2BIN',
     OCT2DEC = 'OCT2DEC',
     OCT2HEX = 'OCT2HEX',

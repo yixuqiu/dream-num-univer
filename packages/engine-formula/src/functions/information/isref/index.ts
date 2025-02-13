@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
-import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
+import type { FunctionVariantType } from '../../../engine/reference-object/base-reference-object';
 import { BooleanValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Isref extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 1;
+
     override needsReferenceObject = true;
 
-    override calculate(value: BaseValueObject) {
-        if (value == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
+    override calculate(value: FunctionVariantType) {
         if (value.isReferenceObject()) {
             return BooleanValueObject.create(true);
         }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,11 @@
 
 import type { IDocumentBody, IDocumentData } from '../../types/interfaces/i-document-data';
 import { DocumentDataModel } from './document-data-model';
+import { JSONX } from './json-x/json-x';
 import { TextX } from './text-x/text-x';
 
-export function replaceInDocumentBody(body: IDocumentBody, query: string, target: string): IDocumentBody {
+// TODO: this function should be replaced by replaceSelection
+export function replaceInDocumentBody(body: IDocumentBody, query: string, target: string, caseSensitive: boolean): IDocumentBody {
     if (query === '') {
         return body;
     }
@@ -34,8 +36,10 @@ export function replaceInDocumentBody(body: IDocumentBody, query: string, target
     const queryLen = query.length;
     let index;
 
-    while ((index = documentDataModel.getBody()!.dataStream.indexOf(query)) >= 0) {
+    // eslint-disable-next-line no-cond-assign
+    while ((index = (caseSensitive ? documentDataModel.getBody()!.dataStream : documentDataModel.getBody()!.dataStream.toLowerCase()).indexOf(query)) >= 0) {
         const textX = new TextX();
+        const jsonX = JSONX.getInstance();
 
         if (index > 0) {
             textX.retain(index);
@@ -55,14 +59,20 @@ export function replaceInDocumentBody(body: IDocumentBody, query: string, target
                 }];
             }
 
+            if (sliceBody?.customRanges?.length) {
+                const customRange = sliceBody.customRanges[0];
+                replaceBody.customRanges = [{
+                    ...customRange,
+                    startIndex: 0,
+                    endIndex: target.length - 1,
+                }];
+            }
+
             textX.insert(target.length, replaceBody);
         }
 
         textX.delete(queryLen);
-
-        const actions = textX.serialize();
-
-        documentDataModel.apply(actions);
+        documentDataModel.apply(jsonX.editOp(textX.serialize()));
     }
 
     const newBody = documentDataModel.getBody()!;

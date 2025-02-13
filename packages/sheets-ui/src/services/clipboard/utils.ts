@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,33 +14,33 @@
  * limitations under the License.
  */
 
-import { ObjectMatrix } from '@univerjs/core';
 import type { ICellData, IMutationInfo, IObjectMatrixPrimitiveType, IRange, Nullable } from '@univerjs/core';
 import type { ISetRangeValuesMutationParams } from '@univerjs/sheets';
-import { SetRangeValuesMutation } from '@univerjs/sheets';
 import type { IDiscreteRange } from '../../controllers/utils/range-tools';
+import { ObjectMatrix } from '@univerjs/core';
+import { SetRangeValuesMutation } from '@univerjs/sheets';
 
 /**
  *
  *
  * @param {IRange} sourceRange
- * @param {IRange} targetRang
+ * @param {IRange} targetRange
  * @param {boolean} [isStrictMode] if is true,the remainder of the row and column must all be 0 to be repeated
  * @return {*}
  */
-export const getRepeatRange = (sourceRange: IRange, targetRang: IRange, isStrictMode = false) => {
+export const getRepeatRange = (sourceRange: IRange, targetRange: IRange, isStrictMode = false) => {
     const getRowLength = (range: IRange) => range.endRow - range.startRow + 1;
     const getColLength = (range: IRange) => range.endColumn - range.startColumn + 1;
-    const rowMod = getRowLength(targetRang) % getRowLength(sourceRange);
-    const colMod = getColLength(targetRang) % getColLength(sourceRange);
+    const rowMod = getRowLength(targetRange) % getRowLength(sourceRange);
+    const colMod = getColLength(targetRange) % getColLength(sourceRange);
     const repeatRelativeRange: IRange = {
         startRow: 0,
         endRow: getRowLength(sourceRange) - 1,
         startColumn: 0,
         endColumn: getColLength(sourceRange) - 1,
     };
-    const repeatRow = Math.floor(getRowLength(targetRang) / getRowLength(sourceRange));
-    const repeatCol = Math.floor(getColLength(targetRang) / getColLength(sourceRange));
+    const repeatRow = Math.floor(getRowLength(targetRange) / getRowLength(sourceRange));
+    const repeatCol = Math.floor(getColLength(targetRange) / getColLength(sourceRange));
     const repeatList: Array<{ startRange: IRange; repeatRelativeRange: IRange }> = [];
     if (!rowMod && !colMod) {
         for (let countRow = 1; countRow <= repeatRow; countRow++) {
@@ -48,10 +48,10 @@ export const getRepeatRange = (sourceRange: IRange, targetRang: IRange, isStrict
                 const row = getRowLength(sourceRange) * (countRow - 1);
                 const col = getColLength(sourceRange) * (countCol - 1);
                 const startRange: IRange = {
-                    startRow: row + targetRang.startRow,
-                    endRow: row + targetRang.startRow,
-                    startColumn: col + targetRang.startColumn,
-                    endColumn: col + targetRang.startColumn,
+                    startRow: row + targetRange.startRow,
+                    endRow: row + targetRange.startRow,
+                    startColumn: col + targetRange.startColumn,
+                    endColumn: col + targetRange.startColumn,
                 };
 
                 repeatList.push({ repeatRelativeRange, startRange });
@@ -62,10 +62,10 @@ export const getRepeatRange = (sourceRange: IRange, targetRang: IRange, isStrict
             const row = getRowLength(sourceRange) * (countRow - 1);
             const col = 0;
             const startRange: IRange = {
-                startRow: row + targetRang.startRow,
-                endRow: row + targetRang.startRow,
-                startColumn: col + targetRang.startColumn,
-                endColumn: col + targetRang.startColumn,
+                startRow: row + targetRange.startRow,
+                endRow: row + targetRange.startRow,
+                startColumn: col + targetRange.startColumn,
+                endColumn: col + targetRange.startColumn,
             };
 
             repeatList.push({ repeatRelativeRange, startRange });
@@ -75,33 +75,47 @@ export const getRepeatRange = (sourceRange: IRange, targetRang: IRange, isStrict
             const row = 0;
             const col = getColLength(sourceRange) * (countCol - 1);
             const startRange: IRange = {
-                startRow: row + targetRang.startRow,
-                endRow: row + targetRang.startRow,
-                startColumn: col + targetRang.startColumn,
-                endColumn: col + targetRang.startColumn,
+                startRow: row + targetRange.startRow,
+                endRow: row + targetRange.startRow,
+                startColumn: col + targetRange.startColumn,
+                endColumn: col + targetRange.startColumn,
             };
 
             repeatList.push({ repeatRelativeRange, startRange });
         }
     } else {
         const startRange: IRange = {
-            startRow: targetRang.startRow,
-            endRow: targetRang.startRow,
-            startColumn: targetRang.startColumn,
-            endColumn: targetRang.startColumn,
+            startRow: targetRange.startRow,
+            endRow: targetRange.startRow,
+            startColumn: targetRange.startColumn,
+            endColumn: targetRange.startColumn,
         };
         repeatList.push({ startRange, repeatRelativeRange });
     }
     return repeatList;
 };
 
-export async function clipboardItemIsFromExcel(html: string): Promise<boolean> {
-    if (html) {
-        const regex = /<td[^>]*class=".*?xl.*?"[^>]*>.*?<\/td>/;
-        return regex.test(html);
+export function htmlIsFromExcel(html: string): boolean {
+    if (!html) {
+        return false;
     }
 
-    return false;
+    const excelMarkers = [
+        // Excel class names
+        /<td[^>]*class=".*?xl.*?"[^>]*>/i,
+        // Excel namespace
+        /xmlns:x="urn:schemas-microsoft-com:office:excel"/i,
+        // Excel ProgID
+        /ProgId="Excel.Sheet"/i,
+        // Office specific namespace
+        /xmlns:o="urn:schemas-microsoft-com:office:office"/i,
+        // Excel specific style markers
+        /@mso-|mso-excel/i,
+        // Excel workbook metadata
+        /<x:ExcelWorkbook>/i,
+    ];
+
+    return excelMarkers.some((marker) => marker.test(html));
 }
 
 export function mergeCellValues(...cellValues: IObjectMatrixPrimitiveType<Nullable<ICellData>>[]) {
@@ -153,7 +167,6 @@ export function mergeSetRangeValues(mutations: IMutationInfo[]) {
     return newMutations;
 }
 
-
 export function rangeIntersectWithDiscreteRange(range: IRange, discrete: IDiscreteRange) {
     const { startRow, endRow, startColumn, endColumn } = range;
     for (let i = startRow; i <= endRow; i++) {
@@ -164,7 +177,6 @@ export function rangeIntersectWithDiscreteRange(range: IRange, discrete: IDiscre
         }
     }
 }
-
 
 export function discreteRangeContainsRange(discrete: IDiscreteRange, range: IRange) {
     const { startRow, endRow, startColumn, endColumn } = range;
@@ -179,4 +191,23 @@ export function discreteRangeContainsRange(discrete: IDiscreteRange, range: IRan
         }
     }
     return true;
+}
+
+export function convertTextToTable(text: string): string {
+    const rows = text.trim().split('\n');
+
+    let html = '<table>';
+
+    rows.forEach((row) => {
+        const columns = row.split('\t');
+        html += '<tr>';
+        columns.forEach((column) => {
+            html += `<td>${column}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</table>';
+
+    return html;
 }

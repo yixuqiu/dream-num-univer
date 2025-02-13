@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
 import type { BaseReferenceObject, FunctionVariantType } from '../../../engine/reference-object/base-reference-object';
-import { expandArrayValueObject } from '../../../engine/utils/array-object';
 import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
+import { ErrorType } from '../../../basics/error-type';
+import { expandArrayValueObject } from '../../../engine/utils/array-object';
 import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { NullValueObject, NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
@@ -27,15 +27,18 @@ import { BaseFunction } from '../../base-function';
  *
  * =INDEX(A2:A5,2,1):A1 same as =A1:A3
  *
+ * We refer to Google Sheets and set both rowNum and columnNum to optional
+ *
  */
 export class Index extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 4;
+
     override needsReferenceObject = true;
 
-    override calculate(reference: FunctionVariantType, rowNum: FunctionVariantType, columnNum?: FunctionVariantType, areaNum?: FunctionVariantType) {
-        if (reference == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
+    // eslint-disable-next-line max-lines-per-function, complexity
+    override calculate(reference: FunctionVariantType, rowNum?: FunctionVariantType, columnNum?: FunctionVariantType, areaNum?: FunctionVariantType) {
         if (reference.isError()) {
             return reference;
         }
@@ -59,63 +62,64 @@ export class Index extends BaseFunction {
             referenceRowCount = 1;
             referenceColumnCount = 1;
         } else if (reference.isReferenceObject()) {
-            const { startRow, endRow, startColumn, endColumn } = (reference as BaseReferenceObject).getRangeData();
+            const { startRow, endRow, startColumn, endColumn } = (reference as BaseReferenceObject).getRangePosition();
             referenceRowCount = endRow - startRow + 1;
             referenceColumnCount = endColumn - startColumn + 1;
         } else {
             return ErrorValueObject.create(ErrorType.VALUE);
         }
 
+        let _rowNum, _columnNum;
         // When there is only one row, the rowNum is considered to be the column number.
         // =INDEX(A6:B6,2) equals =INDEX(A6:B6,1,2)
         if (referenceRowCount === 1 && referenceColumnCount > 1 && columnNum == null) {
-            columnNum = rowNum ?? NumberValueObject.create(0);
-            rowNum = NumberValueObject.create(0);
+            _columnNum = rowNum ?? NumberValueObject.create(0);
+            _rowNum = NumberValueObject.create(0);
         } else {
-            rowNum = rowNum ?? NumberValueObject.create(0);
-            columnNum = columnNum ?? NumberValueObject.create(0);
+            _rowNum = rowNum ?? NumberValueObject.create(0);
+            _columnNum = columnNum ?? NumberValueObject.create(0);
         }
 
-        areaNum = areaNum ?? NumberValueObject.create(1);
+        let _areaNum = areaNum ?? NumberValueObject.create(1);
 
-        if (rowNum.isReferenceObject()) {
-            rowNum = (rowNum as BaseReferenceObject).toArrayValueObject();
+        if (_rowNum.isReferenceObject()) {
+            _rowNum = (_rowNum as BaseReferenceObject).toArrayValueObject();
         }
 
-        if (columnNum.isReferenceObject()) {
-            columnNum = (columnNum as BaseReferenceObject).toArrayValueObject();
+        if (_columnNum.isReferenceObject()) {
+            _columnNum = (_columnNum as BaseReferenceObject).toArrayValueObject();
         }
 
-        if (areaNum.isReferenceObject()) {
-            areaNum = (areaNum as BaseReferenceObject).toArrayValueObject();
+        if (_areaNum.isReferenceObject()) {
+            _areaNum = (_areaNum as BaseReferenceObject).toArrayValueObject();
         }
 
         // get max row length
         const maxRowLength = Math.max(
-            rowNum.isArray() ? (rowNum as ArrayValueObject).getRowCount() : 1,
-            columnNum.isArray() ? (columnNum as ArrayValueObject).getRowCount() : 1,
-            areaNum.isArray() ? (areaNum as ArrayValueObject).getRowCount() : 1
+            _rowNum.isArray() ? (_rowNum as ArrayValueObject).getRowCount() : 1,
+            _columnNum.isArray() ? (_columnNum as ArrayValueObject).getRowCount() : 1,
+            _areaNum.isArray() ? (_areaNum as ArrayValueObject).getRowCount() : 1
         );
 
         // get max column length
         const maxColumnLength = Math.max(
-            rowNum.isArray() ? (rowNum as ArrayValueObject).getColumnCount() : 1,
-            columnNum.isArray() ? (columnNum as ArrayValueObject).getColumnCount() : 1,
-            areaNum.isArray() ? (areaNum as ArrayValueObject).getColumnCount() : 1
+            _rowNum.isArray() ? (_rowNum as ArrayValueObject).getColumnCount() : 1,
+            _columnNum.isArray() ? (_columnNum as ArrayValueObject).getColumnCount() : 1,
+            _areaNum.isArray() ? (_areaNum as ArrayValueObject).getColumnCount() : 1
         );
 
-        rowNum = rowNum as BaseValueObject;
-        columnNum = columnNum as BaseValueObject;
-        areaNum = areaNum as BaseValueObject;
+        _rowNum = _rowNum as BaseValueObject;
+        _columnNum = _columnNum as BaseValueObject;
+        _areaNum = _areaNum as BaseValueObject;
 
         // If maxRowLength and maxColumnLength are both 1, pick the value from the reference array
         // Otherwise, filter the results from the reference according to the specified rowNum/columnNum/areaNum, take the upper left corner cell value of each result array, and then form an array with maxRowLength row number and maxColumnLength column number.
         if (maxRowLength === 1 && maxColumnLength === 1) {
-            return this._calculateSingleCell(reference, rowNum, columnNum, areaNum);
+            return this._calculateSingleCell(reference, _rowNum, _columnNum, _areaNum);
         } else {
-            const rowNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, rowNum, ErrorValueObject.create(ErrorType.NA));
-            const columnNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, columnNum, ErrorValueObject.create(ErrorType.NA));
-            const areaNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, areaNum, ErrorValueObject.create(ErrorType.NA));
+            const rowNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, _rowNum, ErrorValueObject.create(ErrorType.NA));
+            const columnNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, _columnNum, ErrorValueObject.create(ErrorType.NA));
+            const areaNumArray = expandArrayValueObject(maxRowLength, maxColumnLength, _areaNum, ErrorValueObject.create(ErrorType.NA));
 
             return rowNumArray.map((rowNumValue, rowIndex, columnIndex) => {
                 const columnNumValue = columnNumArray.get(rowIndex, columnIndex) || NullValueObject.create();
@@ -220,7 +224,7 @@ export class Index extends BaseFunction {
     }
 
     private _getReferenceObject(reference: BaseReferenceObject, rowNumberValue: number, columnNumberValue: number, areaNumberValue: number) {
-        const { startRow, endRow, startColumn, endColumn } = reference.getRangeData();
+        const { startRow, endRow, startColumn, endColumn } = reference.getRangePosition();
 
         let referenceStartRow = 0;
         let referenceEndRow = 0;

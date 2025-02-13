@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { useDependency } from '@wendellhu/redi/react-bindings';
 import clsx from 'clsx';
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { ComponentManager } from '../../../common/component-manager';
 import { IZenZoneService } from '../../../services/zen-zone/zen-zone.service';
+import { useDependency, useObservable } from '../../../utils/di';
 import styles from './index.module.less';
 
 export function ZenZone() {
@@ -27,7 +27,7 @@ export function ZenZone() {
 
     const [visible, setVisible] = useState(false);
     const [componentKey, setComponentKey] = useState<string>();
-
+    const hidden = useObservable(zenZoneService.temporaryHidden$);
     const componentManager = useDependency(ComponentManager);
 
     useEffect(() => {
@@ -56,5 +56,11 @@ export function ZenZone() {
         }
     }, [componentKey]);
 
-    return <section className={_className}>{Component && <Component />}</section>;
+    return (
+        <section style={hidden ? { opacity: 0, zIndex: -1 } : undefined} className={_className}>
+            <div className={styles.zenZoneEditorContainer}>
+                {Component && <Component />}
+            </div>
+        </section>
+    );
 }

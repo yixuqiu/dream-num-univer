@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
  */
 
 import type { Nullable } from '@univerjs/core';
-import { Disposable, requestImmediateMacroTask, sortRules, toDisposable } from '@univerjs/core';
+import type { UniverRenderingContext } from './context';
 
+import type { Scene } from './scene';
+import type { SceneViewer } from './scene-viewer';
+import { Disposable, requestImmediateMacroTask, sortRules, toDisposable } from '@univerjs/core';
 import { BaseObject } from './base-object';
 import { RENDER_CLASS_TYPE } from './basics/const';
 import { Canvas } from './canvas';
-import type { UniverRenderingContext } from './context';
-import type { ThinScene } from './thin-scene';
 
 export class Layer extends Disposable {
     private _objects: BaseObject[] = [];
@@ -33,7 +34,7 @@ export class Layer extends Disposable {
     private _debounceDirtyFunc: Nullable<() => void>;
 
     constructor(
-        private _scene: ThinScene,
+        private _scene: Scene,
         objects: BaseObject[] = [],
         private _zIndex: number = 1,
         private _allowCache: boolean = false
@@ -60,17 +61,21 @@ export class Layer extends Disposable {
         this._initialCacheCanvas();
     }
 
-    disableCache() {
+    disableCache(): void {
         this._allowCache = false;
         this._cacheCanvas?.dispose();
         this._cacheCanvas = null;
     }
 
-    isAllowCache() {
+    isAllowCache(): boolean {
         return this._allowCache;
     }
 
-    getObjectsByOrder() {
+    /**
+     * Get direct visible children in order. (direct means object is not in group), default order is ascending by z-index.
+     * @returns {BaseObject[]} objects
+     */
+    getObjectsByOrder(): BaseObject[] {
         const objects: BaseObject[] = [];
         this._objects.sort(sortRules);
         for (const o of this._objects) {
@@ -81,22 +86,31 @@ export class Layer extends Disposable {
         return objects;
     }
 
-    getObjectsByOrderForPick() {
+    /**
+     * Get visible and evented objects.
+     * @returns {BaseObject[]} objects
+     */
+    getObjectsByOrderForPick(): BaseObject[] {
         const objects: BaseObject[] = [];
         this._objects.sort(sortRules);
         for (const o of this._objects) {
-            if (!(o.classType === RENDER_CLASS_TYPE.GROUP) && o.visible) {
+            if (!(o.classType === RENDER_CLASS_TYPE.GROUP) && o.visible && o.evented) {
                 objects.push(o);
             }
         }
         return objects;
     }
 
-    getObjects() {
+    getObjects(): BaseObject[] {
         return this._objects;
     }
 
-    addObject(o: BaseObject) {
+    /**
+     * Insert object to this._objects, if object is a group, insert all its children and group itself to _objects[]
+     * @param o
+     * @returns {Layer} this
+     */
+    addObject(o: BaseObject): Layer {
         if (o.classType === RENDER_CLASS_TYPE.GROUP) {
             const objects = (o as BaseObject).getObjects();
             for (const object of objects) {
@@ -111,8 +125,7 @@ export class Layer extends Disposable {
         this._objects.push(o);
         this.scene.setObjectBehavior(o);
         this._layerBehavior(o);
-        this.scene.applyTransformer(o);
-
+        this.makeDirty(true);
         return this;
     }
 
@@ -123,6 +136,7 @@ export class Layer extends Disposable {
         if (object instanceof BaseObject) {
             for (let i = 0; i < objectsLength; i++) {
                 const o = objects[i];
+
                 if (o === object) {
                     objects.splice(i, 1);
                     return;
@@ -139,7 +153,12 @@ export class Layer extends Disposable {
         }
     }
 
-    addObjects(objects: BaseObject[]) {
+    /**
+     * Insert objects to this._objects, if object is a group, insert all its children and group itself to _objects[]
+     * @param objects
+     * @returns {Layer} this
+     */
+    addObjects(objects: BaseObject[]): Layer {
         objects.forEach((o: BaseObject) => {
             this.addObject(o);
         });
@@ -170,13 +189,12 @@ export class Layer extends Disposable {
 
     makeDirty(state: boolean = true) {
         this._dirty = state;
-
         /**
          * parent is SceneViewer, make it dirty
          */
         const parent = this.scene.getParent();
         if (parent.classType === RENDER_CLASS_TYPE.SCENE_VIEWER) {
-            parent.makeDirty(true);
+            (parent as SceneViewer).makeDirty(true);
         }
 
         return this;
@@ -186,6 +204,7 @@ export class Layer extends Disposable {
         if (this._debounceDirtyFunc) {
             this._debounceDirtyFunc();
         }
+
         // To prevent multiple refreshes caused by setting values for multiple object instances at once.
         this._debounceDirtyFunc = requestImmediateMacroTask(() => {
             this.makeDirty(state);
@@ -199,25 +218,26 @@ export class Layer extends Disposable {
 
     render(parentCtx?: UniverRenderingContext, isMaxLayer = false) {
         const mainCtx = parentCtx || this._scene.getEngine()?.getCanvas().getContext();
+        if (mainCtx) {
+            if (this._allowCache && this._cacheCanvas) {
+                if (this.isDirty()) {
+                    const ctx = this._cacheCanvas.getContext();
 
-        if (this._allowCache && this._cacheCanvas) {
-            if (this.isDirty()) {
-                const ctx = this._cacheCanvas.getContext();
+                    this._cacheCanvas.clear();
 
-                this._cacheCanvas.clear();
+                    ctx.save();
 
-                ctx.save();
+                    ctx.setTransform(mainCtx.getTransform());
+                    this._draw(ctx, isMaxLayer);
 
-                ctx.setTransform(mainCtx.getTransform());
-                this._draw(ctx, isMaxLayer);
-
-                ctx.restore();
+                    ctx.restore();
+                }
+                this._applyCache(mainCtx);
+            } else {
+                mainCtx.save();
+                this._draw(mainCtx, isMaxLayer);
+                mainCtx.restore();
             }
-            this._applyCache(mainCtx);
-        } else {
-            mainCtx.save();
-            this._draw(mainCtx, isMaxLayer);
-            mainCtx.restore();
         }
 
         this.makeDirty(false);
@@ -227,7 +247,7 @@ export class Layer extends Disposable {
     private _layerBehavior(o: BaseObject) {
         this.disposeWithMe(
             toDisposable(
-                o.onTransformChangeObservable.add(() => {
+                o.onTransformChange$.subscribeEvent(() => {
                     this.makeDirty(true);
                 })
             )
@@ -238,17 +258,25 @@ export class Layer extends Disposable {
 
     private _initialCacheCanvas() {
         this._cacheCanvas = new Canvas();
-        this.disposeWithMe(
-            toDisposable(
-                this._scene.getEngine().onTransformChangeObservable.add(() => {
-                    this._resizeCacheCanvas();
-                })
-            )
-        );
+
+        const engine = this.scene.getEngine();
+        if (engine) {
+            this.disposeWithMe(engine.onTransformChange$.subscribeEvent(() => {
+                this._resizeCacheCanvas();
+            }));
+        }
     }
 
     private _draw(mainCtx: UniverRenderingContext, isMaxLayer: boolean) {
-        this._scene.getViewports()?.forEach((vp) => vp.render(mainCtx, this.getObjectsByOrder(), isMaxLayer));
+        const viewports = this._scene.getViewports().filter((vp) => vp.shouldIntoRender());
+        const objects = this.getObjectsByOrder();
+        for (const [_index, vp] of viewports.entries()) {
+            vp.render(mainCtx, objects, isMaxLayer);
+        }
+        objects.forEach((o) => {
+            o.makeDirty(false);
+            o.makeForceDirty?.(false);
+        });
     }
 
     private _applyCache(ctx?: UniverRenderingContext) {
@@ -257,12 +285,17 @@ export class Layer extends Disposable {
         }
         const width = this._cacheCanvas.getWidth();
         const height = this._cacheCanvas.getHeight();
-        ctx.drawImage(this._cacheCanvas.getCanvasEle(), 0, 0, width, height);
+        // it throw an error if canvas size is zero, and canvas size is zero when viewport isActive is false.
+        if (width !== 0 && height !== 0) {
+            ctx.drawImage(this._cacheCanvas.getCanvasEle(), 0, 0, width, height);
+        }
     }
 
     private _resizeCacheCanvas() {
         const engine = this._scene.getEngine();
-        this._cacheCanvas?.setSize(engine.width, engine.height);
+        if (engine) {
+            this._cacheCanvas?.setSize(engine.width, engine.height);
+        }
         this.makeDirty(true);
     }
 
@@ -278,6 +311,7 @@ export class Layer extends Disposable {
         });
         this.clear();
 
+        this._debounceDirtyFunc?.();
         this._debounceDirtyFunc = null;
 
         this._cacheCanvas?.dispose();

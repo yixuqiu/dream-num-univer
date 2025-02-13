@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
+import type { Canvas } from '../canvas';
+import type { SHEET_VIEWPORT_KEY } from '../components/sheets/interfaces';
 import type { DeepImmutable, FloatArray } from './i-events';
+import type { Transform } from './transform';
 
 export interface IPoint {
     x: number;
@@ -32,7 +35,9 @@ export class Vector2 implements IPoint {
         public x: number = 0,
         /** defines the second coordinate */
         public y: number = 0
-    ) {}
+    ) {
+        // empty
+    }
 
     // Statics
 
@@ -848,11 +853,54 @@ export interface IBoundRectNoAngle {
     bottom: number;
 }
 
-export interface IViewportBound {
+export interface IViewportInfo {
     viewBound: IBoundRectNoAngle;
     diffBounds: IBoundRectNoAngle[];
+
+    /**
+     * scroll right further diffX < 0
+     * previewBound.x - viewbound.x
+     */
     diffX: number;
     diffY: number;
+
+    /**
+     * The physical position of the frozen rows and columns on the canvas, used for drawImage.
+     * For example, if the freezing starts from the fourth column, the left position would be 4 * column + rowHeaderWidth.
+     * The physical position means the top and left values have already considered the scaling factor.
+     */
     viewPortPosition: IBoundRectNoAngle;
-    viewPortKey?: string;
+    viewportKey: string | SHEET_VIEWPORT_KEY;
+    /**
+     * In the future, a number will be used to indicate the reason for the "dirty" status
+     * Here, a binary value is used to facilitate computation.
+     */
+    isDirty?: number;
+    isForceDirty?: boolean;
+
+    allowCache?: boolean;
+    cacheBound: IBoundRectNoAngle;
+    diffCacheBounds: IBoundRectNoAngle[];
+    cacheViewPortPosition: IBoundRectNoAngle;
+
+    shouldCacheUpdate: number;
+    sceneTrans: Transform;
+    cacheCanvas?: Canvas;
+
+    leftOrigin: number;
+    topOrigin: number;
+
+    bufferEdgeX: number;
+    bufferEdgeY: number;
+
+    updatePrevCacheBounds?: (viewbound: IBoundRectNoAngle) => void;
+}
+
+export interface IViewportInfos {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    width: number;
+    height: number;
 }

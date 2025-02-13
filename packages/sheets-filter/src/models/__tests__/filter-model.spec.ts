@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { IWorkbookData, Workbook } from '@univerjs/core';
+import type { Injector, IWorkbookData, Workbook } from '@univerjs/core';
 import { ILogService, IUniverInstanceService, LocaleType, LogLevel, Univer, UniverInstanceType } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
 
 import { FilterColumn, generateFilterFn } from '../filter-model';
 import { CustomFilterOperator } from '../types';
@@ -214,51 +213,6 @@ describe('Test filter model and related utils', () => {
             filterColumn.setCriteria({ colId: 1, customFilters: { customFilters: [{ operator: CustomFilterOperator.GREATER_THAN, val: 200 }] } });
             filterColumn.reCalc();
             expect(filterColumn.filteredOutRows!.size).toBe(1);
-        });
-    });
-
-    describe('Test "FilterModel"', () => {
-        let univer: Univer;
-        let filterColumn: FilterColumn;
-        let get: Injector['get'];
-
-        beforeEach(() => {
-            const testBed = createFilterModelTestBed({
-                id: 'test',
-                appVersion: '3.0.0-alpha',
-                sheets: {
-                    sheet1: {
-                        id: 'sheet1',
-                        name: 'sheet1',
-                        cellData: {
-                            0: {
-                                1: { v: 'header' },
-                            },
-                            1: {
-                                1: { v: 123 },
-                            },
-                            2: {
-                                1: { v: 345 },
-                            },
-                        },
-                    },
-                },
-                locale: LocaleType.ZH_CN,
-                name: '',
-                sheetOrder: [],
-                styles: {},
-            });
-
-            univer = testBed.univer;
-            get = testBed.get;
-        });
-
-        // TODO@wzhudev: not implemented yet
-
-        describe('Test serialization and deserialization', () => {
-            it('should serialize return a correct object', () => { });
-
-            it('should deserialize return a correct instance', () => { });
         });
     });
 });

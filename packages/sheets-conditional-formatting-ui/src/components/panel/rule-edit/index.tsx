@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,33 +14,34 @@
  * limitations under the License.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { IRange, IUnitRange, Workbook } from '@univerjs/core';
-import { createInternalEditorID, ICommandService, InterceptorManager, IUniverInstanceService, LocaleService, UniverInstanceType } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import { serializeRange } from '@univerjs/engine-formula';
-import { Button, Select } from '@univerjs/design';
-
-import { RangeSelector } from '@univerjs/ui';
+import type { IRange, Workbook } from '@univerjs/core';
 import type { IRemoveSheetMutationParams } from '@univerjs/sheets';
-import { RemoveSheetMutation, SelectionManagerService, setEndForRange, SetWorksheetActiveOperation } from '@univerjs/sheets';
 import type { IConditionFormattingRule } from '@univerjs/sheets-conditional-formatting';
-import { CFRuleType, CFSubRuleType, ConditionalFormattingRuleModel, SHEET_CONDITIONAL_FORMATTING_PLUGIN } from '@univerjs/sheets-conditional-formatting';
 import type { IAddCfCommandParams } from '../../../commands/commands/add-cf.command';
-import { AddCfCommand } from '../../../commands/commands/add-cf.command';
 import type { ISetCfCommandParams } from '../../../commands/commands/set-cf.command';
-import { SetCfCommand } from '../../../commands/commands/set-cf.command';
 
-import styleBase from '../index.module.less';
 import type { IStyleEditorProps } from './type';
-import { beforeSubmit, submit } from './type';
-import { ColorScaleStyleEditor } from './colorScale';
-import { DataBarStyleEditor } from './dataBar';
-import { RankStyleEditor } from './rank';
-import { HighlightCellStyleEditor } from './highlightCell';
-import { FormulaStyleEditor } from './formula';
+import { ICommandService, InterceptorManager, IUniverInstanceService, LocaleService, UniverInstanceType } from '@univerjs/core';
+import { Button, Select } from '@univerjs/design';
+import { deserializeRangeWithSheet, serializeRange } from '@univerjs/engine-formula';
+import { RemoveSheetMutation, setEndForRange, SetWorksheetActiveOperation, SheetsSelectionsService } from '@univerjs/sheets';
+import { CFRuleType, CFSubRuleType, ConditionalFormattingRuleModel } from '@univerjs/sheets-conditional-formatting';
+import { RangeSelector } from '@univerjs/sheets-formula-ui';
+import { useDependency, useSidebarClick } from '@univerjs/ui';
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AddCfCommand } from '../../../commands/commands/add-cf.command';
+
+import { SetCfCommand } from '../../../commands/commands/set-cf.command';
+import styleBase from '../index.module.less';
+import { ColorScaleStyleEditor } from './ColorScale';
+import { DataBarStyleEditor } from './DataBar';
+import { FormulaStyleEditor } from './Formula';
+import { HighlightCellStyleEditor } from './HighlightCell';
+import { IconSet } from './IconSet';
 import styles from './index.module.less';
-import { IconSet } from './iconSet';
+import { RankStyleEditor } from './Rank';
+import { beforeSubmit, submit } from './type';
 
 interface IRuleEditProps {
     rule?: IConditionFormattingRule;
@@ -48,23 +49,26 @@ interface IRuleEditProps {
 }
 
 const getUnitId = (univerInstanceService: IUniverInstanceService) => univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getUnitId();
-const getSubUnitId = (univerInstanceService: IUniverInstanceService) => univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet().getSheetId();
+const getSubUnitId = (univerInstanceService: IUniverInstanceService) => univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet()?.getSheetId();
 
 export const RuleEdit = (props: IRuleEditProps) => {
     const localeService = useDependency(LocaleService);
     const commandService = useDependency(ICommandService);
     const univerInstanceService = useDependency(IUniverInstanceService);
     const conditionalFormattingRuleModel = useDependency(ConditionalFormattingRuleModel);
-    const selectionManagerService = useDependency(SelectionManagerService);
+    const selectionManagerService = useDependency(SheetsSelectionsService);
     const unitId = getUnitId(univerInstanceService);
     const subUnitId = getSubUnitId(univerInstanceService);
 
+    const [isFocusRangeSelector, isFocusRangeSelectorSet] = useState(true);
+    const rangeSelectorActionsRef = useRef<Parameters<typeof RangeSelector>[0]['actions']>({});
+    const [errorText, errorTextSet] = useState<string | undefined>(undefined);
     const rangeResult = useRef<IRange[]>(props.rule?.ranges ?? []);
 
     const rangeString = useMemo(() => {
         let ranges = props.rule?.ranges;
         if (!ranges?.length) {
-            ranges = selectionManagerService.getSelectionRanges() ?? [];
+            ranges = selectionManagerService.getCurrentSelections()?.map((s) => s.range) ?? [];
         }
         rangeResult.current = ranges;
         if (!ranges?.length) {
@@ -91,39 +95,39 @@ export const RuleEdit = (props: IRuleEditProps) => {
             return defaultType;
         }
         switch (type) {
-            case CFRuleType.highlightCell:{
+            case CFRuleType.highlightCell: {
                 const subType = props.rule?.rule.subType;
                 switch (subType) {
                     case CFSubRuleType.number:
                     case CFSubRuleType.text:
                     case CFSubRuleType.duplicateValues:
                     case CFSubRuleType.uniqueValues:
-                    case CFSubRuleType.timePeriod:{
+                    case CFSubRuleType.timePeriod: {
                         return '1';
                     }
                     case CFSubRuleType.average:
-                    case CFSubRuleType.rank:{
+                    case CFSubRuleType.rank: {
                         return '2';
                     }
-                    case CFSubRuleType.formula:{
+                    case CFSubRuleType.formula: {
                         return '5';
                     }
                 }
                 break;
             }
-            case CFRuleType.dataBar:{
+            case CFRuleType.dataBar: {
                 return '3';
             }
-            case CFRuleType.colorScale:{
+            case CFRuleType.colorScale: {
                 return '4';
             }
-            case CFRuleType.iconSet:{
+            case CFRuleType.iconSet: {
                 return '6';
             }
         }
         return defaultType;
     });
-    const result = useRef < Parameters<IStyleEditorProps['onChange']>>();
+    const result = useRef<Parameters<IStyleEditorProps['onChange']>>(undefined);
     const interceptorManager = useMemo(() => {
         const _interceptorManager = new InterceptorManager({ beforeSubmit, submit });
         return _interceptorManager;
@@ -131,25 +135,25 @@ export const RuleEdit = (props: IRuleEditProps) => {
 
     const StyleEditor = useMemo(() => {
         switch (ruleType) {
-            case '1':{
+            case '1': {
                 return HighlightCellStyleEditor;
             }
-            case '2':{
+            case '2': {
                 return RankStyleEditor;
             }
-            case '3':{
+            case '3': {
                 return DataBarStyleEditor;
             }
-            case '4':{
+            case '4': {
                 return ColorScaleStyleEditor;
             }
-            case '5':{
+            case '5': {
                 return FormulaStyleEditor;
             }
-            case '6':{
+            case '6': {
                 return IconSet;
             }
-            default :{
+            default: {
                 return HighlightCellStyleEditor;
             }
         }
@@ -157,46 +161,53 @@ export const RuleEdit = (props: IRuleEditProps) => {
 
     useEffect(() => {
         // If the child table which  the rule being edited is deleted, exit edit mode
-        if (props.rule?.cfId !== undefined) {
-            const disposable = commandService.onCommandExecuted((commandInfo) => {
-                if (commandInfo.id === RemoveSheetMutation.id) {
-                    const params = commandInfo.params as IRemoveSheetMutationParams;
-                    if (params.subUnitId === subUnitId && params.unitId === unitId) {
-                        props.onCancel();
-                    }
-                }
-                if (commandInfo.id === SetWorksheetActiveOperation.id) {
+        const disposable = commandService.onCommandExecuted((commandInfo) => {
+            if (commandInfo.id === RemoveSheetMutation.id) {
+                const params = commandInfo.params as IRemoveSheetMutationParams;
+                if (params.subUnitId === subUnitId && params.unitId === unitId) {
                     props.onCancel();
                 }
-            });
-            return () => disposable.dispose();
-        }
-    }, [props.rule?.cfId]);
+            }
+            if (commandInfo.id === SetWorksheetActiveOperation.id) {
+                props.onCancel();
+            }
+        });
+        return () => disposable.dispose();
+    }, []);
 
     const onStyleChange = (config: unknown) => {
         result.current = config as Parameters<IStyleEditorProps['onChange']>;
     };
 
-    const onRangeSelectorChange = (ranges: IUnitRange[]) => {
-        rangeResult.current = ranges.map((r) => r.range);
+    const onRangeSelectorChange = (rangeString: string) => {
+        const result = rangeString.split(',').filter((e) => !!e).map(deserializeRangeWithSheet).map((item) => item.range);
+        rangeResult.current = result;
     };
 
     const handleSubmit = () => {
-        const beforeSubmitResult = interceptorManager.fetchThroughInterceptors(interceptorManager.getInterceptPoints().beforeSubmit)(true, null);
+        if (errorText) {
+            return;
+        }
         const getRanges = () => {
             const worksheet = univerInstanceService.getCurrentUnitForType<Workbook>(UniverInstanceType.UNIVER_SHEET)!.getActiveSheet();
+            if (!worksheet) {
+                throw new Error('No active sheet found');
+            }
             const ranges = rangeResult.current.map((range) => setEndForRange(range, worksheet.getRowCount(), worksheet.getColumnCount()));
             const result = ranges.filter((range) => !(Number.isNaN(range.startRow) || Number.isNaN(range.startColumn)));
             return result;
         };
-
+        const ranges = getRanges();
+        const beforeSubmitResult = interceptorManager.fetchThroughInterceptors(interceptorManager.getInterceptPoints().beforeSubmit)(true, null);
         if (beforeSubmitResult) {
             const result = interceptorManager.fetchThroughInterceptors(interceptorManager.getInterceptPoints().submit)(null, null);
-            const ranges = getRanges();
-            if (result && ranges.length) {
+            if (result) {
                 // When you switch the child table, you need to fetch it again here, instead of using the
                 const unitId = getUnitId(univerInstanceService);
                 const subUnitId = getSubUnitId(univerInstanceService);
+                if (!unitId || !subUnitId) {
+                    throw new Error('No active sheet found');
+                }
                 let rule = {} as IConditionFormattingRule;
                 if (props.rule && props.rule.cfId) {
                     rule = { ...props.rule, ranges, rule: result };
@@ -211,21 +222,57 @@ export const RuleEdit = (props: IRuleEditProps) => {
             }
         }
     };
+
     const handleCancel = () => {
         props.onCancel();
     };
+
+    const handleVerify = (v: boolean, rangeText: string) => {
+        if (v) {
+            if (rangeText.length < 1) {
+                errorTextSet(localeService.t('sheet.cf.errorMessage.rangeError'));
+            } else {
+                errorTextSet(undefined);
+            }
+        } else {
+            errorTextSet(localeService.t('sheet.cf.errorMessage.rangeError'));
+        }
+    };
+
+    useSidebarClick((e: MouseEvent) => {
+        const handleOutClick = rangeSelectorActionsRef.current?.handleOutClick;
+        handleOutClick && handleOutClick(e, () => isFocusRangeSelectorSet(false));
+    });
+
     return (
         <div className={styles.cfRuleStyleEditor}>
             <div className={styleBase.title}>{localeService.t('sheet.cf.panel.range')}</div>
-            <div className={`${styleBase.mTBase}`}>
-                <RangeSelector placeholder={localeService.t('sheet.cf.form.rangeSelector')} width={'100%' as unknown as number} openForSheetSubUnitId={subUnitId} openForSheetUnitId={unitId} value={rangeString} id={createInternalEditorID(`${SHEET_CONDITIONAL_FORMATTING_PLUGIN}_rangeSelector`)} onChange={onRangeSelectorChange} />
+            <div className={`
+              ${styleBase.mTBase}
+            `}
+            >
+                <RangeSelector
+                    unitId={unitId}
+                    errorText={errorText}
+                    subUnitId={subUnitId}
+                    initValue={rangeString}
+                    onChange={onRangeSelectorChange}
+                    onVerify={handleVerify}
+                    onFocus={() => isFocusRangeSelectorSet(true)}
+                    isFocus={isFocusRangeSelector}
+                    actions={rangeSelectorActionsRef.current}
+                />
             </div>
             <div className={styleBase.title}>{localeService.t('sheet.cf.panel.styleType')}</div>
             <div className={styleBase.mTBase}>
                 <Select className={styles.width100} value={ruleType} options={options} onChange={(e) => ruleTypeSet(e)} />
             </div>
             <StyleEditor interceptorManager={interceptorManager} rule={props.rule?.rule as any} onChange={onStyleChange} />
-            <div className={`${styleBase.mTBase} ${styles.btnList}`}>
+            <div className={`
+              ${styleBase.mTBase}
+              ${styles.btnList}
+            `}
+            >
                 <Button size="small" onClick={handleCancel}>{localeService.t('sheet.cf.panel.cancel')}</Button>
                 <Button className={styleBase.mLSm} size="small" type="primary" onClick={handleSubmit}>{localeService.t('sheet.cf.panel.submit')}</Button>
             </div>

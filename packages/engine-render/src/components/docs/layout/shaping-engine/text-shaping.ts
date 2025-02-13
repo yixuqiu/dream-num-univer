@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-import { BooleanNumber, type IDocumentBody, type IStyleBase } from '@univerjs/core';
+import { BooleanNumber, type IDocumentBody, type IStyleBase, type Nullable } from '@univerjs/core';
 // @ts-ignore
-import opentype from 'opentype.js/dist/opentype.module';
+import { parse } from 'opentype.js/dist/opentype.module';
 import type Opentype from 'opentype.js';
-import type { Nullable } from 'vitest';
 import { DEFAULT_FONTFACE_PLANE } from '../../../../basics/const';
 import { EMOJI_REG } from '../../../../basics/tools';
 import { fontLibrary } from './font-library';
@@ -44,7 +43,6 @@ export interface IOpenTypeGlyphInfo {
 
 const fontCache = new Map<string, Opentype.Font>();
 const glyphCache: Map<string, IOpenTypeGlyphInfo[]> = new Map();
-
 
 function shapeChunk(
     content: string,
@@ -83,7 +81,7 @@ function shapeChunk(
 
     let font = fontCache.get(fontInfo.fullName);
     if (!font) {
-        font = opentype.parse(fontBuffer) as Opentype.Font;
+        font = parse(fontBuffer) as Opentype.Font;
         fontCache.set(fontInfo.fullName, font);
     }
 

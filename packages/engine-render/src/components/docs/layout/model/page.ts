@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,28 @@
  * limitations under the License.
  */
 
-import type { Nullable } from '@univerjs/core';
-import { PageOrientType } from '@univerjs/core';
+import type { ITable, Nullable } from '@univerjs/core';
 import type {
-    IDocumentSkeletonFooter,
-    IDocumentSkeletonHeader,
+    IDocumentSkeletonHeaderFooter,
     IDocumentSkeletonPage,
     ISkeletonResourceReference,
 } from '../../../../basics/i-document-skeleton-cached';
-import { BreakType } from '../../../../basics/i-document-skeleton-cached';
 import type { ISectionBreakConfig } from '../../../../basics/interfaces';
-import { dealWithSection } from '../block/section';
+import type { DataStreamTreeNode } from '../../view-model/data-stream-tree-node';
 import type { DocumentViewModel } from '../../view-model/document-view-model';
 import type { ILayoutContext } from '../tools';
-import { updateBlockIndex } from '../tools';
+import { BooleanNumber, PageOrientType } from '@univerjs/core';
+import { BreakType, DocumentSkeletonPageType } from '../../../../basics/i-document-skeleton-cached';
+import { dealWithSection } from '../block/section';
+import { resetContext, updateBlockIndex } from '../tools';
 import { createSkeletonSection } from './section';
+
+function getHeaderFooterMaxHeight(pageHeight: number) {
+    return (pageHeight - 100) / 2;
+}
 
 // 新增数据结构框架
 // 判断奇数和偶数页码
-
 export function createSkeletonPage(
     ctx: ILayoutContext,
     sectionBreakConfig: ISectionBreakConfig,
@@ -49,15 +52,15 @@ export function createSkeletonPage(
         headerIds = {},
         footerIds = {},
         useFirstPageHeaderFooter,
-        useEvenPageHeaderFooter,
+        evenAndOddHeaders,
         footerTreeMap,
         headerTreeMap,
         columnProperties = [],
         columnSeparatorType,
         marginTop = 0,
         marginBottom = 0,
-        marginHeader = 0,
-        marginFooter = 0,
+        marginHeader: _marginHeader = 0,
+        marginFooter: _marginFooter = 0,
         marginLeft = 0,
         marginRight = 0,
         renderConfig = {},
@@ -70,7 +73,6 @@ export function createSkeletonPage(
     page.pageNumber = pageNumber;
     page.pageNumberStart = pageNumberStart;
     page.renderConfig = renderConfig;
-
     page.marginLeft = marginLeft;
     page.marginRight = marginRight;
     page.breakType = breakType;
@@ -85,26 +87,29 @@ export function createSkeletonPage(
 
     let headerId = defaultHeaderId ?? '';
     let footerId = defaultFooterId ?? '';
-    if (pageNumber === pageNumberStart && useFirstPageHeaderFooter) {
+    if (pageNumber === pageNumberStart && useFirstPageHeaderFooter === BooleanNumber.TRUE) {
         headerId = firstPageHeaderId ?? '';
         footerId = firstPageFooterId ?? '';
-    } else if (pageNumber % 2 === 0 && useEvenPageHeaderFooter) {
+    } else if (pageNumber % 2 === 0 && evenAndOddHeaders === BooleanNumber.TRUE) {
         headerId = evenPageHeaderId ?? '';
         footerId = evenPageFooterId ?? '';
     }
 
-    let header: Nullable<IDocumentSkeletonHeader>;
-    let footer: Nullable<IDocumentSkeletonFooter>;
+    let header: Nullable<IDocumentSkeletonHeaderFooter>;
+    let footer: Nullable<IDocumentSkeletonHeaderFooter>;
     if (headerId) {
         if (skeHeaders.get(headerId)?.has(pageWidth)) {
             header = skeHeaders.get(headerId)?.get(pageWidth);
         } else if (headerTreeMap && headerTreeMap.has(headerId)) {
-            header = _createSkeletonHeader(
+            header = _createSkeletonHeaderFooter(
                 ctx,
                 headerTreeMap.get(headerId)!,
                 sectionBreakConfig,
-                skeletonResourceReference
-            ) as IDocumentSkeletonHeader;
+                skeletonResourceReference,
+                headerId,
+                true
+            );
+
             skeHeaders.set(headerId, new Map([[pageWidth, header]]));
         }
         page.headerId = headerId;
@@ -114,19 +119,24 @@ export function createSkeletonPage(
         if (skeFooters.get(footerId)?.has(pageWidth)) {
             footer = skeFooters.get(footerId)?.get(pageWidth);
         } else if (footerTreeMap && footerTreeMap.has(footerId)) {
-            footer = _createSkeletonHeader(
+            footer = _createSkeletonHeaderFooter(
                 ctx,
                 footerTreeMap.get(footerId)!,
                 sectionBreakConfig,
-                skeletonResourceReference
-            ) as IDocumentSkeletonFooter;
-            skeFooters.set(headerId, new Map([[pageWidth, footer]]));
+                skeletonResourceReference,
+                footerId,
+                false
+            );
+
+            skeFooters.set(footerId, new Map([[pageWidth, footer]]));
         }
         page.footerId = footerId;
     }
 
-    page.marginTop = _getVerticalMargin(marginTop, marginHeader, header);
-    page.marginBottom = _getVerticalMargin(marginBottom, marginFooter, footer);
+    page.originMarginTop = marginTop;
+    page.originMarginBottom = marginBottom;
+    page.marginTop = _getVerticalMargin(marginTop, header, pageHeight);
+    page.marginBottom = _getVerticalMargin(marginBottom, footer, pageHeight);
 
     const sections = page.sections;
     const lastSection = sections[sections.length - 1];
@@ -152,10 +162,10 @@ export function createSkeletonPage(
     return page;
 }
 
-// 检测是否溢出了一页
-function checkPageOverflow(page: IDocumentSkeletonPage) { }
-
-function _getNullPage() {
+function _getNullPage(
+    type = DocumentSkeletonPageType.BODY,
+    segmentId = ''
+): IDocumentSkeletonPage {
     return {
         sections: [],
         headerId: '',
@@ -170,112 +180,217 @@ function _getNullPage() {
         angle: 0,
         width: 0,
         height: 0,
+        // Only use in cell.
+        left: 0,
         marginLeft: 0,
         marginRight: 0,
+        originMarginTop: 0,
         marginTop: 0,
+        originMarginBottom: 0,
         marginBottom: 0,
         breakType: BreakType.SECTION,
         st: 0,
         ed: 0,
         skeDrawings: new Map(),
+        skeTables: new Map(),
+        type,
+        segmentId,
     };
 }
 
-function _createSkeletonHeader(
+function _createSkeletonHeaderFooter(
     ctx: ILayoutContext,
-    headerOrFooter: DocumentViewModel,
+    headerOrFooterViewModel: DocumentViewModel,
     sectionBreakConfig: ISectionBreakConfig,
     skeletonResourceReference: ISkeletonResourceReference,
-    isHeader = true
-): IDocumentSkeletonHeader | IDocumentSkeletonFooter {
+    segmentId: string,
+    isHeader = true,
+    areaPage: Nullable<IDocumentSkeletonHeaderFooter>,
+    count = 0
+): IDocumentSkeletonHeaderFooter {
     const {
-        lists,
-        footerTreeMap,
-        headerTreeMap,
-        localeService,
-        pageSize,
-        marginLeft = 0,
-        marginRight = 0,
-        drawings,
-        marginTop = 0,
-        marginBottom = 0,
-        marginHeader = 0,
-        marginFooter = 0,
+        lists, footerTreeMap, headerTreeMap, localeService, pageSize, drawings,
+        marginLeft = 0, marginRight = 0,
+        marginHeader = 0, marginFooter = 0,
     } = sectionBreakConfig;
     const pageWidth = pageSize?.width || Number.POSITIVE_INFINITY;
-    const headerConfig: ISectionBreakConfig = {
+    const pageHeight = pageSize?.height || Number.POSITIVE_INFINITY;
+    const headerFooterConfig: ISectionBreakConfig = {
         lists,
         footerTreeMap,
         headerTreeMap,
         pageSize: {
             width: pageWidth - marginLeft - marginRight,
-            height: Number.POSITIVE_INFINITY,
+            height: getHeaderFooterMaxHeight(pageHeight) - (isHeader ? marginHeader : marginFooter) - 5,
         },
         localeService,
         drawings,
     };
 
-    const areaPage = createSkeletonPage(ctx, headerConfig, skeletonResourceReference);
+    if (areaPage == null) {
+        areaPage = createSkeletonPage(ctx, headerFooterConfig, skeletonResourceReference);
+        areaPage.type = isHeader ? DocumentSkeletonPageType.HEADER : DocumentSkeletonPageType.FOOTER;
+        areaPage.segmentId = segmentId;
+    }
+    const layoutAnchor = ctx.layoutStartPointer[segmentId];
+    // Reset layoutStartPointer.
+    ctx.layoutStartPointer[segmentId] = null;
+
     const page = dealWithSection(
         ctx,
-        headerOrFooter,
-        headerOrFooter.children[0],
+        headerOrFooterViewModel,
+        headerOrFooterViewModel.getChildren()[0],
         areaPage,
-        headerConfig
+        headerFooterConfig,
+        layoutAnchor
     ).pages[0];
 
-    updateBlockIndex([page]);
-    const column = page.sections[0].columns[0];
-    const height = column.height || 0;
-    const { skeDrawings, st, ed } = page;
+    if (ctx.isDirty && count < 10) {
+        count++;
+        resetContext(ctx);
 
-    const headerOrFooterSke = {
-        lines: column.lines,
-        skeDrawings,
-        height,
-        st,
-        ed,
-        marginLeft,
-        marginRight,
-    };
+        return _createSkeletonHeaderFooter(
+            ctx,
+            headerOrFooterViewModel,
+            sectionBreakConfig,
+            skeletonResourceReference,
+            segmentId,
+            isHeader,
+            areaPage,
+            count
+        );
+    }
+
+    updateBlockIndex([page]);
 
     if (isHeader) {
-        return {
-            ...headerOrFooterSke,
-            marginTop: __getHeaderMarginTop(marginTop, marginHeader, height),
-        };
+        Object.assign(page, {
+            marginTop: marginHeader,
+            marginBottom: 5, // Space between header and content
+        });
+    } else {
+        Object.assign(page, {
+            marginTop: 5, // Space between content and footer
+            marginBottom: marginFooter,
+        });
     }
-    return {
-        ...headerOrFooterSke,
-        marginBottom: __getHeaderMarginBottom(marginBottom, marginFooter, height),
+
+    return page;
+}
+
+export function createNullCellPage(
+    ctx: ILayoutContext,
+    sectionBreakConfig: ISectionBreakConfig,
+    tableConfig: ITable,
+    row: number,
+    col: number,
+    availableHeight: number = Number.POSITIVE_INFINITY,
+    maxCellPageHeight: number = Number.POSITIVE_INFINITY
+) {
+    const { lists, footerTreeMap, headerTreeMap, localeService, drawings } = sectionBreakConfig;
+    const { skeletonResourceReference } = ctx;
+    const { cellMargin, tableRows, tableColumns, tableId } = tableConfig;
+    const cellConfig = tableRows[row].tableCells[col];
+
+    const {
+        start = { v: 10 },
+        end = { v: 10 },
+        top = { v: 5 },
+        bottom = { v: 5 },
+    } = cellConfig.margin ?? cellMargin ?? {};
+    const pageWidth = tableColumns[col].size.width.v;
+    const pageHeight = maxCellPageHeight;
+
+    const cellSectionBreakConfig: ISectionBreakConfig = {
+        lists,
+        footerTreeMap,
+        headerTreeMap,
+        pageSize: {
+            width: pageWidth,
+            height: pageHeight,
+        },
+        marginTop: top.v,
+        marginBottom: bottom.v,
+        marginLeft: start.v,
+        marginRight: end.v,
+        localeService,
+        drawings,
     };
+
+    const areaPage = createSkeletonPage(
+        ctx,
+        // Set first page height to availableHeight.
+        Object.assign({}, cellSectionBreakConfig, {
+            pageSize: {
+                width: pageWidth,
+                height: Number.isFinite(availableHeight) ? availableHeight : pageHeight,
+            },
+        }),
+        skeletonResourceReference
+    );
+    areaPage.type = DocumentSkeletonPageType.CELL;
+    areaPage.segmentId = tableId;
+
+    return {
+        page: areaPage,
+        sectionBreakConfig: cellSectionBreakConfig,
+    };
+}
+
+export function createSkeletonCellPages(
+    ctx: ILayoutContext,
+    viewModel: DocumentViewModel,
+    cellNode: DataStreamTreeNode,
+    sectionBreakConfig: ISectionBreakConfig,
+    tableConfig: ITable,
+    row: number,
+    col: number,
+    availableHeight: number = Number.POSITIVE_INFINITY,
+    maxCellPageHeight: number = Number.POSITIVE_INFINITY
+) {
+    // Table cell only has one section.
+    const sectionNode = cellNode.children[0];
+
+    const { page: areaPage, sectionBreakConfig: cellSectionBreakConfig } = createNullCellPage(
+        ctx,
+        sectionBreakConfig,
+        tableConfig,
+        row,
+        col,
+        availableHeight,
+        maxCellPageHeight
+    );
+
+    const { pages } = dealWithSection(
+        ctx,
+        viewModel,
+        sectionNode,
+        areaPage,
+        cellSectionBreakConfig
+    );
+
+    for (const p of pages) {
+        p.type = DocumentSkeletonPageType.CELL;
+        p.segmentId = tableConfig.tableId;
+    }
+
+    updateBlockIndex(pages, cellNode.startIndex);
+
+    return pages;
 }
 
 function _getVerticalMargin(
     marginTB: number,
-    marginHF: number,
-    headerOrFooter: Nullable<IDocumentSkeletonHeader> | Nullable<IDocumentSkeletonFooter>
+    headerOrFooter: Nullable<IDocumentSkeletonHeaderFooter>,
+    pageHeight: number
 ) {
-    if (!headerOrFooter || headerOrFooter.lines.length === 0) {
+    if (!headerOrFooter || headerOrFooter.sections[0].columns[0].lines.length === 0) {
         return marginTB;
     }
-    return Math.max(marginTB, marginHF, headerOrFooter?.height || 0);
-}
 
-function __getHeaderMarginTop(marginTop: number, marginHeader: number, height: number) {
-    const maxMargin = Math.max(marginTop, marginHeader);
-    if (height > maxMargin) {
-        return 0;
-    }
+    const HeaderFooterPageHeight = headerOrFooter.height + headerOrFooter.marginTop + headerOrFooter.marginBottom;
+    // Content height should be at least 100px.
+    const maxMargin = getHeaderFooterMaxHeight(pageHeight);
 
-    return maxMargin - height;
-}
-
-function __getHeaderMarginBottom(marginBottom: number, marginFooter: number, height: number) {
-    const maxMargin = Math.max(marginBottom, marginFooter);
-    if (height > maxMargin) {
-        return 0;
-    }
-
-    return maxMargin - height;
+    return Math.min(maxMargin, Math.max(marginTB, HeaderFooterPageHeight));
 }

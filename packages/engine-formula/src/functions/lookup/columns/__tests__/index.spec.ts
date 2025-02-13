@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-import type { Injector } from '@wendellhu/redi';
-import { beforeEach, describe, expect, it } from 'vitest';
-
-import { Lexer } from '../../../../engine/analysis/lexer';
+import type { Injector } from '@univerjs/core';
 import type { LexerNode } from '../../../../engine/analysis/lexer-node';
-import { AstTreeBuilder } from '../../../../engine/analysis/parser';
+
 import type { BaseAstNode } from '../../../../engine/ast-node/base-ast-node';
+import type { BaseValueObject, ErrorValueObject } from '../../../../engine/value-object/base-value-object';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { ErrorType } from '../../../../basics/error-type';
+import { Lexer } from '../../../../engine/analysis/lexer';
+import { AstTreeBuilder } from '../../../../engine/analysis/parser';
 import { Interpreter } from '../../../../engine/interpreter/interpreter';
+import { generateExecuteAstNodeData } from '../../../../engine/utils/ast-node-tool';
 import { IFormulaCurrentConfigService } from '../../../../services/current-data.service';
 import { IFunctionService } from '../../../../services/function.service';
 import { IFormulaRuntimeService } from '../../../../services/runtime.service';
 import { createFunctionTestBed } from '../../../__tests__/create-function-test-bed';
 import { FUNCTION_NAMES_LOOKUP } from '../../function-names';
 import { Columns } from '../index';
-import type { BaseValueObject, ErrorValueObject } from '../../../../engine/value-object/base-value-object';
-import { ErrorType } from '../../../../basics/error-type';
 
 describe('Test columns', () => {
     let get: Injector['get'];
@@ -55,6 +56,7 @@ describe('Test columns', () => {
         formulaCurrentConfigService.load({
             formulaData: {},
             arrayFormulaCellData: {},
+            arrayFormulaRange: {},
             forceCalculate: false,
             dirtyRanges: [],
             dirtyNameMap: {},
@@ -84,66 +86,66 @@ describe('Test columns', () => {
     });
 
     describe('Columns', () => {
-        it('Reference single cell', async () => {
+        it('Reference single cell', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS(C1)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(1);
         });
-        it('Reference array cell', async () => {
+        it('Reference array cell', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS(C2:F3)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(4);
         });
-        it('No reference', async () => {
+        it('No reference', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS()');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as ErrorValueObject).getValue()).toBe(ErrorType.NA);
         });
-        it('Text params', async () => {
+        it('Text params', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS("A5")');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(1);
         });
-        it('Boolean params TRUE', async () => {
+        it('Boolean params TRUE', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS(TRUE)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(1);
         });
-        it('Boolean params FALSE', async () => {
+        it('Boolean params FALSE', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS(FALSE)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(1);
         });
-        it('Number params', async () => {
+        it('Number params', () => {
             const lexerNode = lexer.treeBuilder('=COLUMNS(11)');
 
             const astNode = astTreeBuilder.parse(lexerNode as LexerNode);
 
-            const result = await interpreter.executeAsync(astNode as BaseAstNode);
+            const result = interpreter.execute(generateExecuteAstNodeData(astNode as BaseAstNode));
 
             expect((result as BaseValueObject).getValue()).toBe(1);
         });

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 import { useCallback, useRef } from 'react';
 
-export function useEvent<T extends (...params: any[]) => any>(func: T) {
+export function useEvent<T extends (...params: any[]) => any>(func: T | undefined) {
     const funcRef = useRef(func);
 
     funcRef.current = func;
     return useCallback<T>(
         ((...params) => {
-            return funcRef.current(...params);
+            return funcRef.current?.(...params);
         }) as T,
         []
     );

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,18 @@
  * limitations under the License.
  */
 
-import type { IExecutionOptions, IMutation, IUnitRange, Nullable } from '@univerjs/core';
-import { CommandType } from '@univerjs/core';
-
+import type { IExecutionOptions, IMutation, Nullable } from '@univerjs/core';
 import type {
-    IDirtyUnitFeatureMap,
-    IDirtyUnitOtherFormulaMap,
-    IDirtyUnitSheetDefinedNameMap,
-    IDirtyUnitSheetNameMap,
     IRuntimeOtherUnitDataType,
     IRuntimeUnitDataPrimitiveType,
 } from '../../basics/common';
-import type { FormulaExecutedStateType, IExecutionInProgressParams } from '../../services/runtime.service';
 
-export interface ISetFormulaCalculationStartMutation {
-    dirtyRanges: IUnitRange[];
-    dirtyNameMap: IDirtyUnitSheetNameMap;
-    dirtyDefinedNameMap: IDirtyUnitSheetDefinedNameMap;
-    dirtyUnitFeatureMap: IDirtyUnitFeatureMap;
-    dirtyUnitOtherFormulaMap: IDirtyUnitOtherFormulaMap;
+import type { IFormulaDirtyData } from '../../services/current-data.service';
+import type { FormulaExecutedStateType, IExecutionInProgressParams } from '../../services/runtime.service';
+import { CommandType } from '@univerjs/core';
+
+export interface ISetFormulaCalculationStartMutation extends IFormulaDirtyData {
     options: Nullable<IExecutionOptions>;
-    forceCalculation?: boolean;
 }
 /**
  * TODO: @DR-Univer
@@ -54,6 +45,7 @@ export const SetFormulaCalculationStopMutation: IMutation<ISetFormulaCalculation
     handler: () => true,
 };
 
+// TODO: this name lacks Params
 export interface ISetFormulaCalculationNotificationMutation {
     functionsExecutedState?: FormulaExecutedStateType;
     stageInfo?: IExecutionInProgressParams;

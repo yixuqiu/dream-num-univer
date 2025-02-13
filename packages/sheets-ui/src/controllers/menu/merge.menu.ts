@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
  */
 
 import { UniverInstanceType } from '@univerjs/core';
-import { getCurrentSheetDisabled$, RemoveWorksheetMergeCommand } from '@univerjs/sheets';
+import { RangeProtectionPermissionEditPoint, RemoveWorksheetMergeCommand, WorkbookEditablePermission, WorksheetEditPermission, WorksheetSetCellStylePermission, WorksheetSetCellValuePermission } from '@univerjs/sheets';
 import type { IMenuButtonItem, IMenuSelectorItem } from '@univerjs/ui';
-import { getMenuHiddenObservable, MenuGroup, MenuItemType, MenuPosition } from '@univerjs/ui';
-import type { IAccessor } from '@wendellhu/redi';
+import { getMenuHiddenObservable, MenuItemType } from '@univerjs/ui';
+import type { IAccessor } from '@univerjs/core';
 
 import { combineLatestWith, map } from 'rxjs';
 import {
@@ -28,59 +28,62 @@ import {
     AddWorksheetMergeVerticalCommand,
 } from '../../commands/commands/add-worksheet-merge.command';
 import { getSheetSelectionsDisabled$ } from '../utils/selections-tools';
+import { getCurrentRangeDisable$ } from './menu-util';
 
 export function CellMergeMenuItemFactory(accessor: IAccessor): IMenuSelectorItem<string> {
-    const disabled$ = getCurrentSheetDisabled$(accessor);
+    const editDisabled$ = getCurrentRangeDisable$(accessor, { workbookTypes: [WorkbookEditablePermission], worksheetTypes: [WorksheetEditPermission, WorksheetSetCellValuePermission, WorksheetSetCellStylePermission], rangeTypes: [RangeProtectionPermissionEditPoint] });
     const selectionsHasCross$ = getSheetSelectionsDisabled$(accessor);
 
     return {
         id: AddWorksheetMergeCommand.id,
         icon: 'MergeAllSingle',
         tooltip: 'toolbar.mergeCell.main',
-        positions: [MenuPosition.TOOLBAR_START],
-        group: MenuGroup.TOOLBAR_LAYOUT,
         type: MenuItemType.SUBITEMS,
         // selections: [...MERGE_CHILDREN],
         hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
-        disabled$: disabled$.pipe(
+        disabled$: editDisabled$.pipe(
             combineLatestWith(selectionsHasCross$),
             map(([disable, hasCross]) => disable || hasCross)
         ),
     };
 }
+
 export function CellMergeAllMenuItemFactory(accessor: IAccessor): IMenuButtonItem<string> {
     return {
         id: AddWorksheetMergeAllCommand.id,
         type: MenuItemType.BUTTON,
         title: 'merge.all',
         icon: 'MergeAllSingle',
-        positions: [AddWorksheetMergeCommand.id],
+        hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
     };
 }
+
 export function CellMergeVerticalMenuItemFactory(accessor: IAccessor): IMenuButtonItem<string> {
     return {
         id: AddWorksheetMergeVerticalCommand.id,
         type: MenuItemType.BUTTON,
         title: 'merge.vertical',
         icon: 'VerticalIntegrationSingle',
-        positions: [AddWorksheetMergeCommand.id],
+        hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
     };
 }
+
 export function CellMergeHorizontalMenuItemFactory(accessor: IAccessor): IMenuButtonItem<string> {
     return {
         id: AddWorksheetMergeHorizontalCommand.id,
         type: MenuItemType.BUTTON,
         title: 'merge.horizontal',
         icon: 'HorizontalMergeSingle',
-        positions: [AddWorksheetMergeCommand.id],
+        hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
     };
 }
+
 export function CellMergeCancelMenuItemFactory(accessor: IAccessor): IMenuButtonItem<string> {
     return {
         id: RemoveWorksheetMergeCommand.id,
         type: MenuItemType.BUTTON,
         title: 'merge.cancel',
         icon: 'CancelMergeSingle',
-        positions: [AddWorksheetMergeCommand.id],
+        hidden$: getMenuHiddenObservable(accessor, UniverInstanceType.UNIVER_SHEET),
     };
 }

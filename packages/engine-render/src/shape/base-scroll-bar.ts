@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import { Disposable, type Nullable } from '@univerjs/core';
-
 import type { Vector2 } from '../basics/vector2';
+
 import type { UniverRenderingContext } from '../context';
-import type { ThinScene } from '../thin-scene';
+import type { Scene } from '../scene';
 import type { Rect } from './rect';
+import { Disposable, type Nullable } from '@univerjs/core';
 
 export interface IScrollBarProps {
     thumbMargin?: number;
@@ -27,6 +27,9 @@ export interface IScrollBarProps {
     thumbBackgroundColor?: string;
     thumbHoverBackgroundColor?: string;
     thumbActiveBackgroundColor?: string;
+    /**
+     * The thickness of a scrolling bar.
+     */
     barSize?: number;
     barBackgroundColor?: string;
     barBorder?: number;
@@ -35,10 +38,13 @@ export interface IScrollBarProps {
     enableHorizontal?: boolean;
     enableVertical?: boolean;
 
-    mainScene?: ThinScene;
+    mainScene?: Scene;
+
+    minThumbSizeH?: number;
+    minThumbSizeV?: number;
 }
 
-export class BaseScrollBar extends Disposable {
+export abstract class BaseScrollBar extends Disposable {
     enableHorizontal: boolean = true;
 
     enableVertical: boolean = true;
@@ -55,11 +61,11 @@ export class BaseScrollBar extends Disposable {
 
     verticalMinusMiniThumb: number = 0;
 
-    horizonBarRect: Nullable<Rect>;
+    horizonScrollTrack: Nullable<Rect>;
 
     horizonThumbRect: Nullable<Rect>;
 
-    verticalBarRect: Nullable<Rect>;
+    verticalScrollTrack: Nullable<Rect>;
 
     verticalThumbRect: Nullable<Rect>;
 
@@ -160,27 +166,27 @@ export class BaseScrollBar extends Disposable {
             return this.verticalThumbRect;
         }
 
-        if (this.horizonBarRect?.isHit(coord)) {
-            return this.horizonBarRect;
+        if (this.horizonScrollTrack?.isHit(coord)) {
+            return this.horizonScrollTrack;
         }
 
-        if (this.verticalBarRect?.isHit(coord)) {
-            return this.verticalBarRect;
+        if (this.verticalScrollTrack?.isHit(coord)) {
+            return this.verticalScrollTrack;
         }
 
         return null;
     }
 
     override dispose() {
-        this.horizonBarRect?.dispose();
+        this.horizonScrollTrack?.dispose();
         this.horizonThumbRect?.dispose();
-        this.verticalBarRect?.dispose();
+        this.verticalScrollTrack?.dispose();
         this.verticalThumbRect?.dispose();
         this.placeholderBarRect?.dispose();
 
-        this.horizonBarRect = null;
+        this.horizonScrollTrack = null;
         this.horizonThumbRect = null;
-        this.verticalBarRect = null;
+        this.verticalScrollTrack = null;
         this.verticalThumbRect = null;
         this.placeholderBarRect = null;
     }
@@ -193,14 +199,14 @@ export class BaseScrollBar extends Disposable {
         return this.verticalThumbRect?.visible || false;
     }
 
-    resize(
-        parentWidth: Nullable<number> = 0,
-        parentHeight: Nullable<number> = 0,
-        contentWidth: number = 0,
-        contentHeight: number = 0
-    ) {}
+    abstract resize(
+        parentWidth: Nullable<number>,
+        parentHeight: Nullable<number>,
+        contentWidth: number,
+        contentHeight: number
+    ): void;
 
-    makeDirty(state: boolean) {}
+    abstract makeDirty(state: boolean): void;
 
-    render(ctx: UniverRenderingContext, left: number = 0, top: number = 0) {}
+    abstract render(ctx: UniverRenderingContext, left?: number, top?: number): void;
 }

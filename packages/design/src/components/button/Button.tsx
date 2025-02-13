@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,6 +60,8 @@ export interface IButtonProps {
 
     /** Set the handler to handle `click` event */
     onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+
+    id?: string;
 }
 
 export function Button(props: IButtonProps) {

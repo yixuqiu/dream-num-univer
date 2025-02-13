@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,3 +29,5 @@ export const DEFAULT_TOKEN_LET_FUNCTION_NAME = 'LET';
 export const DEFAULT_TOKEN_LAMBDA_FUNCTION_NAME = 'LAMBDA';
 
 export const DEFAULT_TOKEN_CUBE_FUNCTION_NAME = 'CUBE';
+
+export const FORCED_RECALCULATION_FUNCTION_NAME = new Set<string>(['RAND', 'RANDBETWEEN', 'NOW', 'TODAY']);

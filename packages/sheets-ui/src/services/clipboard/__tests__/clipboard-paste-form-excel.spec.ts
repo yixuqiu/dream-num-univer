@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,24 +14,22 @@
  * limitations under the License.
  */
 
-import type { ICellData, IStyleData, Nullable, Univer } from '@univerjs/core';
 import { ICommandService, IUniverInstanceService, LocaleType, RANGE_TYPE } from '@univerjs/core';
 import {
     AddWorksheetMergeMutation,
     MoveRangeMutation,
-    NORMAL_SELECTION_PLUGIN_NAME,
     RemoveWorksheetMergeMutation,
-    SelectionManagerService,
     SetRangeValuesMutation,
     SetSelectionsOperation,
     SetWorksheetColWidthMutation,
     SetWorksheetRowHeightMutation,
+    SheetsSelectionsService,
 } from '@univerjs/sheets';
-import type { Injector } from '@wendellhu/redi';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ICellData, Injector, IStyleData, Nullable, Univer } from '@univerjs/core';
 
-import { ISheetClipboardService } from '../clipboard.service';
 import { SheetSkeletonManagerService } from '../../sheet-skeleton-manager.service';
+import { ISheetClipboardService } from '../clipboard.service';
 import { clipboardTestBed } from './clipboard-test-bed';
 import { excelSample } from './constant';
 
@@ -124,19 +122,14 @@ describe('Test clipboard', () => {
 
     describe('Test paste from excel ', () => {
         beforeEach(() => {
-            const selectionManager = get(SelectionManagerService);
+            const selectionManager = get(SheetsSelectionsService);
 
-            selectionManager.setCurrentSelection({
-                pluginName: NORMAL_SELECTION_PLUGIN_NAME,
-                unitId: 'test',
-                sheetId: 'sheet1',
-            });
             const startRow = 1;
             const startColumn = 1;
             const endRow = 1;
             const endColumn = 1;
 
-            selectionManager.add([
+            selectionManager.addSelections([
                 {
                     range: { startRow, startColumn, endRow, endColumn, rangeType: RANGE_TYPE.NORMAL },
                     primary: null,
@@ -145,7 +138,6 @@ describe('Test clipboard', () => {
             ]);
 
             sheetSkeletonManagerService.setCurrent({
-                unitId: 'test',
                 sheetId: 'sheet1',
             });
         });
@@ -157,7 +149,45 @@ describe('Test clipboard', () => {
             expect(worksheet.getMergeData().length).toBe(3);
             expect(getValues(2, 2, 2, 2)?.[0]?.[0]?.v).toEqual('Univer');
             expect(getStyles(2, 2, 2, 2)?.[0]?.[0]).toStrictEqual({
-                bl: 1, cl: { rgb: 'black' }, ff: '等线', fs: 12, ht: 0, it: 1, vt: 2, tb: 1,
+                bl: 1,
+                cl: {
+                    rgb: 'rgb(0,0,0)',
+                },
+                ff: '等线',
+                fs: 12,
+                ht: 0,
+                it: 1,
+                ol: {
+                    cl: {
+                        rgb: 'rgb(0,0,0)',
+                    },
+                    s: 0,
+                },
+                pd: {
+                    b: 2,
+                    l: 2,
+                    r: 2,
+                    t: 0,
+                },
+                st: {
+                    cl: {
+                        rgb: 'rgb(0,0,0)',
+                    },
+                    s: 0,
+                },
+                tb: 1,
+                td: 0,
+                tr: {
+                    a: 0,
+                    v: 0,
+                },
+                ul: {
+                    cl: {
+                        rgb: 'rgb(0,0,0)',
+                    },
+                    s: 0,
+                },
+                vt: 2,
             });
         });
 

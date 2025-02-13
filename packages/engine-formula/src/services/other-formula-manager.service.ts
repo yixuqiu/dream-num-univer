@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
  */
 
 import type { Nullable } from '@univerjs/core';
-import { Disposable } from '@univerjs/core';
-import { createIdentifier } from '@wendellhu/redi';
+import type { IDirtyUnitOtherFormulaMap, IOtherFormulaData, IOtherFormulaDataItem } from '../basics/common';
 
-import type { IDirtyUnitOtherFormulaMap, IFormulaDataItem, IOtherFormulaData } from '../basics/common';
+import { createIdentifier, Disposable } from '@univerjs/core';
 
 export interface IOtherFormulaManagerSearchParam {
     unitId: string;
@@ -27,7 +26,7 @@ export interface IOtherFormulaManagerSearchParam {
 }
 
 export interface IOtherFormulaManagerInsertParam extends IOtherFormulaManagerSearchParam {
-    item: IFormulaDataItem;
+    item: IOtherFormulaDataItem;
 }
 
 export interface IOtherFormulaManagerService {
@@ -35,7 +34,7 @@ export interface IOtherFormulaManagerService {
 
     remove(searchParam: IOtherFormulaManagerSearchParam): void;
 
-    get(searchParam: IOtherFormulaManagerSearchParam): Nullable<IFormulaDataItem>;
+    get(searchParam: IOtherFormulaManagerSearchParam): Nullable<IOtherFormulaDataItem>;
 
     has(searchParam: IOtherFormulaManagerSearchParam): boolean;
 

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import { ErrorType } from '../../../../basics/error-type';
 import { Isna } from '../index';
 
 describe('Test isna function', () => {
-    const textFunction = new Isna(FUNCTION_NAMES_INFORMATION.ISNA);
+    const testFunction = new Isna(FUNCTION_NAMES_INFORMATION.ISNA);
 
     describe('Isna', () => {
         it('value error', () => {
             const value = ErrorValueObject.create(ErrorType.NA);
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(result.getValue()).toBe(true);
         });
 
@@ -45,7 +45,7 @@ describe('Test isna function', () => {
                 row: 0,
                 column: 0,
             });
-            const result = textFunction.calculate(value);
+            const result = testFunction.calculate(value);
             expect(transformToValue(result.getArrayValue())).toStrictEqual([
                 [false, false, false, false, false, false, true, false, false, false],
                 [false, false, false, false, false, false, false, false, false, false],

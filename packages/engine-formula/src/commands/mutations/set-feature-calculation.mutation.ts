@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,13 @@ export const SetFeatureCalculationMutation: IMutation<ISetFeatureCalculationMuta
     handler: () => true,
 };
 
-export const RemoveFeatureCalculationMutation: IMutation<{ featureId: string }> = {
+export interface IRemoveFeatureCalculationMutationParam {
+    featureIds: string[];
+    unitId: string;
+    subUnitId: string;
+}
+
+export const RemoveFeatureCalculationMutation: IMutation<IRemoveFeatureCalculationMutationParam> = {
     id: 'formula.mutation.remove-feature-calculation',
     type: CommandType.MUTATION,
     handler: () => true,

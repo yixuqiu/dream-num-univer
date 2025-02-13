@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,11 +20,10 @@ import type { ICommandService } from '../services/command/command.service';
 import { CommandType } from '../services/command/command.service';
 import { fromCallback } from './rxjs';
 
-
 export const afterInitApply = (commandService: ICommandService) => {
     return new Promise<void>((res) => {
         merge(
-            fromCallback(commandService.onCommandExecuted).pipe(filter(([info]) => {
+            fromCallback(commandService.onCommandExecuted.bind(commandService)).pipe(filter(([info]) => {
                 return info.type === CommandType.MUTATION;
             })),
             timer(300)

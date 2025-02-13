@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,14 +47,15 @@ const wordPastePlugin: IPastePlugin = {
                 return el.tagName === 'DIV' && /ace-line/i.test(el.className);
             },
             handler(doc) {
-                if (doc.paragraphs == null) {
-                    doc.paragraphs = [];
+                const body = doc.body!;
+                if (body.paragraphs == null) {
+                    body.paragraphs = [];
                 }
 
-                doc.paragraphs.push({
-                    startIndex: doc.dataStream.length,
+                body.paragraphs.push({
+                    startIndex: body.dataStream.length,
                 });
-                doc.dataStream += '\r';
+                body.dataStream += '\r';
             },
         },
     ],

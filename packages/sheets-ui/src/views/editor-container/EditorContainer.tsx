@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-import type { IDocumentData } from '@univerjs/core';
-import { DEFAULT_EMPTY_DOCUMENT_VALUE, DOCS_NORMAL_EDITOR_UNIT_ID_KEY, IContextService } from '@univerjs/core';
-import { useDependency } from '@wendellhu/redi/react-bindings';
-import React, { useEffect, useState } from 'react';
+import type { KeyCode } from '@univerjs/ui';
+import { DOCS_NORMAL_EDITOR_UNIT_ID_KEY, ICommandService, IContextService } from '@univerjs/core';
+import { IEditorService } from '@univerjs/docs-ui';
+import { DeviceInputEventType } from '@univerjs/engine-render';
+import { ComponentManager, DISABLE_AUTO_FOCUS_KEY, MetaKeys, useDependency, useEvent, useObservable, useSidebarClick } from '@univerjs/ui';
+import React, { useEffect, useRef, useState } from 'react';
+import { SetCellEditVisibleArrowOperation, SetCellEditVisibleOperation } from '../../commands/operations/cell-edit.operation';
 
-import { FIX_ONE_PIXEL_BLUR_OFFSET } from '@univerjs/engine-render';
-import { DISABLE_AUTO_FOCUS_KEY, IEditorService, TextEditor, useObservable } from '@univerjs/ui';
+import { EMBEDDING_FORMULA_EDITOR_COMPONENT_KEY } from '../../common/keys';
+import { IEditorBridgeService } from '../../services/editor-bridge.service';
 import { ICellEditorManagerService } from '../../services/editor/cell-editor-manager.service';
+import { useKeyEventConfig } from './hooks';
 import styles from './index.module.less';
 
 interface ICellIEditorProps { }
@@ -36,42 +40,32 @@ const EDITOR_DEFAULT_POSITION = {
 };
 
 /**
- * Floating editor's container.
+ * Cell editor container.
  * @returns
  */
-
 export const EditorContainer: React.FC<ICellIEditorProps> = () => {
     const [state, setState] = useState({
         ...EDITOR_DEFAULT_POSITION,
     });
-
     const cellEditorManagerService = useDependency(ICellEditorManagerService);
     const editorService = useDependency(IEditorService);
     const contextService = useDependency(IContextService);
-
+    const componentManager = useDependency(ComponentManager);
+    const editorBridgeService = useDependency(IEditorBridgeService);
+    const visible = useObservable(editorBridgeService.visible$);
+    const commandService = useDependency(ICommandService);
+    const isRefSelecting = useRef<0 | 1 | 2>(0);
     const disableAutoFocus = useObservable(
         () => contextService.subscribeContextValue$(DISABLE_AUTO_FOCUS_KEY),
         false,
         undefined,
         [contextService, DISABLE_AUTO_FOCUS_KEY]
     );
-
-    const snapshot: IDocumentData = {
-        id: DOCS_NORMAL_EDITOR_UNIT_ID_KEY,
-        body: {
-            dataStream: `${DEFAULT_EMPTY_DOCUMENT_VALUE}`,
-            textRuns: [],
-            paragraphs: [
-                {
-                    startIndex: 0,
-                },
-            ],
-        },
-        documentStyle: {},
-    };
+    const FormulaEditor = componentManager.get(EMBEDDING_FORMULA_EDITOR_COMPONENT_KEY);
+    const editState = editorBridgeService.getEditLocation();
 
     useEffect(() => {
-        cellEditorManagerService.state$.subscribe((param) => {
+        const sub = cellEditorManagerService.state$.subscribe((param) => {
             if (param == null) {
                 return;
             }
@@ -90,10 +84,10 @@ export const EditorContainer: React.FC<ICellIEditorProps> = () => {
                 });
             } else {
                 setState({
-                    width: endX - startX - FIX_ONE_PIXEL_BLUR_OFFSET + 2,
-                    height: endY - startY - FIX_ONE_PIXEL_BLUR_OFFSET + 2,
-                    left: startX + FIX_ONE_PIXEL_BLUR_OFFSET,
-                    top: startY + FIX_ONE_PIXEL_BLUR_OFFSET,
+                    width: endX - startX,
+                    height: endY - startY,
+                    left: startX,
+                    top: startY,
                 });
 
                 const editor = editorService.getEditor(DOCS_NORMAL_EDITOR_UNIT_ID_KEY);
@@ -107,6 +101,10 @@ export const EditorContainer: React.FC<ICellIEditorProps> = () => {
                 cellEditorManagerService.setRect({ left, top, width, height });
             }
         });
+        return () => {
+            sub.unsubscribe();
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Empty dependency array means this effect runs once on mount and clean up on unmount
 
     useEffect(() => {
@@ -115,6 +113,30 @@ export const EditorContainer: React.FC<ICellIEditorProps> = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [disableAutoFocus, state]);
+
+    const handleClickSideBar = useEvent(() => {
+        if (editorBridgeService.isVisible().visible) {
+            commandService.executeCommand(SetCellEditVisibleOperation.id, {
+                visible: false,
+                eventType: DeviceInputEventType.PointerUp,
+                unitId: editState?.unitId,
+            });
+        }
+    });
+
+    useSidebarClick(handleClickSideBar);
+
+    const keyCodeConfig = useKeyEventConfig(isRefSelecting, editState?.unitId!);
+
+    const onMoveInEditor = useEvent((keycode: KeyCode, metaKey: MetaKeys) => {
+        commandService.executeCommand(SetCellEditVisibleArrowOperation.id, {
+            keycode,
+            visible: false,
+            eventType: DeviceInputEventType.Keyboard,
+            isShift: metaKey === MetaKeys.SHIFT || metaKey === (MetaKeys.CTRL_COMMAND | MetaKeys.SHIFT),
+            unitId: editState?.unitId,
+        });
+    });
 
     return (
         <div
@@ -126,14 +148,33 @@ export const EditorContainer: React.FC<ICellIEditorProps> = () => {
                 height: state.height,
             }}
         >
-            <TextEditor
-                id={DOCS_NORMAL_EDITOR_UNIT_ID_KEY}
-                className={styles.editorInput}
-                snapshot={snapshot}
-                cancelDefaultResizeListener={true}
-                isSheetEditor={true}
-                isSingle={false}
-            />
+            {FormulaEditor && (
+                <FormulaEditor
+                    editorId={DOCS_NORMAL_EDITOR_UNIT_ID_KEY}
+                    className={styles.editorInput}
+                    initValue=""
+                    onChange={() => {}}
+                    isFocus={visible?.visible}
+                    unitId={editState?.unitId}
+                    subUnitId={editState?.sheetId}
+                    keyboradEventConfig={keyCodeConfig}
+                    onMoveInEditor={onMoveInEditor}
+                    isSupportAcrossSheet
+                    resetSelectionOnBlur={false}
+                    isSingle={false}
+                    autoScrollbar={false}
+                    onFormulaSelectingChange={(isSelecting: 0 | 1 | 2) => {
+                        isRefSelecting.current = isSelecting;
+                        if (isSelecting) {
+                            editorBridgeService.enableForceKeepVisible();
+                        } else {
+                            editorBridgeService.disableForceKeepVisible();
+                        }
+                    }}
+                    disableSelectionOnClick
+                    disableContextMenu={false}
+                />
+            )}
         </div>
     );
 };

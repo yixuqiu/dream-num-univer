@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,16 @@
  * limitations under the License.
  */
 
-import type { IWorkbookData } from '@univerjs/core';
-import { ILogService, IUniverInstanceService, LocaleType, LogLevel, Plugin, Univer, UniverInstanceType } from '@univerjs/core';
-import type { Dependency } from '@wendellhu/redi';
-import { Inject, Injector } from '@wendellhu/redi';
+import type { Dependency, IWorkbookData } from '@univerjs/core';
+import { ILogService, Inject, Injector, IUniverInstanceService, LocaleType, LogLevel, Plugin, Univer, UniverInstanceType } from '@univerjs/core';
 
+import { Lexer } from '../../engine/analysis/lexer';
 import { LexerTreeBuilder } from '../../engine/analysis/lexer-tree-builder';
-import { CalculateFormulaService } from '../../services/calculate-formula.service';
+import { CalculateFormulaService, ICalculateFormulaService } from '../../services/calculate-formula.service';
 import { FormulaCurrentConfigService, IFormulaCurrentConfigService } from '../../services/current-data.service';
 import { DefinedNamesService, IDefinedNamesService } from '../../services/defined-names.service';
 import { FormulaRuntimeService, IFormulaRuntimeService } from '../../services/runtime.service';
 import { FormulaDataModel } from '../formula-data.model';
-import { Lexer } from '../../engine/analysis/lexer';
 
 const TEST_WORKBOOK_DATA: IWorkbookData = {
     id: 'test',
@@ -69,8 +67,9 @@ export function createCommandTestBed(workbookData?: IWorkbookData, dependencies?
             super();
         }
 
-        override onStarting(injector: Injector): void {
-            injector.add([CalculateFormulaService]);
+        override onStarting(): void {
+            const injector = this._injector;
+            injector.add([ICalculateFormulaService, { useClass: CalculateFormulaService }]);
             injector.add([FormulaDataModel]);
             injector.add([LexerTreeBuilder]);
             injector.add([Lexer]);

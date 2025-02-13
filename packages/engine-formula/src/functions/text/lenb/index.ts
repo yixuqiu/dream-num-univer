@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,26 +14,27 @@
  * limitations under the License.
  */
 
-import { ErrorType } from '../../../basics/error-type';
+import type { ArrayValueObject } from '../../../engine/value-object/array-value-object';
+import type { BaseValueObject } from '../../../engine/value-object/base-value-object';
+import { getTextValueOfNumberFormat } from '../../../basics/format';
 import { charLenByte } from '../../../engine/utils/char-kit';
-import { type BaseValueObject, ErrorValueObject } from '../../../engine/value-object/base-value-object';
 import { NumberValueObject } from '../../../engine/value-object/primitive-object';
 import { BaseFunction } from '../../base-function';
 
 export class Lenb extends BaseFunction {
+    override minParams = 1;
+
+    override maxParams = 1;
+
     override calculate(text: BaseValueObject) {
-        if (text == null) {
-            return ErrorValueObject.create(ErrorType.NA);
-        }
-
-        if (text.isError()) {
-            return text;
-        }
-
         if (text.isArray()) {
-            return text.mapValue((textValue: BaseValueObject) => {
-                return this._handleSingleText(textValue);
-            });
+            const resultArray = text.mapValue((textValue: BaseValueObject) => this._handleSingleText(textValue));
+
+            if ((resultArray as ArrayValueObject).getRowCount() === 1 && (resultArray as ArrayValueObject).getColumnCount() === 1) {
+                return (resultArray as ArrayValueObject).get(0, 0) as BaseValueObject;
+            }
+
+            return resultArray;
         }
 
         return this._handleSingleText(text);
@@ -44,17 +45,10 @@ export class Lenb extends BaseFunction {
             return text;
         }
 
-        if (text.isNull()) {
-            return NumberValueObject.create(0);
-        }
+        const textValue = getTextValueOfNumberFormat(text);
 
-        if (text.isString() || text.isBoolean() || text.isNumber()) {
-            const textValue = text.getValue().toString();
-            const textByteLen = charLenByte(textValue);
+        const textByteLen = charLenByte(textValue);
 
-            return NumberValueObject.create(textByteLen);
-        }
-
-        return ErrorValueObject.create(ErrorType.VALUE);
+        return NumberValueObject.create(textByteLen);
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import type { Meta } from '@storybook/react';
 import React from 'react';
 
 import { Button } from '../button/Button';
-import { Message, MessageType } from './Message';
+import { message, Messager, MessageType } from './Message';
 
 const meta: Meta = {
     title: 'Components / Message',
@@ -33,26 +33,33 @@ export default meta;
 
 export const Playground = {
     render: () => {
-        const message = new Message(document.body);
-
         function handleOpen(type: MessageType) {
-            message[type]({
+            message({
+                type,
                 content: 'Hello world!',
             });
         }
 
         return (
-            <>
+            <section className="univer-space-x-2">
                 <Button type="primary" onClick={() => handleOpen(MessageType.Success)}>
-                    Click Me
+                    success
+                </Button>
+                <Button type="primary" onClick={() => handleOpen(MessageType.Info)}>
+                    info / default
                 </Button>
                 <Button type="primary" onClick={() => handleOpen(MessageType.Warning)}>
-                    Click Me
+                    warning
                 </Button>
                 <Button type="primary" onClick={() => handleOpen(MessageType.Error)}>
-                    Click Me
+                    error
                 </Button>
-            </>
+                <Button type="primary" onClick={() => handleOpen(MessageType.Loading)}>
+                    loading
+                </Button>
+
+                <Messager />
+            </section>
         );
     },
 };

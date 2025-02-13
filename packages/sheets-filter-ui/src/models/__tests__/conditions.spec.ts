@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,7 +87,7 @@ describe('test "FilterConditionItems"', () => {
 
             it('should map to filter column with space string', () => {
                 expect(FilterConditionItems.NOT_EMPTY.mapToFilterColumn({ operator1: ExtendCustomFilterOperator.NOT_EMPTY }))
-                    .toEqual({ customFilters: { customFilters: [{ operator: CustomFilterOperator.NOT_EQUALS, val: ' ' }] } });
+                    .toEqual({ customFilters: { customFilters: [{ operator: CustomFilterOperator.NOT_EQUALS, val: '' }] } });
             });
         });
 

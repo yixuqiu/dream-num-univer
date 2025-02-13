@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
+import type { Injector } from '@univerjs/core';
+import type { FUniver } from '../../everything';
 import { ICommandService } from '@univerjs/core';
-import type { Injector } from '@wendellhu/redi';
+import { RichTextEditingMutation } from '@univerjs/docs';
+import { InsertCommand } from '@univerjs/docs-ui';
 import { beforeEach, describe, expect, it } from 'vitest';
-
-import { InsertCommand, RichTextEditingMutation } from '@univerjs/docs';
-import type { FUniver } from '../../facade';
 import { createTestBed } from './create-test-bed';
 
 describe('Test FDocument', () => {
@@ -34,16 +34,14 @@ describe('Test FDocument', () => {
 
         commandService = get(ICommandService);
         commandService.registerCommand(InsertCommand);
-        commandService.registerCommand(RichTextEditingMutation as any);
+        commandService.registerCommand(RichTextEditingMutation);
     });
 
     it('Document appendText', async () => {
-        const activeDoc = univerAPI.getActiveDocument();
+        const activeDoc = univerAPI.getActiveDocument()!;
+        expect(await activeDoc.appendText('Univer')).toBeTruthy();
 
-        expect(await activeDoc?.appendText('Univer')).toBeTruthy();
-
-        const dataStream = activeDoc?.getSnapshot().body?.dataStream;
-
-        expect(dataStream?.substring(0, dataStream.length - 2)).toEqual('Hello,Univer');
+        const dataStream = activeDoc.getSnapshot().body!.dataStream;
+        expect(dataStream.substring(0, dataStream.length - 2)).toEqual('Hello,Univer');
     });
 });

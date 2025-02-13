@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,21 @@
  * limitations under the License.
  */
 
-import type { EventState, IKeyValue, Nullable, Observer } from '@univerjs/core';
-import { Observable } from '@univerjs/core';
+import type { IKeyValue, ITransformState, Nullable } from '@univerjs/core';
+import type { IDragEvent, IMouseEvent, IPointerEvent, IWheelEvent } from './basics/i-events';
 
-import type { EVENT_TYPE } from './basics/const';
-import { CURSOR_TYPE, RENDER_CLASS_TYPE } from './basics/const';
-import type { IMouseEvent, IPointerEvent, IWheelEvent } from './basics/i-events';
 import type { IObjectFullState, ITransformChangeState } from './basics/interfaces';
+import type { ITransformerConfig } from './basics/transformer-config';
+import type { IViewportInfo, Vector2 } from './basics/vector2';
+import type { UniverRenderingContext } from './context';
+import type { Engine } from './engine';
+import type { Layer } from './layer';
+import type { Scene } from './scene';
+import { Disposable, EventSubject } from '@univerjs/core';
+import { CURSOR_TYPE, RENDER_CLASS_TYPE } from './basics/const';
 import { TRANSFORM_CHANGE_OBSERVABLE_TYPE } from './basics/interfaces';
 import { generateRandomKey, toPx } from './basics/tools';
 import { Transform } from './basics/transform';
-import type { IViewportBound, Vector2 } from './basics/vector2';
-import type { UniverRenderingContext } from './context';
-import type { Layer } from './layer';
 
 export const BASE_OBJECT_ARRAY = [
     'top',
@@ -43,71 +45,72 @@ export const BASE_OBJECT_ARRAY = [
     'strokeWidth',
 ];
 
-export abstract class BaseObject {
-    groupKey?: string;
+export enum ObjectType {
+    UNKNOWN,
+    RICH_TEXT,
+    SHAPE,
+    IMAGE,
+    RECT,
+    CIRCLE,
+    CHART,
+}
 
+export abstract class BaseObject extends Disposable {
+    groupKey?: string;
     isInGroup: boolean = false;
 
-    onTransformChangeObservable = new Observable<ITransformChangeState>();
+    objectType: ObjectType = ObjectType.UNKNOWN;
 
-    onPointerDownObserver = new Observable<IPointerEvent | IMouseEvent>();
+    onTransformChange$ = new EventSubject<ITransformChangeState>();
 
-    onPointerMoveObserver = new Observable<IPointerEvent | IMouseEvent>();
+    onPointerDown$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerMove$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerUp$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerOut$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerOver$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerLeave$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onPointerEnter$ = new EventSubject<IPointerEvent | IMouseEvent>();
 
-    onPointerUpObserver = new Observable<IPointerEvent | IMouseEvent>();
+    onDblclick$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onTripleClick$ = new EventSubject<IPointerEvent | IMouseEvent>();
+    onMouseWheel$ = new EventSubject<IWheelEvent>();
 
-    onDblclickObserver = new Observable<IPointerEvent | IMouseEvent>();
+    onDragLeave$ = new EventSubject<IDragEvent | IMouseEvent>();
+    onDragOver$ = new EventSubject<IDragEvent | IMouseEvent>();
+    onDragEnter$ = new EventSubject<IDragEvent | IMouseEvent>();
+    onDrop$ = new EventSubject<IDragEvent | IMouseEvent>();
 
-    onTripleClickObserver = new Observable<IPointerEvent | IMouseEvent>();
-
-    onMouseWheelObserver = new Observable<IWheelEvent>();
-    // onKeyDownObservable = new Observable<IKeyboardEvent>();
-    // onKeyUpObservable = new Observable<IKeyboardEvent>();
-
-    onPointerOutObserver = new Observable<IPointerEvent | IMouseEvent>();
-
-    onPointerLeaveObserver = new Observable<IPointerEvent | IMouseEvent>();
-
-    onPointerOverObserver = new Observable<IPointerEvent | IMouseEvent>();
-
-    onPointerEnterObserver = new Observable<IPointerEvent | IMouseEvent>();
-
-    onIsAddedToParentObserver = new Observable<any>();
-
-    onDisposeObserver = new Observable<BaseObject>();
+    onIsAddedToParent$ = new EventSubject<any>();
+    onDispose$ = new EventSubject<BaseObject>();
 
     protected _oKey: string;
 
     protected _dirty: boolean = true;
+    protected _forceDirty: boolean = true;
+
+    private _printable: boolean = false;
 
     private _top: number = 0;
-
     private _topOrigin: number | string = 0;
 
     private _left: number = 0;
-
     private _leftOrigin: number | string = 0;
 
     private _width: number = 0;
-
     private _widthOrigin: number | string = 0;
 
     private _height: number = 0;
-
     private _heightOrigin: number | string = 0;
 
     private _angle: number = 0;
 
     private _scaleX: number = 1;
-
     private _scaleY: number = 1;
 
     private _skewX: number = 0;
-
     private _skewY: number = 0;
 
     private _flipX: boolean = false;
-
     private _flipY: boolean = false;
 
     private _strokeWidth: number = 0;
@@ -126,13 +129,15 @@ export abstract class BaseObject {
 
     private _cursor: CURSOR_TYPE = CURSOR_TYPE.DEFAULT;
 
-    private _isTransformer = false;
+    private _transformerConfig: ITransformerConfig;
 
     private _forceRender = false;
 
     private _layer: Nullable<Layer>; // TODO: @DR-Univer. Belong to layer
 
     constructor(key?: string) {
+        super();
+
         if (key) {
             this._oKey = key;
         } else {
@@ -141,7 +146,28 @@ export abstract class BaseObject {
     }
 
     get transform() {
-        return this._transform;
+        const transform = this._transform.clone();
+        return this.transformForAngle(transform);
+    }
+
+    transformForAngle(transform: Transform) {
+        /**
+         * If the object is center rotated, the coordinate needs to be rotated back to the original position.
+         */
+        if (this._angle !== 0) {
+            const cx = (this.width + this.strokeWidth) / 2;
+            const cy = (this.height + this.strokeWidth) / 2;
+            transform.rotate(-this._angle);
+            transform.translate(cx, cy);
+            transform.rotate(this.angle);
+            transform.translate(-cx, -cy);
+        }
+
+        return transform;
+    }
+
+    get printable() {
+        return this._printable;
     }
 
     get topOrigin() {
@@ -206,6 +232,34 @@ export abstract class BaseObject {
         return this.scaleY * pScale;
     }
 
+    get ancestorLeft() {
+        return this.left + (this.getParent()?.ancestorLeft || 0);
+    }
+
+    get ancestorTop() {
+        return this.top + (this.getParent()?.ancestorTop || 0);
+    }
+
+    get ancestorTransform() {
+        const parent = this.getParent();
+        if (this.isInGroup && parent?.classType === RENDER_CLASS_TYPE.GROUP) {
+            return parent?.ancestorTransform.multiply(this.transform);
+        }
+        return this.transform;
+    }
+
+    get ancestorGroup() {
+        let group: Nullable<BaseObject> = null;
+        let parent = this.getParent();
+        while (parent != null) {
+            if (parent.classType === RENDER_CLASS_TYPE.GROUP) {
+                group = parent;
+            }
+            parent = parent.getParent();
+        }
+        return group;
+    }
+
     get skewX() {
         return this._skewX;
     }
@@ -246,10 +300,6 @@ export abstract class BaseObject {
         return this._debounceParentDirty;
     }
 
-    get isTransformer() {
-        return this._isTransformer;
-    }
-
     get cursor() {
         return this._cursor;
     }
@@ -276,10 +326,6 @@ export abstract class BaseObject {
 
     set debounceParentDirty(state: boolean) {
         this._debounceParentDirty = state;
-    }
-
-    set isTransformer(state: boolean) {
-        this._isTransformer = state;
     }
 
     set cursor(val: CURSOR_TYPE) {
@@ -342,6 +388,18 @@ export abstract class BaseObject {
         this._skewY = skewY;
     }
 
+    get transformerConfig() {
+        return this._transformerConfig;
+    }
+
+    set transformerConfig(config: ITransformerConfig) {
+        this._transformerConfig = config;
+    }
+
+    get maxZIndex() {
+        return this._zIndex;
+    }
+
     makeDirty(state: boolean = true) {
         this._dirty = state;
 
@@ -355,6 +413,10 @@ export abstract class BaseObject {
         }
 
         return this;
+    }
+
+    makeForceDirty(state: boolean = true) {
+        this._forceDirty = state;
     }
 
     makeDirtyNoDebounce(state: boolean = true) {
@@ -383,7 +445,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.translate,
             value: { top: this._top, left: this._left },
             preValue: { top: preTop, left: preLeft },
@@ -404,7 +466,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.resize,
             value: { width: this._width, height: this._height },
             preValue: { width: preWidth, height: preHeight },
@@ -426,7 +488,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.scale,
             value: { scaleX: this._scaleX, scaleY: this._scaleY },
             preValue: { scaleX: preScaleX, scaleY: preScaleY },
@@ -448,7 +510,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.skew,
             value: { skewX: this._skewX, skewY: this._skewY },
             preValue: { skewX: preSkewX, skewY: preSkewY },
@@ -469,7 +531,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.flip,
             value: { flipX: this._flipX, flipY: this._flipY },
             preValue: { flipX: preFlipX, flipY: preFlipY },
@@ -478,6 +540,10 @@ export abstract class BaseObject {
         return this;
     }
 
+    /**
+     * this[pKey] = option[pKey]
+     * @param option
+     */
     transformByState(option: IObjectFullState) {
         const optionKeys = Object.keys(option);
         const preKeys: IObjectFullState = {};
@@ -495,7 +561,7 @@ export abstract class BaseObject {
 
         this._setTransForm();
 
-        this.onTransformChangeObservable.notifyObservers({
+        this.onTransformChange$.emitEvent({
             type: TRANSFORM_CHANGE_OBSERVABLE_TYPE.all,
             value: option,
             preValue: preKeys,
@@ -504,7 +570,7 @@ export abstract class BaseObject {
         return this;
     }
 
-    isRender(bounds?: IViewportBound) {
+    isRender(bounds?: IViewportInfo) {
         if (this._forceRender) {
             return false;
         }
@@ -515,7 +581,7 @@ export abstract class BaseObject {
         return this._parent;
     }
 
-    getState() {
+    getState(): ITransformState {
         return {
             left: this.left,
             top: this.top,
@@ -541,12 +607,12 @@ export abstract class BaseObject {
         this._makeDirtyMix();
     }
 
-    render(ctx: UniverRenderingContext, bounds?: IViewportBound) {
+    render(ctx: UniverRenderingContext, bounds: IViewportInfo) {
         /* abstract */
     }
 
     isHit(coord: Vector2) {
-        const oCoord = this._getInverseCoord(coord);
+        const oCoord = this.getInverseCoord(coord);
         if (
             oCoord.x >= -this.strokeWidth / 2 &&
             oCoord.x <= this.width + this.strokeWidth / 2 &&
@@ -558,24 +624,8 @@ export abstract class BaseObject {
         return false;
     }
 
-    on(eventType: EVENT_TYPE, func: (evt: unknown, state: EventState) => void) {
-        const observable = (this as IKeyValue)[`on${eventType}Observer`] as Observable<unknown>;
-        const observer = observable.add(func.bind(this));
-        return observer;
-    }
-
-    off(eventType: EVENT_TYPE, observer: Nullable<Observer<unknown>>) {
-        const observable = (this as IKeyValue)[`on${eventType}Observer`] as Observable<unknown>;
-        observable.remove(observer);
-    }
-
-    clear(eventType: EVENT_TYPE) {
-        const observable = (this as IKeyValue)[`on${eventType}Observer`] as Observable<unknown>;
-        observable.clear();
-    }
-
     triggerPointerMove(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerMoveObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerMove$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerMove(evt);
             return false;
         }
@@ -583,7 +633,7 @@ export abstract class BaseObject {
     }
 
     triggerPointerDown(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerDownObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerDown$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerDown(evt);
             return false;
         }
@@ -591,7 +641,7 @@ export abstract class BaseObject {
     }
 
     triggerPointerUp(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerUpObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerUp$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerUp(evt);
             return false;
         }
@@ -599,7 +649,7 @@ export abstract class BaseObject {
     }
 
     triggerDblclick(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onDblclickObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onDblclick$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerDblclick(evt);
 
             return false;
@@ -609,7 +659,7 @@ export abstract class BaseObject {
     }
 
     triggerTripleClick(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onTripleClickObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onTripleClick$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerTripleClick(evt);
 
             return false;
@@ -619,25 +669,15 @@ export abstract class BaseObject {
     }
 
     triggerMouseWheel(evt: IWheelEvent) {
-        if (!this.onMouseWheelObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onMouseWheel$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerMouseWheel(evt);
             return false;
         }
         return true;
     }
 
-    // triggerKeyDown(evt: IKeyboardEvent) {
-    //     // this.onKeyDownObservable.notifyObservers(evt);
-    //     this._parent?.triggerKeyDown(evt);
-    // }
-
-    // triggerKeyUp(evt: IKeyboardEvent) {
-    //     // this.onKeyUpObservable.notifyObservers(evt);
-    //     this._parent?.triggerKeyUp(evt);
-    // }
-
     triggerPointerOut(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerOutObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerOut$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerOut(evt);
             return false;
         }
@@ -645,7 +685,7 @@ export abstract class BaseObject {
     }
 
     triggerPointerLeave(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerLeaveObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerLeave$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerLeave(evt);
             return false;
         }
@@ -653,7 +693,7 @@ export abstract class BaseObject {
     }
 
     triggerPointerOver(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerOverObserver.notifyObservers(evt)) {
+        if (!this.onPointerOver$.emitEvent(evt)) {
             this._parent?.triggerPointerOver(evt);
             return false;
         }
@@ -661,34 +701,79 @@ export abstract class BaseObject {
     }
 
     triggerPointerEnter(evt: IPointerEvent | IMouseEvent) {
-        if (!this.onPointerEnterObserver.notifyObservers(evt)?.stopPropagation) {
+        if (!this.onPointerEnter$.emitEvent(evt)?.stopPropagation) {
             this._parent?.triggerPointerEnter(evt);
             return false;
         }
         return true;
     }
 
-    dispose() {
-        this.onTransformChangeObservable.clear();
-        this.onPointerDownObserver.clear();
-        this.onPointerMoveObserver.clear();
-        this.onPointerUpObserver.clear();
-        this.onMouseWheelObserver.clear();
-        this.onPointerOutObserver.clear();
-        this.onPointerLeaveObserver.clear();
-        this.onPointerOverObserver.clear();
-        this.onPointerEnterObserver.clear();
-        this.onDblclickObserver.clear();
-        this.onTripleClickObserver.clear();
-        this.onIsAddedToParentObserver.clear();
+    triggerPointerCancel(evt: IPointerEvent) {
+        if (!this.onPointerEnter$.emitEvent(evt)?.stopPropagation) {
+            this._parent?.triggerPointerCancel(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragLeave(evt: IDragEvent | IMouseEvent) {
+        if (!this.onDragLeave$.emitEvent(evt)?.stopPropagation) {
+            this._parent?.triggerDragLeave(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragOver(evt: IDragEvent | IMouseEvent) {
+        if (!this.onDragOver$.emitEvent(evt)?.stopPropagation) {
+            this._parent?.triggerDragOver(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDragEnter(evt: IDragEvent | IMouseEvent) {
+        if (!this.onDragEnter$.emitEvent(evt)?.stopPropagation) {
+            this._parent?.triggerDragEnter(evt);
+            return false;
+        }
+        return true;
+    }
+
+    triggerDrop(evt: IDragEvent | IMouseEvent) {
+        if (!this.onDrop$.emitEvent(evt)?.stopPropagation) {
+            this._parent?.triggerDrop(evt);
+            return false;
+        }
+        return true;
+    }
+
+    override dispose() {
+        super.dispose();
+        this.onTransformChange$.complete();
+        this.onPointerDown$.complete();
+        this.onPointerMove$.complete();
+        this.onPointerUp$.complete();
+        this.onMouseWheel$.complete();
+        this.onPointerOut$.complete();
+        this.onPointerLeave$.complete();
+        this.onPointerOver$.complete();
+        this.onPointerEnter$.complete();
+        this.onDragLeave$.complete();
+        this.onDragOver$.complete();
+        this.onDragEnter$.complete();
+        this.onDrop$.complete();
+        this.onDblclick$.complete();
+        this.onTripleClick$.complete();
+        this.onIsAddedToParent$.complete();
 
         this.parent?.removeObject(this);
 
-        this.onDisposeObserver.notifyObservers(this);
+        this.onDispose$.emitEvent(this);
 
         this._makeDirtyMix();
 
-        this.onDisposeObserver.clear();
+        this.onDispose$.complete();
 
         this._parent = null;
         this._layer = null;
@@ -706,23 +791,16 @@ export abstract class BaseObject {
         return props;
     }
 
-    getScene(): any {
+    getScene(): Nullable<Scene> {
         let parent: any = this.parent;
-
-        if (parent == null) {
-            return;
-        }
-
-        if (parent.classType === RENDER_CLASS_TYPE.SCENE) {
-            return parent;
-        }
-
         while (parent) {
             if (parent.classType === RENDER_CLASS_TYPE.SCENE) {
                 return parent;
             }
             parent = parent.getParent();
         }
+
+        return null;
     }
 
     resetCursor() {
@@ -734,7 +812,7 @@ export abstract class BaseObject {
         this.getScene()?.setCursor(val);
     }
 
-    getEngine(): any {
+    getEngine(): Nullable<Engine> {
         let parent: any = this.getParent();
         while (parent != null) {
             if (parent.classType === RENDER_CLASS_TYPE.ENGINE) {
@@ -749,8 +827,23 @@ export abstract class BaseObject {
         return [];
     }
 
-    protected _getInverseCoord(coord: Vector2) {
-        return this._transform.clone().invert().applyPoint(coord);
+    getLayerIndex() {
+        if (this._layer == null) {
+            return 1;
+        }
+        return this._layer.zIndex;
+    }
+
+    applyTransform() {
+        this.getScene()?.attachTransformerTo(this);
+    }
+
+    removeTransform() {
+        this.getScene()?.detachTransformerFrom(this);
+    }
+
+    getInverseCoord(coord: Vector2): Vector2 {
+        return this.ancestorTransform.invert().applyPoint(coord);
     }
 
     protected _setTransForm() {

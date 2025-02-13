@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,22 @@
  * limitations under the License.
  */
 
+import type { IDefinedNameMapItem } from '@univerjs/engine-formula';
 import {
     Disposable,
-    ICommandService,
     IResourceManagerService,
-    IUniverInstanceService,
-    LifecycleStages,
-    OnLifecycle,
-    UniverInstanceType } from '@univerjs/core';
-import type { IDefinedNameMapItem } from '@univerjs/engine-formula';
+    UniverInstanceType,
+} from '@univerjs/core';
 import { IDefinedNamesService } from '@univerjs/engine-formula';
 
 const SHEET_DEFINED_NAME_PLUGIN = 'SHEET_DEFINED_NAME_PLUGIN';
 
-@OnLifecycle(LifecycleStages.Ready, DefinedNameDataController)
+export const SCOPE_WORKBOOK_VALUE_DEFINED_NAME = 'AllDefaultWorkbook';
+
 export class DefinedNameDataController extends Disposable {
     constructor(
-        @ICommandService private readonly _commandService: ICommandService,
-        @IUniverInstanceService private readonly _univerInstanceService: IUniverInstanceService,
         @IDefinedNamesService private readonly _definedNamesService: IDefinedNamesService,
         @IResourceManagerService private _resourceManagerService: IResourceManagerService
-
     ) {
         super();
 
@@ -46,8 +41,8 @@ export class DefinedNameDataController extends Disposable {
     }
 
     private _initSnapshot() {
-        const toJson = (unitID: string) => {
-            const map = this._definedNamesService.getDefinedNameMap(unitID);
+        const toJson = (unitId: string) => {
+            const map = this._definedNamesService.getDefinedNameMap(unitId);
             if (map) {
                 return JSON.stringify(map);
             }
@@ -67,13 +62,13 @@ export class DefinedNameDataController extends Disposable {
             this._resourceManagerService.registerPluginResource<IDefinedNameMapItem>({
                 pluginName: SHEET_DEFINED_NAME_PLUGIN,
                 businesses: [UniverInstanceType.UNIVER_SHEET],
-                toJson: (unitID) => toJson(unitID),
+                toJson: (unitId) => toJson(unitId),
                 parseJson: (json) => parseJson(json),
-                onUnLoad: (unitID) => {
-                    this._definedNamesService.removeUnitDefinedName(unitID);
+                onUnLoad: (unitId) => {
+                    this._definedNamesService.removeUnitDefinedName(unitId);
                 },
-                onLoad: (unitID, value) => {
-                    this._definedNamesService.registerDefinedNames(unitID, value);
+                onLoad: (unitId, value) => {
+                    this._definedNamesService.registerDefinedNames(unitId, value);
                 },
             })
         );

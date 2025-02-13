@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-import type { ICommand } from '@univerjs/core';
-import { CommandType, ICommandService, Range } from '@univerjs/core';
-import { SelectionManagerService } from '@univerjs/sheets';
-import type { IAccessor } from '@wendellhu/redi';
-
+import type { IAccessor, ICommand } from '@univerjs/core';
 import type { ISetNumfmtCommandParams } from './set-numfmt.command';
+import { CommandType, ICommandService, Range } from '@univerjs/core';
+import { SheetsSelectionsService } from '@univerjs/sheets';
 import { SetNumfmtCommand } from './set-numfmt.command';
 
 export const SetPercentCommand: ICommand = {
@@ -27,9 +25,9 @@ export const SetPercentCommand: ICommand = {
     type: CommandType.COMMAND,
     handler: async (accessor: IAccessor) => {
         const commandService = accessor.get(ICommandService);
-        const selectionManagerService = accessor.get(SelectionManagerService);
+        const selectionManagerService = accessor.get(SheetsSelectionsService);
 
-        const selections = selectionManagerService.getSelections();
+        const selections = selectionManagerService.getCurrentSelections();
         if (!selections || !selections.length) {
             return false;
         }

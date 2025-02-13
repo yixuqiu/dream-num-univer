@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-import type { IPageElement } from '@univerjs/core';
+import type { Injector, IPageElement } from '@univerjs/core';
 import { PageElementType } from '@univerjs/core';
-import { Picture } from '@univerjs/engine-render';
-import type { Injector } from '@wendellhu/redi';
+import { Image } from '@univerjs/engine-render';
 
 import { CanvasObjectProviderRegistry, ObjectAdaptor } from '../adaptor';
 
@@ -56,7 +55,7 @@ export class ImageAdaptor extends ObjectAdaptor {
 
         const contentUrl = imageProperties?.contentUrl || '';
 
-        return new Picture(id, {
+        return new Image(id, {
             url: contentUrl,
             top,
             left,
@@ -70,7 +69,6 @@ export class ImageAdaptor extends ObjectAdaptor {
             skewY,
             flipX,
             flipY,
-            isTransformer: true,
             forceRender: true,
         });
     }

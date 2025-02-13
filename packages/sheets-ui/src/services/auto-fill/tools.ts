@@ -1,5 +1,5 @@
 /**
- * Copyright 2023-present DreamNum Inc.
+ * Copyright 2023-present DreamNum Co., Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import type { ICellData, IObjectMatrixPrimitiveType, IRange, Nullable } from '@univerjs/core';
-import { CellValueType, Direction, ObjectMatrix, Tools } from '@univerjs/core';
+import type { ICellData, IRange, Nullable } from '@univerjs/core';
+import { CellValueType, Direction, isFormulaId, isFormulaString, Tools } from '@univerjs/core';
 
 export const chnNumChar = { 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
 export const chnNumChar2 = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
@@ -328,6 +328,8 @@ export function fillCopy(data: Array<Nullable<ICellData>>, len: number) {
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
 
+        removeCellCustom(d);
+
         applyData.push({
             v: null,
             s: null,
@@ -391,10 +393,12 @@ export function fillSeries(data: Array<Nullable<ICellData>>, len: number, direct
             const index = (i - 1) % data.length;
             const d = Tools.deepClone(data[index]);
 
+            removeCellCustom(d);
+
             const num = Number(data[data.length - 1]?.v) * (Number(data[1]?.v) / Number(data[0]?.v)) ** i;
 
             if (d) {
-                if (d.t !== CellValueType.BOOLEAN) {
+                if (needsUpdateCellValue(d)) {
                     d.v = num;
                 }
                 applyData.push(d);
@@ -406,11 +410,13 @@ export function fillSeries(data: Array<Nullable<ICellData>>, len: number, direct
             const index = (i - 1) % data.length;
             const d = Tools.deepClone(data[index]);
 
+            removeCellCustom(d);
+
             const forward = direction === Direction.DOWN || direction === Direction.RIGHT;
             const y = forecast(data.length + i, dataNumArr, xArr, forward);
 
             if (d) {
-                if (d.t !== CellValueType.BOOLEAN) {
+                if (needsUpdateCellValue(d)) {
                     d.v = y;
                 }
                 applyData.push(d);
@@ -462,6 +468,8 @@ export function fillExtendNumber(data: Array<Nullable<ICellData>>, len: number, 
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
 
+        removeCellCustom(d);
+
         const last = `${data[data.length - 1]?.v}`;
         const match = last?.match(reg);
         const lastTxt = match?.[match.length - 1];
@@ -487,6 +495,8 @@ export function fillOnlyFormat(data: Array<Nullable<ICellData>>, len: number) {
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
 
+        removeCellCustom(d);
+
         if (d) {
             delete d.v;
 
@@ -511,6 +521,8 @@ export function fillChnWeek(data: Array<Nullable<ICellData>>, len: number, step:
     for (let i = 1; i <= len; i++) {
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
+
+        removeCellCustom(d);
 
         let num = 0;
         if (data[data.length - 1]?.v === keyword[0]) {
@@ -544,6 +556,8 @@ export function fillChnNumber(data: Array<Nullable<ICellData>>, len: number, ste
     for (let i = 1; i <= len; i++) {
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
+
+        removeCellCustom(d);
 
         const formattedValue = `${data[data.length - 1]?.v}`;
         const num = chineseToNumber(formattedValue) + step * i;
@@ -619,6 +633,8 @@ export function fillLoopSeries(data: Array<Nullable<ICellData>>, len: number, st
     for (let i = 1; i <= len; i++) {
         const index = (i - 1) % data.length;
         const d = Tools.deepClone(data[index]);
+
+        removeCellCustom(d);
 
         const last = `${data[data.length - 1]?.v}`;
         let num = series.indexOf(last) + step * i;
@@ -782,22 +798,29 @@ export function getAutoFillRepeatRange(sourceRange: IRange, targetRange: IRange)
     return repeats;
 }
 
-// Generate cellValue from range and set v/p/f/si to null
-export function generateNullCellValue(range: IRange[]): IObjectMatrixPrimitiveType<ICellData> {
-    const cellValue = new ObjectMatrix<ICellData>();
-    range.forEach((r: IRange) => {
-        const { startRow, startColumn, endRow, endColumn } = r;
-        for (let i = startRow; i <= endRow; i++) {
-            for (let j = startColumn; j <= endColumn; j++) {
-                cellValue.setValue(i, j, {
-                    v: null,
-                    p: null,
-                    f: null,
-                    si: null,
-                });
-            }
-        }
-    });
+/**
+ * Formulas or Boolean values do not need to update cell.v
+ * @param cell
+ * @returns
+ */
+export function needsUpdateCellValue(cell: ICellData) {
+    if (isFormulaString(cell.f) || isFormulaId(cell.si)) {
+        return false;
+    }
 
-    return cellValue.getData();
+    if (cell.t === CellValueType.BOOLEAN) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Remove cell.custom
+ * @param cell
+ */
+export function removeCellCustom(cell: Nullable<ICellData>) {
+    if (cell && 'custom' in cell) {
+        delete cell.custom;
+    }
 }
